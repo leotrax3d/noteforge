@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { StartupNotices } from "@/features/update/StartupNotices";
+import { GlassBackdrop } from "@/components/glass/Backdrop";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { CalendarPage } from "@/features/calendar/CalendarPage";
 import { HomePage } from "@/features/home/HomePage";
@@ -83,6 +84,8 @@ export default function App() {
 
   return (
     <ThemeProvider>
+      <GlassBackdrop />
+      <div key={route.view} className="nf-page h-full">
       {route.view === "home" && <HomePage />}
       {route.view === "subject" && <SubjectView subjectId={route.subjectId} pageId={route.pageId} focus={route.focus} />}
       {route.view === "search" && <SearchPage query={route.query} />}
@@ -90,6 +93,7 @@ export default function App() {
       {route.view === "calendar" && <CalendarPage key={route.date ?? 0} date={route.date} mode={route.date ? "week" : undefined} />}
       {route.view === "homework" && <HomeworkPage subjectId={route.subjectId} />}
       {route.view === "grades" && <GradesPage subjectId={route.subjectId} />}
+      </div>
       <SettingsDialog open={dialog === "settings"} onOpenChange={(o) => setDialog(o ? "settings" : null)} />
       {calcOpen && <Suspense fallback={null}><CalcPanel /></Suspense>}
       <ShortcutsDialog open={dialog === "shortcuts"} onOpenChange={(o) => setDialog(o ? "shortcuts" : null)} />

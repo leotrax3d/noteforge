@@ -3,8 +3,12 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import { initPower } from "./lib/power";
+import { applyGlass, initGlass, startInkWatcher } from "./lib/glass";
 
 void initPower();
+applyGlass();
+void initGlass();
+startInkWatcher();
 // Natives Ziehen nur für ausdrücklich ziehbare Elemente (z. B. Leiste anpassen) und Dateien von außen
 window.addEventListener("dragstart", (e) => {
   const t = e.target as Element | null;
@@ -29,7 +33,9 @@ async function reveal() {
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
   const w = getCurrentWindow();
   const dark = document.documentElement.classList.contains("dark");
-  await w.setBackgroundColor(dark ? "#0a0a0a" : "#ffffff").catch(() => {});
+  // Mit Fenstermaterial (Mica/Acrylic) bleibt der Fensterhintergrund durchsichtig
+  const material = document.documentElement.hasAttribute("data-material");
+  await w.setBackgroundColor(material ? [0, 0, 0, 0] : dark ? "#0a0a0a" : "#ffffff").catch(() => {});
   await w.show();
 }
 void reveal().catch(console.error);

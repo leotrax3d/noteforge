@@ -155,3 +155,100 @@ input[type="range"].hue::-webkit-slider-thumb { margin-top: -4px; background: #f
 .nf-grp-in { animation: nf-grp-in 180ms cubic-bezier(.2,.8,.2,1); transform-origin: center; }
 .nf-grp-out { animation: nf-grp-out 160ms ease-in forwards; transform-origin: center; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .nf-grp-in, .nf-grp-out { animation-duration: 1ms; } }
+
+/* ===================== Designschema „Glas“ (SPEC §7.1) ===================== */
+:root {
+  --glass-alpha: 0.55;
+  --glass-blur: 24px;
+  --glass-saturate: 160%;
+  --glass-tint: 255 255 255;
+  --glass-bg: rgb(var(--glass-tint) / var(--glass-alpha));
+  --glass-border: rgb(255 255 255 / 0.6);
+  --glass-highlight: inset 0 1px 0 rgb(255 255 255 / 0.7);
+  --glass-shadow: 0 8px 32px rgb(15 23 42 / 0.14);
+  --radius-glass: 24px;
+  --glass-dim: rgb(255 255 255 / 0.35);
+}
+.dark {
+  --glass-tint: 20 20 24;
+  --glass-border: rgb(255 255 255 / 0.1);
+  --glass-highlight: inset 0 1px 0 rgb(255 255 255 / 0.08);
+  --glass-shadow: 0 10px 40px rgb(0 0 0 / 0.45);
+  --glass-dim: rgb(0 0 0 / 0.45);
+}
+
+/* Fensterhintergrund: mit Mica/Acrylic scheint das Fenstermaterial durch, sonst Verlauf/Bild */
+html.glass[data-material], html.glass[data-material] body { background: transparent; }
+.nf-backdrop { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; display: none; }
+html.glass .nf-backdrop { display: block; }
+html.glass[data-material][data-glass-bg="none"] .nf-backdrop { display: none; }
+.nf-backdrop > div { position: absolute; inset: -80px; background: var(--background); filter: blur(60px) saturate(140%); transform: translateZ(0); }
+.nf-backdrop::after { content: ""; position: absolute; inset: 0; background: var(--glass-dim); }
+
+/* Wiederverwendbare Glasfläche */
+.glass-surface,
+html.glass [data-glass],
+html.glass [data-slot="dialog-content"],
+html.glass [data-slot="alert-dialog-content"],
+html.glass [data-slot="popover-content"],
+html.glass [data-slot="dropdown-menu-content"],
+html.glass [data-slot="dropdown-menu-sub-content"] {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+}
+html.glass [data-slot="dialog-content"], html.glass [data-slot="alert-dialog-content"] { border-radius: var(--radius-glass); }
+html.glass [data-slot="popover-content"], html.glass [data-slot="dropdown-menu-content"], html.glass [data-slot="dropdown-menu-sub-content"] { border-radius: 18px; }
+/* Leisten: Glas ohne Schwebeschatten und ohne Rundung */
+html.glass [data-glass="bar"] { border-width: 0 0 1px; border-radius: 0; box-shadow: var(--glass-highlight); }
+html.glass [data-glass="side"] { border-width: 0 1px 0 0; border-radius: 0; box-shadow: none; }
+html.glass [data-glass="side"][data-side="right"] { border-width: 0 0 0 1px; }
+/* Ohne backdrop-filter (oder zu langsam): deckender, kein Blur */
+html.glass-solid [data-glass], html.glass-solid [data-slot$="-content"] { -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* Innenflächen auf Glas leicht absetzen statt deckend */
+html.glass [data-glass] .bg-card, html.glass [data-slot="dialog-content"] .bg-card { background: rgb(var(--glass-tint) / 0.35); }
+html.glass .bg-muted\/30 { background: transparent; }
+
+/* Schwebend über dem Canvas: eigene Compositing-Ebene; beim Schreiben ohne Blur (günstig) */
+[data-glass-float] { will-change: transform; isolation: isolate; }
+html.glass [data-glass-float] { transition: background-color 280ms ease-out, -webkit-backdrop-filter 280ms ease-out, backdrop-filter 280ms ease-out; }
+html.glass [data-glass-float][data-cheap] {
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  background: rgb(var(--glass-tint) / max(var(--glass-alpha), 0.88));
+  transition-duration: 90ms;
+}
+
+/* Kacheln im Widget-Stil: große Rundung, Icon-Kreise, viel Innenabstand */
+html.glass [data-glass="tile"] { border-radius: var(--radius-glass); transition: background-color 160ms ease-out, scale 160ms ease-out; }
+html.glass [data-glass="tile"]:hover { background: rgb(var(--glass-tint) / min(calc(var(--glass-alpha) + 0.12), 1)); }
+html.glass [data-glass="tile"]:active { scale: 0.98; }
+.nf-icon-circle { display: none; }
+html.glass .nf-icon-circle { display: inline-flex; align-items: center; justify-content: center; width: 3rem; height: 3rem; border-radius: 999px; background: var(--subject, var(--primary)); color: #fff; }
+html.glass .nf-tile-subject { background: var(--glass-bg) !important; color: var(--foreground) !important; padding: 1.25rem; }
+html.glass .nf-tile-subject .nf-tile-plain { display: none; }
+html.glass .nf-tile-subject button { color: var(--foreground); }
+
+/* Übergänge: Blur-In für Dialoge und Menüs, Überblendung beim Seitenwechsel */
+@keyframes nf-glass-in { from { opacity: 0; scale: 0.97; filter: blur(6px); } to { opacity: 1; scale: 1; filter: none; } }
+@keyframes nf-glass-out { from { opacity: 1; scale: 1; } to { opacity: 0; scale: 0.98; } }
+@keyframes nf-dim-in { from { background: transparent; -webkit-backdrop-filter: blur(0); backdrop-filter: blur(0); } to { background: rgb(0 0 0 / 0.28); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); } }
+@keyframes nf-fade-in { from { opacity: 0; } to { opacity: 1; } }
+html.glass [data-slot$="-content"][data-state="open"] { animation: nf-glass-in 180ms ease-out; }
+html.glass [data-slot$="-content"][data-state="closed"] { animation: nf-glass-out 140ms ease-in forwards; }
+html.glass [data-slot="dialog-overlay"], html.glass [data-slot="alert-dialog-overlay"] { background: rgb(0 0 0 / 0.28); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+html.glass [data-slot$="-overlay"][data-state="open"] { animation: nf-dim-in 180ms ease-out; }
+html.glass .nf-page { animation: nf-fade-in 180ms ease-out; }
+html.glass-solid [data-slot$="-overlay"] { -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+/* „Animationen reduzieren“ (App) und System */
+[data-reduce-motion] *, [data-reduce-motion] *::before, [data-reduce-motion] *::after {
+  animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.glass *, html.glass *::before, html.glass *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  html.glass [data-glass="tile"]:active { scale: 1; }
+}
+/* Kontrastmodus: kein Glas, Systemfarben */
+@media (forced-colors: active) { html.glass [data-glass], html.glass [data-slot$="-content"] { backdrop-filter: none; background: Canvas; } }
