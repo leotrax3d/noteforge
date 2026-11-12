@@ -110,3 +110,91 @@ pub struct Event {
     pub note: String,
     pub source: String,
 }
+
+// ---------- Phase 4 ----------
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashItem {
+    pub page: Page,
+    pub section_name: String,
+    pub deleted_at: i64,
+    /// Mitgelöschte Unterseiten.
+    pub child_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PageRef {
+    pub page_id: String,
+    pub subject_id: String,
+    pub subject_name: String,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchHit {
+    pub page_id: String,
+    pub subject_id: String,
+    pub subject_name: String,
+    pub subject_color: String,
+    pub section_name: String,
+    pub title: String,
+    /// Ausschnitt; Treffer zwischen \u{1} und \u{2}.
+    pub snippet: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ElementTag {
+    pub element_id: String,
+    pub tag_id: String,
+    pub done: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TaggedItem {
+    pub element_id: String,
+    pub tag_id: String,
+    pub done: bool,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub page_id: String,
+    pub page_title: String,
+    pub subject_id: String,
+    pub subject_name: String,
+    pub subject_color: String,
+    pub section_name: String,
+    pub snippet: String,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionMeta {
+    pub id: String,
+    pub page_id: String,
+    pub created_at: i64,
+    pub label: String,
+    pub element_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateMeta {
+    pub id: String,
+    pub name: String,
+    pub created_at: i64,
+    pub mode: String,
+    pub background: String,
+    pub element_count: i64,
+}
+
+/// Inhalt einer Seitenversion / Vorlage (zlib-komprimiertes JSON).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Snapshot {
+    pub page: Page,
+    pub elements: Vec<Element>,
+}

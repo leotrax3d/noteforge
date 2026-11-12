@@ -5,7 +5,13 @@ import { apply, type Mat } from "./geometry";
 export type ObjKind = "text" | "image" | "table";
 
 export interface TextData { html: string }
-export interface ImageData { src: string }
+export interface ImageData {
+  src: string;
+  /** Fest im Hintergrund (importierte PDF-Seite): nicht auswählbar, Element-Typ „pdfPage“. */
+  locked?: boolean;
+  /** Durchsuchbarer Text der PDF-Seite. */
+  text?: string;
+}
 export interface TableData { cells: string[][] }
 
 interface Base {
@@ -68,15 +74,18 @@ const dec = new TextDecoder();
 
 export function objToElement(o: CanvasObj, pageId: string): CanvasElement {
   const { x, y, w, h, angle, data } = o;
-  return { id: o.id, pageId, type: o.kind, z: o.z, bbox: o.bbox, data: Array.from(enc.encode(JSON.stringify({ v: 1, x, y, w, h, angle, data }))) };
+  const type = o.kind === "image" && o.data.locked ? "pdfPage" : o.kind;
+  return { id: o.id, pageId, type, z: o.z, bbox: o.bbox, data: Array.from(enc.encode(JSON.stringify({ v: 1, x, y, w, h, angle, data }))) };
 }
 
 export function elementToObj(e: CanvasElement): CanvasObj | null {
-  if (e.type !== "text" && e.type !== "image" && e.type !== "table") return null;
+  if (e.type !== "text" && e.type !== "image" && e.type !== "table" && e.type !== "pdfPage") return null;
   try {
     const j = JSON.parse(dec.decode(Uint8Array.from(e.data)));
     if (j.v !== 1) return null;
-    return makeObj({ id: e.id, z: e.z, kind: e.type, x: j.x, y: j.y, w: j.w, h: j.h, angle: j.angle ?? 0, data: j.data } as CanvasObj);
+    const kind = e.type === "pdfPage" ? "image" : e.type;
+    const data = e.type === "pdfPage" ? { ...j.data, locked: true } : j.data;
+    return makeObj({ id: e.id, z: e.z, kind, x: j.x, y: j.y, w: j.w, h: j.h, angle: j.angle ?? 0, data } as CanvasObj);
   } catch {
     return null;
   }

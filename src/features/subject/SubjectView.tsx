@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react";
-import { ArrowLeft, FileText, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
+import { ArrowLeft, FileText, PanelLeftClose, PanelLeftOpen, Search, Tags } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { api } from "@/lib/api";
@@ -10,10 +10,20 @@ import { cn } from "@/lib/utils";
 import { CanvasView } from "@/features/canvas/CanvasView";
 import type { PagePatch } from "@/lib/types";
 import { Sidebar, type SidebarActions } from "./Sidebar";
+import { TemplateDialog, createFromTemplate } from "@/features/pages/TemplateDialog";
+import { TrashDialog } from "@/features/pages/TrashDialog";
+import { layoutPdfPages, orientationOf, pdfToImages } from "@/features/pages/pdf-import";
+import { objToElement } from "@/canvas/core/objects";
 
-export function SubjectView({ subjectId, pageId }: { subjectId: string; pageId: string | null }) {
+export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; pageId: string | null; focus?: string }) {
   const go = useNav((s) => s.go);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [tpl, setTpl] = useState<{ sectionId: string; parent: string | null } | null>(null);
+  const [trash, setTrash] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [rev, setRev] = useState(0);
+  const pdfRef = useRef<HTMLInputElement>(null);
+  const pdfTarget = useRef<string | null>(null);
   const subjects = useAsync(() => api.listSubjects(), []);
   const data = useAsync(
     async () => {
@@ -51,6 +61,48 @@ export function SubjectView({ subjectId, pageId }: { subjectId: string; pageId: 
         if (pageId && (pageId === id || !(await api.listPages(subjectId)).some((p) => p.id === pageId))) select(null);
       }, reload),
     movePage: (id, t) => void mutate(() => api.movePage(id, t.sectionId, t.parentPageId, t.index), reload),
+    createFromTemplate: (sectionId, parent) => setTpl({ sectionId, parent }),
+    importPdf: (sectionId) => {
+      pdfTarget.current = sectionId;
+      pdfRef.current?.click();
+    },
+    openTrash: () => setTrash(true),
+  };
+
+  /** PDF → neues A4-Blatt mit festen Hintergrundseiten. */
+  const importPdf = async (file: File, sectionId: string) => {
+    setBusy("PDF wird gelesen …");
+    try {
+      const imgs = await pdfToImages(await file.arrayBuffer(), (d, n) => setBusy(`PDF-Seite ${d} von ${n} …`));
+      if (!imgs.length) throw new Error("Die PDF enthält keine Seiten");
+      const orientation = orientationOf(imgs[0]);
+      const p = await api.createPage(sectionId, null, file.name.replace(/\.pdf$/i, ""));
+      await api.updatePage(p.id, { mode: "a4", orientation, background: "blank" });
+      const objs = layoutPdfPages(imgs, { mode: "a4", orientation, z: 0 });
+      await api.saveElements(p.id, objs.map((o) => objToElement(o, p.id)), []);
+      reload();
+      select(p.id);
+      setBusy(null);
+    } catch (e) {
+      console.error(e);
+      setBusy(`PDF-Import fehlgeschlagen: ${e instanceof Error ? e.message : e}`);
+      window.setTimeout(() => setBusy(null), 4000);
+    }
+  };
+
+  /** Seitenlink [[Titel]] öffnen; fehlt das Blatt, wird es in der aktuellen Themengruppe angelegt. */
+  const openLink = async (title: string) => {
+    try {
+      const hit = await api.findPage(title, subjectId);
+      if (hit) return go({ view: "subject", subjectId: hit.subjectId, pageId: hit.pageId });
+      const sectionId = page?.sectionId ?? sections[0]?.id;
+      if (!sectionId) return;
+      const p = await api.createPage(sectionId, null, title);
+      reload();
+      select(p.id);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   if (subjects.data && !subject) {
@@ -77,6 +129,8 @@ export function SubjectView({ subjectId, pageId }: { subjectId: string; pageId: 
           <Icon className="size-5" />
         </span>
         <h1 className="mr-auto ml-2 truncate text-lg font-semibold">{subject?.name}</h1>
+        <Button variant="ghost" size="icon" aria-label="Suche" title="Suche (Strg+K)" onClick={() => go({ view: "search" })}><Search /></Button>
+        <Button variant="ghost" size="icon" aria-label="Tag-Übersicht" title="Tags" onClick={() => go({ view: "tags" })}><Tags /></Button>
         <ThemeToggle />
       </header>
       {data.error && <p className="px-4 py-2 text-destructive">{data.error}</p>}
@@ -93,8 +147,14 @@ export function SubjectView({ subjectId, pageId }: { subjectId: string; pageId: 
         <main className="min-w-0 flex-1">
           {page ? (
             <CanvasView
-              key={page.id}
+              key={`${page.id}:${rev}`}
               page={page}
+              focus={focus}
+              onOpenLink={(t) => void openLink(t)}
+              onPageReplaced={() => { setRev((r) => r + 1); reload(); }}
+              sections={sections}
+              pages={pages}
+              subjectName={subject?.name ?? ""}
               onRename={(title) => void mutate(() => api.updatePage(page.id, { title }), reload)}
               onPageChange={(patch: PagePatch) => {
                 data.setData((d) => d && { ...d, pages: d.pages.map((x) => (x.id === page.id ? { ...x, ...patch } : x)) });
@@ -109,6 +169,22 @@ export function SubjectView({ subjectId, pageId }: { subjectId: string; pageId: 
           )}
         </main>
       </div>
+      <input ref={pdfRef} type="file" accept="application/pdf,.pdf" hidden aria-hidden data-testid="pdf-page-input"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f && pdfTarget.current) void importPdf(f, pdfTarget.current);
+        }} />
+      <TemplateDialog open={!!tpl} onOpenChange={(o) => !o && setTpl(null)}
+        onPick={(id) => tpl && void mutate(async () => select((await createFromTemplate(tpl.sectionId, tpl.parent, id)).id), reload)} />
+      <TrashDialog open={trash} onOpenChange={setTrash} subjectId={subjectId}
+        onChanged={(restored) => { reload(); if (restored) select(restored); }} />
+      {busy && (
+        <div role="status" data-testid="subject-busy"
+          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg">
+          {busy}
+        </div>
+      )}
     </div>
   );
 }

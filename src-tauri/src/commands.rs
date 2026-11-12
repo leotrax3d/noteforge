@@ -92,3 +92,115 @@ pub fn list_events(db: S, from: i64, to: i64) -> Result<Vec<Event>> { repo::list
 pub fn save_event(db: S, event: Event) -> Result<Event> { repo::save_event(&db.conn(), event) }
 #[tauri::command]
 pub fn delete_event(db: S, id: String) -> Result<()> { repo::delete_event(&db.conn(), &id) }
+
+// ---------- Phase 4 ----------
+use crate::db::onenote as on;
+
+#[tauri::command]
+pub fn list_trash(db: S, subject_id: String) -> Result<Vec<TrashItem>> { on::list_trash(&db.conn(), &subject_id) }
+#[tauri::command]
+pub fn restore_page(db: S, id: String) -> Result<Page> { on::restore_page(&mut db.conn(), &id) }
+#[tauri::command]
+pub fn purge_page(db: S, id: String) -> Result<()> { on::purge_page(&db.conn(), &id) }
+#[tauri::command]
+pub fn empty_trash(db: S, subject_id: String) -> Result<usize> { on::empty_trash(&mut db.conn(), &subject_id) }
+
+#[tauri::command]
+pub fn search(db: S, query: String, limit: Option<i64>) -> Result<Vec<SearchHit>> {
+    on::search(&db.conn(), &query, limit.unwrap_or(50).clamp(1, 200))
+}
+#[tauri::command]
+pub fn list_page_refs(db: S) -> Result<Vec<PageRef>> { on::list_page_refs(&db.conn()) }
+#[tauri::command]
+pub fn find_page(db: S, title: String, subject_id: Option<String>) -> Result<Option<PageRef>> {
+    on::find_page(&db.conn(), &title, subject_id.as_deref())
+}
+
+#[tauri::command]
+pub fn delete_custom_tag(db: S, id: String) -> Result<()> { on::delete_custom_tag(&db.conn(), &id) }
+#[tauri::command]
+pub fn list_page_tags(db: S, page_id: String) -> Result<Vec<ElementTag>> { on::list_page_tags(&db.conn(), &page_id) }
+#[tauri::command]
+pub fn set_tag_done(db: S, element_id: String, tag_id: String, done: bool) -> Result<()> {
+    on::set_tag_done(&db.conn(), &element_id, &tag_id, done)
+}
+#[tauri::command]
+pub fn list_tagged(db: S, tag_id: Option<String>, subject_id: Option<String>) -> Result<Vec<TaggedItem>> {
+    on::list_tagged(&db.conn(), tag_id.as_deref(), subject_id.as_deref())
+}
+
+#[tauri::command]
+pub fn list_versions(db: S, page_id: String) -> Result<Vec<VersionMeta>> { on::list_versions(&db.conn(), &page_id) }
+#[tauri::command]
+pub fn create_version(db: S, page_id: String, label: String) -> Result<VersionMeta> {
+    on::create_version(&db.conn(), &page_id, &label)
+}
+#[tauri::command]
+pub fn auto_version(db: S, page_id: String, min_interval_ms: i64) -> Result<Option<VersionMeta>> {
+    on::auto_version(&db.conn(), &page_id, min_interval_ms)
+}
+#[tauri::command]
+pub fn restore_version(db: S, id: String) -> Result<Page> { on::restore_version(&mut db.conn(), &id) }
+#[tauri::command]
+pub fn delete_version(db: S, id: String) -> Result<()> { on::delete_version(&db.conn(), &id) }
+
+#[tauri::command]
+pub fn list_templates(db: S) -> Result<Vec<TemplateMeta>> { on::list_templates(&db.conn()) }
+#[tauri::command]
+pub fn save_template(db: S, page_id: String, name: String) -> Result<TemplateMeta> {
+    on::save_template(&db.conn(), &page_id, &name)
+}
+#[tauri::command]
+pub fn delete_template(db: S, id: String) -> Result<()> { on::delete_template(&db.conn(), &id) }
+#[tauri::command]
+pub fn create_page_from_template(
+    db: S, section_id: String, parent_page_id: Option<String>, template_id: String, title: String,
+) -> Result<Page> {
+    on::create_page_from_template(&mut db.conn(), &section_id, parent_page_id.as_deref(), &template_id, &title)
+}
+
+/// Export (PDF): Rohdaten im Body, Zielpfad (vom Speichern-Dialog) im Header `x-path`.
+#[tauri::command]
+pub fn write_export(request: tauri::ipc::Request) -> Result<()> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err(crate::db::Error::Invalid("Erwartet Binärdaten".into()));
+    };
+    let path = request
+        .headers()
+        .get("x-path")
+        .and_then(|v| v.to_str().ok())
+        .map(percent_decode)
+        .ok_or_else(|| crate::db::Error::Invalid("Kein Zielpfad".into()))?;
+    let path = std::path::PathBuf::from(path);
+    if path.extension().and_then(|e| e.to_str()).map(|e| e.eq_ignore_ascii_case("pdf")) != Some(true) {
+        return Err(crate::db::Error::Invalid("Nur PDF-Dateien können exportiert werden".into()));
+    }
+    std::fs::write(&path, bytes)?;
+    Ok(())
+}
+
+fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len()
+            && let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn decodes_percent() {
+        assert_eq!(super::percent_decode("C%3A%5CNotizen%5CM%C3%BCll.pdf"), "C:\\Notizen\\Müll.pdf");
+        assert_eq!(super::percent_decode("a%2"), "a%2");
+    }
+}

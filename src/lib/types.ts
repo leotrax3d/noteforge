@@ -51,3 +51,23 @@ export interface CanvasElement {
   /** Binärdaten; über Tauri als Zahlen-Array serialisiert. */
   data: number[];
 }
+
+// ---------- Phase 4 (SPEC §5) ----------
+export interface Tag { id: string; name: string; icon: string; color: string }
+export const BUILTIN_TAG_IDS = ["todo", "important", "question", "exam-prep"];
+
+export interface TrashItem { page: Page; sectionName: string; deletedAt: number; childCount: number }
+export interface PageRef { pageId: string; subjectId: string; subjectName: string; title: string }
+export interface SearchHit {
+  pageId: string; subjectId: string; subjectName: string; subjectColor: string;
+  sectionName: string; title: string;
+  /** Treffer zwischen \u0001 und \u0002. */
+  snippet: string;
+}
+export interface ElementTag { elementId: string; tagId: string; done: boolean }
+export interface TaggedItem extends ElementTag {
+  type: ElementType; pageId: string; pageTitle: string; subjectId: string; subjectName: string;
+  subjectColor: string; sectionName: string; snippet: string; updatedAt: number;
+}
+export interface VersionMeta { id: string; pageId: string; createdAt: number; label: string; elementCount: number }
+export interface TemplateMeta { id: string; name: string; createdAt: number; mode: PageMode; background: PageBackground; elementCount: number }

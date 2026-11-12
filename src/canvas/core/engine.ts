@@ -49,6 +49,8 @@ export interface ToolState {
 
 export interface SelectionInfo {
   count: number;
+  /** IDs der ausgewählten Elemente; das erste ist der Anker (oben links) für Tags. */
+  ids: string[];
   /** Bildschirm-Rechteck (CSS-Pixel relativ zum Host). */
   rect: BBox;
   color: string | null;
@@ -292,7 +294,38 @@ export class CanvasEngine {
   addObject(o: CanvasObj) {
     this.commitSelection();
     this.store.commit({ add: [], remove: [], addObj: [o] });
-    if (o.kind === "image") this.select([], [o]);
+    if (o.kind === "image" && !o.data.locked) this.select([], [o]);
+  }
+
+  /** Mehrere Objekte in einem Rückgängig-Schritt (z. B. PDF-Seiten). */
+  addObjects(objs: CanvasObj[]) {
+    if (!objs.length) return;
+    this.commitSelection();
+    this.store.commit({ add: [], remove: [], addObj: objs });
+  }
+
+  /** Begrenzung aller Inhalte (Welt) oder null bei leerem Blatt. */
+  contentBounds(): BBox | null {
+    const strokes = this.store.all(), objs = this.store.objects();
+    return strokes.length || objs.length ? unionAll(strokes, objs) : null;
+  }
+
+  /** BBox eines Strichs oder Objekts. */
+  elementBBox(id: string): BBox | null {
+    return (this.store.get(id) ?? this.store.getObj(id))?.bbox ?? null;
+  }
+
+  /** Kamera auf einen Weltbereich zentrieren (Zoom bleibt, außer der Bereich passt nicht). */
+  focusOn(r: BBox) {
+    this.fitted = true;
+    const s = clampZoom(Math.min(this.cam.s, (this.W - 96) / Math.max(1, r.w), (this.H - 96) / Math.max(1, r.h)));
+    this.cam = { s, x: r.x + r.w / 2 - this.W / 2 / s, y: r.y + r.h / 2 - this.H / 2 / s };
+    this.cameraChanged(true);
+  }
+
+  /** Aktuelle Seiteneinstellungen + Anzahl A4-Seiten (für Export/Wiedergabe). */
+  get pageInfo() {
+    return { setup: this.setup, pageCount: this.pageCount, dark: this.pal.dark };
   }
 
   /** Live-Änderung ohne Verlauf (z. B. beim Tippen). */
@@ -481,6 +514,7 @@ export class CanvasEngine {
     if (!el) return;
     const { x, y, s } = this.cam;
     el.style.transform = `matrix(${s},0,0,${s},${-x * s},${-y * s})`;
+    el.style.setProperty("--zoom", String(s));
   }
 
   private cameraChanged(rescaleSoon: boolean) {
@@ -1159,13 +1193,13 @@ export class CanvasEngine {
         return;
       }
       const w = this.toWorld(this.downPos.x, this.downPos.y);
-      const imgs = this.store.objects().filter((o): o is ImageObj => o.kind === "image" && hitObj(o, w.x, w.y));
+      const imgs = this.store.objects().filter((o): o is ImageObj => o.kind === "image" && !o.data.locked && hitObj(o, w.x, w.y));
       if (imgs.length) this.select([], [imgs[imgs.length - 1]]);
       return;
     }
     const picked = this.store.all().filter((s) => strokeInLasso(s, poly));
     const objs = this.store.objects().filter((o): o is ImageObj => {
-      if (o.kind !== "image") return false;
+      if (o.kind !== "image" || o.data.locked) return false;
       const c = objCorners(o);
       return c.filter((p) => pointInPolygon(p.x, p.y, poly)).length >= 3 || pointInPolygon(o.x + o.w / 2, o.y + o.h / 2, poly);
     });
@@ -1267,8 +1301,11 @@ export class CanvasEngine {
     const xs = c.map((p) => p.x), ys = c.map((p) => p.y);
     const x = Math.min(...xs), y = Math.min(...ys);
     const colors = new Set(this.sel.strokes.map((s) => s.color));
+    const all = [...this.sel.strokes, ...this.sel.objs];
+    const anchor = all.reduce((a, b) => (b.bbox.y + b.bbox.x * 0.25 < a.bbox.y + a.bbox.x * 0.25 ? b : a), all[0]);
     cb({
-      count: this.sel.strokes.length + this.sel.objs.length,
+      count: all.length,
+      ids: [anchor.id, ...all.filter((e) => e !== anchor).map((e) => e.id)],
       rect: { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y },
       color: colors.size === 1 ? [...colors][0] : null,
     });
@@ -1481,7 +1518,7 @@ function unionAll(strokes: Stroke[], objs: CanvasObj[]): BBox {
 }
 
 /** Bild (gedreht) in Weltkoordinaten zeichnen. */
-function drawImageObj(ctx: CanvasRenderingContext2D, o: ImageObj, img: HTMLImageElement | undefined) {
+export function drawImageObj(ctx: CanvasRenderingContext2D, o: ImageObj, img: HTMLImageElement | undefined) {
   ctx.save();
   ctx.translate(o.x + o.w / 2, o.y + o.h / 2);
   if (o.angle) ctx.rotate(o.angle);

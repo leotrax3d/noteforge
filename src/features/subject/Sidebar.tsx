@@ -5,7 +5,7 @@ import {
 } from "@dnd-kit/core";
 import {
   ChevronDown, ChevronRight, CornerDownRight, FileText, FilePlus, FolderPlus, GripVertical,
-  IndentDecrease, IndentIncrease, MoreVertical, Palette, Pencil, Trash2,
+  FileUp, IndentDecrease, IndentIncrease, LayoutTemplate, MoreVertical, Palette, Pencil, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +30,9 @@ export interface SidebarActions {
   createPage(sectionId: string, parentPageId: string | null): void;
   deletePage(id: string): void;
   movePage(id: string, drop: PageDrop): void;
+  createFromTemplate(sectionId: string, parentPageId: string | null): void;
+  importPdf(sectionId: string): void;
+  openTrash(): void;
 }
 
 interface Props {
@@ -165,9 +168,12 @@ export function Sidebar({ subjectColor, sections, pages, selectedPageId, actions
           <p className="p-3 text-sm text-muted-foreground">Noch keine Themengruppe. Lege eine an, um Blätter zu erstellen.</p>
         )}
       </div>
-      <div className="border-t p-2">
-        <Button variant="ghost" className="w-full justify-start" onClick={() => setDialog({ kind: "new-section" })}>
+      <div className="flex border-t p-2">
+        <Button variant="ghost" className="flex-1 justify-start" onClick={() => setDialog({ kind: "new-section" })}>
           <FolderPlus /> Themengruppe
+        </Button>
+        <Button variant="ghost" onClick={actions.openTrash}>
+          <Trash2 /> Papierkorb
         </Button>
       </div>
 
@@ -200,7 +206,8 @@ export function Sidebar({ subjectColor, sections, pages, selectedPageId, actions
         open={dialog?.kind === "delete-page"}
         onOpenChange={(o) => !o && setDialog(null)}
         title={`„${dialog?.kind === "delete-page" ? dialog.page.title || "Unbenanntes Blatt" : ""}“ löschen?`}
-        description="Das Blatt und alle Unterseiten werden endgültig gelöscht."
+        description="Das Blatt und alle Unterseiten kommen in den Papierkorb und können 30 Tage lang wiederhergestellt werden."
+        confirmLabel="In den Papierkorb"
         onConfirm={() => dialog?.kind === "delete-page" && actions.deletePage(dialog.page.id)}
       />
     </nav>
@@ -270,6 +277,8 @@ function SectionBlock(props: {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={() => actions.createPage(sec.id, null)}><FilePlus /> Neues Blatt</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => actions.createFromTemplate(sec.id, null)}><LayoutTemplate /> Blatt aus Vorlage …</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => actions.importPdf(sec.id)}><FileUp /> PDF als Blatt importieren …</DropdownMenuItem>
             <DropdownMenuItem onSelect={props.onRename}><Palette /> Umbenennen / Farbe</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={props.onDelete}><Trash2 /> Löschen</DropdownMenuItem>
@@ -364,6 +373,7 @@ function PageRow(props: {
           <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
             <DropdownMenuItem onSelect={() => actions.selectPage(page.id)}><Pencil /> Öffnen</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => actions.createPage(page.sectionId, page.id)}><FilePlus /> Unterseite hinzufügen</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => actions.createFromTemplate(page.sectionId, page.id)}><LayoutTemplate /> Unterseite aus Vorlage …</DropdownMenuItem>
             <DropdownMenuItem disabled={!indent} onSelect={() => indent && actions.movePage(page.id, indent)}>
               <IndentIncrease /> Einrücken
             </DropdownMenuItem>

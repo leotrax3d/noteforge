@@ -1,9 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
-import { GripVertical, Minus, MoveHorizontal, Plus, Trash2 } from "lucide-react";
+import { Check, GripVertical, Minus, MoveHorizontal, Plus, Trash2 } from "lucide-react";
 import type { CanvasEngine } from "@/canvas/core/engine";
 import { makeObj, type CanvasObj, type TableObj, type TextObj } from "@/canvas/core/objects";
+import type { BBox, ElementTag } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { isBlankHtml, sanitizeHtml } from "./sanitize";
+import { TagMenu } from "@/features/tags/TagMenu";
+import { tagIcon, useTagStore } from "@/features/tags/tag-store";
+import { isBlankHtml, linkifyHtml, sanitizeHtml } from "./sanitize";
+
+export interface TagAnchor { id: string; bbox: BBox; tags: ElementTag[] }
 
 export interface ObjectLayerProps {
   objects: CanvasObj[];
@@ -14,13 +19,29 @@ export interface ObjectLayerProps {
   onEditing: (id: string | null) => void;
   layerRef: (el: HTMLDivElement | null) => void;
   dark: boolean;
+  /** Tags je Element-ID. */
+  tags: Map<string, ElementTag[]>;
+  /** Positionen der markierten Elemente (Welt). */
+  anchors: TagAnchor[];
+  onTag: (elementId: string, tagId: string, on: boolean) => void;
+  onTagDone: (elementId: string, tagId: string, done: boolean) => void;
+  onLink: (title: string) => void;
 }
 
 /** DOM-Ebene für Textcontainer und Tabellen; Kamera-Transform setzt die Engine direkt. */
 export function ObjectLayer(p: ObjectLayerProps) {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div ref={p.layerRef} data-testid="object-layer" className="absolute top-0 left-0 origin-top-left" style={{ width: 0, height: 0 }}>
+      <div ref={p.layerRef} data-testid="object-layer" className="absolute top-0 left-0 origin-top-left" style={{ width: 0, height: 0 }}
+        onPointerDownCapture={(e) => {
+          const a = (e.target as HTMLElement).closest?.("a[data-link]");
+          if (!a) return;
+          e.preventDefault();
+          e.stopPropagation();
+          p.onLink(a.getAttribute("data-link") ?? "");
+        }}
+        onClickCapture={(e) => (e.target as HTMLElement).closest?.("a[data-link]") && e.preventDefault()}>
+        {p.anchors.map((a) => <TagBadges key={a.id} anchor={a} onDone={p.onTagDone} />)}
         {p.objects.map((o) =>
           o.kind === "text" ? (
             <TextBox key={o.id} obj={o} {...p} />
@@ -36,7 +57,7 @@ export function ObjectLayer(p: ObjectLayerProps) {
 type BoxProps<T> = ObjectLayerProps & { obj: T };
 
 /** Gemeinsamer Rahmen: Verschiebegriff, Breite ändern, Löschen. */
-function Frame({ obj, engine, interactive, editingId, onEditing, children, label }: BoxProps<CanvasObj> & { children: ReactNode; label: string }) {
+function Frame({ obj, engine, interactive, editingId, onEditing, children, label, tags, onTag }: BoxProps<CanvasObj> & { children: ReactNode; label: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const active = editingId === obj.id;
   const live = interactive || active;
@@ -114,6 +135,8 @@ function Frame({ obj, engine, interactive, editingId, onEditing, children, label
             className="flex size-11 items-center justify-center rounded-md border bg-card text-destructive shadow-sm">
             <Trash2 className="size-5" />
           </button>
+          <TagMenu className="size-11 border bg-card shadow-sm" active={new Set((tags.get(obj.id) ?? []).map((t) => t.tagId))}
+            onToggle={(tagId, on) => onTag(obj.id, tagId, on)} />
         </div>
       )}
       {live && (
@@ -126,14 +149,57 @@ function Frame({ obj, engine, interactive, editingId, onEditing, children, label
   );
 }
 
-/** innerHTML nur setzen, wenn das Element nicht gerade bearbeitet wird. */
+/** innerHTML nur setzen, wenn das Element nicht gerade bearbeitet wird (Anzeige mit Seitenlinks). */
 function useHtml(ref: React.RefObject<HTMLElement | null>, html: string) {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el || document.activeElement === el) return;
-    const clean = sanitizeHtml(html);
-    if (el.innerHTML !== clean) el.innerHTML = clean;
+    const shown = linkifyHtml(sanitizeHtml(html));
+    if (el.innerHTML !== shown) el.innerHTML = shown;
   }, [ref, html]);
+}
+
+/** Beim Bearbeiten Links wieder als Klartext `[[…]]` zeigen. */
+function unlinkify(el: HTMLElement) {
+  if (!el.querySelector("a[data-link]")) return;
+  el.innerHTML = sanitizeHtml(el.innerHTML);
+  const r = document.createRange();
+  r.selectNodeContents(el);
+  r.collapse(false);
+  const s = window.getSelection();
+  s?.removeAllRanges();
+  s?.addRange(r);
+}
+
+/** Tag-Symbole links neben einem markierten Element; Größe unabhängig vom Zoom. */
+function TagBadges({ anchor, onDone }: { anchor: TagAnchor; onDone: (elementId: string, tagId: string, done: boolean) => void }) {
+  const defs = useTagStore((s) => s.tags);
+  return (
+    <div className="pointer-events-auto absolute flex origin-top-right flex-row-reverse gap-0.5" data-testid="tag-badges"
+      style={{ left: anchor.bbox.x - 4, top: anchor.bbox.y, transform: "translateX(-100%) scale(calc(1 / var(--zoom, 1)))", transformOrigin: "100% 0" }}>
+      {anchor.tags.map((t) => {
+        const d = defs.find((x) => x.id === t.tagId);
+        if (!d) return null;
+        const I = tagIcon(d.icon);
+        if (t.tagId === "todo")
+          return (
+            <button key={t.tagId} type="button" role="checkbox" aria-checked={t.done} aria-label={`To-Do ${t.done ? "erledigt" : "offen"}`}
+              onPointerDown={(e) => e.stopPropagation()} onClick={() => onDone(anchor.id, t.tagId, !t.done)}
+              className="flex size-11 items-center justify-center">
+              <span className={cn("flex size-6 items-center justify-center rounded border-2 bg-card", t.done && "text-white")}
+                style={{ borderColor: d.color, background: t.done ? d.color : undefined }}>
+                {t.done && <Check className="size-4" />}
+              </span>
+            </button>
+          );
+        return (
+          <span key={t.tagId} title={d.name} aria-label={`Tag ${d.name}`} role="img" className="flex size-11 items-center justify-center">
+            <I className="size-6" style={{ color: d.color }} />
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 /** Einfügen nur als reiner Text (Bilder übernimmt der Canvas). */
@@ -176,7 +242,8 @@ function TextBox(p: BoxProps<TextObj>) {
         spellCheck
         lang="de"
         className="nf-rich min-h-11 px-2 py-1.5 text-base leading-snug text-foreground outline-none"
-        onFocus={() => {
+        onFocus={(e) => {
+          unlinkify(e.currentTarget);
           before.current = engine?.store.getObj(obj.id) ?? null;
           if (!active) onEditing(obj.id);
         }}
@@ -274,8 +341,13 @@ function Cell({ html, editable, header, onCommit, label }: {
       lang="de"
       className={cn("h-11 border border-foreground/40 px-2 py-1 align-top outline-none focus:bg-primary/5", header && "font-semibold bg-foreground/5")}
       onPaste={pastePlain}
+      onFocus={(e) => unlinkify(e.currentTarget)}
       onKeyDown={(e) => e.stopPropagation()}
-      onBlur={(e) => onCommit(sanitizeHtml(e.currentTarget.innerHTML))}
+      onBlur={(e) => {
+        const h = sanitizeHtml(e.currentTarget.innerHTML);
+        onCommit(h);
+        e.currentTarget.innerHTML = linkifyHtml(h);
+      }}
     />
   );
 }

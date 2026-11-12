@@ -5,7 +5,7 @@ use super::{Error, Result};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-fn new_id() -> String {
+pub(crate) fn new_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
@@ -247,7 +247,7 @@ fn page_row(r: &Row) -> rusqlite::Result<Page> {
 pub fn list_pages(conn: &Connection, subject_id: &str) -> Result<Vec<Page>> {
     let mut stmt = conn.prepare_cached(&format!(
         "SELECT {PAGE_COLS} FROM page p JOIN section s ON s.id = p.section_id
-         WHERE s.subject_id=?1 ORDER BY s.sort_order, p.sort_order"
+         WHERE s.subject_id=?1 AND p.deleted_at IS NULL ORDER BY s.sort_order, p.sort_order"
     ))?;
     let rows = stmt.query_map([subject_id], page_row)?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -292,6 +292,7 @@ pub fn create_page(
            'infinite', 'portrait', 'grid', 5.0, '#ffffff', ?5, ?5)",
         params![id, section_id, parent_page_id, title.trim(), now],
     )?;
+    super::onenote::reindex_page(conn, &id)?;
     get_page(conn, &id)
 }
 
@@ -330,11 +331,13 @@ pub fn update_page(conn: &Connection, id: &str, p: PagePatch) -> Result<Page> {
             pg.page_color, pg.updated_at
         ],
     )?;
+    super::onenote::reindex_page(conn, &pg.id)?;
     Ok(pg)
 }
 
+/// Löschen = in den Papierkorb (endgültig: `onenote::purge_page`).
 pub fn delete_page(conn: &Connection, id: &str) -> Result<()> {
-    changed(conn.execute("DELETE FROM page WHERE id=?1", [id])?, "Blatt", id)
+    super::onenote::trash_page(conn, id)
 }
 
 fn descendants(conn: &Connection, id: &str) -> Result<Vec<String>> {
@@ -365,11 +368,10 @@ pub fn move_page(
         return Err(Error::Invalid("Blätter können nur innerhalb eines Fachs verschoben werden".into()));
     }
     let desc = descendants(&tx, id)?;
-    if let Some(pid) = parent_page_id {
-        if pid == id || desc.iter().any(|d| d == pid) {
+    if let Some(pid) = parent_page_id
+        && (pid == id || desc.iter().any(|d| d == pid)) {
             return Err(Error::Invalid("Ein Blatt kann nicht in sich selbst verschoben werden".into()));
         }
-    }
     check_parent(&tx, section_id, parent_page_id)?;
 
     tx.execute(
@@ -384,7 +386,7 @@ pub fn move_page(
     }
 
     let sibling_sql = "SELECT id FROM page WHERE section_id=?1 AND parent_page_id IS ?2 AND id<>?3
-                       ORDER BY sort_order";
+                       AND deleted_at IS NULL ORDER BY sort_order";
     let mut sibs = ids(&tx, sibling_sql, params![section_id, parent_page_id, id])?;
     sibs.insert(index.min(sibs.len()), id.to_string());
     write_order(&tx, "page", &sibs)?;
@@ -423,6 +425,12 @@ pub fn list_elements(conn: &Connection, page_id: &str) -> Result<Vec<Element>> {
 }
 
 pub fn upsert_element(conn: &Connection, e: &Element) -> Result<()> {
+    upsert_element_raw(conn, e)?;
+    super::onenote::reindex_page(conn, &e.page_id)
+}
+
+/// Ohne Neuaufbau des Suchindex (für Stapel).
+pub(crate) fn upsert_element_raw(conn: &Connection, e: &Element) -> Result<()> {
     one_of(
         &e.kind,
         &["stroke", "shape", "text", "image", "pdfPage", "file", "table"],
@@ -451,16 +459,22 @@ pub fn save_elements(conn: &mut Connection, page_id: &str, upserts: &[Element], 
             if e.page_id != page_id {
                 return Err(Error::Invalid("Element gehört zu einem anderen Blatt".into()));
             }
-            upsert_element(&tx, e)?;
+            upsert_element_raw(&tx, e)?;
         }
         tx.execute("UPDATE page SET updated_at=?2 WHERE id=?1", params![page_id, now_ms()])?;
+        super::onenote::reindex_page(&tx, page_id)?;
     }
     tx.commit()?;
     Ok(())
 }
 
 pub fn delete_element(conn: &Connection, id: &str) -> Result<()> {
-    changed(conn.execute("DELETE FROM element WHERE id=?1", [id])?, "Element", id)
+    let page: Option<String> = conn.query_row("SELECT page_id FROM element WHERE id=?1", [id], |r| r.get(0)).optional()?;
+    changed(conn.execute("DELETE FROM element WHERE id=?1", [id])?, "Element", id)?;
+    if let Some(p) = page {
+        super::onenote::reindex_page(conn, &p)?;
+    }
+    Ok(())
 }
 
 // ---------- Tag ----------

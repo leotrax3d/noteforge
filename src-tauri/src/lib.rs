@@ -13,6 +13,7 @@ fn app_version() -> &'static str {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
@@ -32,6 +33,13 @@ pub fn run() {
             commands::save_elements,
             commands::list_tags, commands::create_tag, commands::delete_tag, commands::set_element_tag,
             commands::list_events, commands::save_event, commands::delete_event,
+            commands::list_trash, commands::restore_page, commands::purge_page, commands::empty_trash,
+            commands::search, commands::list_page_refs, commands::find_page,
+            commands::delete_custom_tag, commands::list_page_tags, commands::set_tag_done, commands::list_tagged,
+            commands::list_versions, commands::create_version, commands::auto_version,
+            commands::restore_version, commands::delete_version,
+            commands::list_templates, commands::save_template, commands::delete_template,
+            commands::create_page_from_template, commands::write_export,
         ])
         .run(tauri::generate_context!())
         .expect("Fehler beim Starten von Noteforge");

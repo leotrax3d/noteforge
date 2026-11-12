@@ -68,3 +68,14 @@ Bilder werden in die Tiles gerendert (Tinte liegt darüber), Text und Tabellen l
 | Einfügen → Bild, Strg+V, Drag & Drop | Bild einfügen (max. 2000 px); mit dem Lasso antippen zum Verschieben/Skalieren/Drehen |
 | Einfügen → Screenshot-Ausschnitt | Bildschirm aufnehmen und Ausschnitt wählen |
 | Einfügen → Tabelle | Tabelle mit Zeilen/Spalten hinzufügen/entfernen |
+
+### OneNote-Funktionen (Phase 4)
+- **Tags:** Lasso-Auswahl oder Textfeld → „Tag“ (To-Do, Wichtig, Frage, Lernen für KA, eigene Tags mit Symbol/Farbe). Symbole erscheinen links neben der Stelle, To-Dos lassen sich direkt abhaken. **Tag-Übersicht** (Startseite/Fach-Kopfzeile) gruppiert nach Fach und Blatt, Filter „Nur offene To-Dos“, Tippen springt zur Stelle.
+- **Seitenlinks:** `[[Blatttitel]]` in Textfeldern/Tabellen wird zum Link (Formatleiste: „Seitenlink einfügen“ mit Blattsuche). Existiert das Blatt nicht, wird es angelegt.
+- **Volltextsuche:** Strg+K / Strg+F. SQLite FTS5 (`unicode61`, Diakritika egal, Präfixsuche) über Titel, Textfelder, Tabellen und Text importierter PDFs.
+- **Seitenvorlagen:** Cornell-Notizen, Versuchsprotokoll, Vokabelliste, Mathe (kariert), Wochenplan, Lernzettel für KA; eigene Vorlagen über Blatt-Aktionen → „Als Vorlage speichern“.
+- **Seitenversionen:** automatisch beim Öffnen/Verlassen eines geänderten Blatts (≥ 10 min Abstand, max. 50, zlib-komprimierte Snapshots), manuell sicherbar, Wiederherstellen sichert vorher den aktuellen Stand.
+- **Papierkorb:** Löschen verschiebt Blätter samt Unterseiten in den Papierkorb (30 Tage, danach automatisch endgültig gelöscht).
+- **PDF-Import:** Themengruppe → „PDF als Blatt importieren“ (neues A4-Blatt) oder Einfügen → „PDF-Seiten“ ins aktuelle Blatt. Seiten werden als feste Hintergrundseiten (`pdfPage`) gerastert (pdf.js), ihr Text ist durchsuchbar.
+- **PDF-Export:** Blatt-Aktionen → Blatt / Themengruppe / ganzes Fach. A4-Blätter 1:1, Endlosblätter auf A4-Breite eingepasst; eigener PDF-Writer (JPEG je Seite), Speichern über den Tauri-Dialog (Rust schreibt die Datei).
+- **Ink-Wiedergabe:** ▶ in der Blatt-Kopfzeile spielt die Handschrift in Entstehungsreihenfolge mit echtem Schreibtempo ab (1×–8×, Zeitleiste, Leertaste/Esc).

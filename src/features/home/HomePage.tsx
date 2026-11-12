@@ -5,7 +5,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { MoreVertical, PenLine, Pencil, Plus, Trash2 } from "lucide-react";
+import { MoreVertical, PenLine, Pencil, Plus, Search, Tags, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -51,6 +51,8 @@ export function HomePage() {
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-2 border-b px-4 py-2">
         <h1 className="mr-auto text-xl font-semibold tracking-tight">Noteforge</h1>
+        <Button variant="ghost" onClick={() => go({ view: "search" })} title="Suche (Strg+K)"><Search /> Suche</Button>
+        <Button variant="ghost" onClick={() => go({ view: "tags" })}><Tags /> Tags</Button>
         <Button variant="ghost" onClick={() => go({ view: "pen-test" })}>
           <PenLine /> Stift-Test
         </Button>

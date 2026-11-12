@@ -4,8 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { SelectionInfo } from "@/canvas/core/engine";
 import { ColorGrid } from "./Toolbar";
+import { TagMenu } from "@/features/tags/TagMenu";
 
-export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDone }: {
+export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDone, activeTags, onTag }: {
+  activeTags: Set<string>;
+  onTag: (tagId: string, on: boolean) => void;
   sel: SelectionInfo;
   hostHeight: number;
   onColor: (c: string) => void;
@@ -29,6 +32,7 @@ export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDo
           <ColorGrid value={sel.color} onPick={(c) => { onColor(c); setOpen(false); }} />
         </PopoverContent>
       </Popover>
+      <TagMenu active={activeTags} onToggle={onTag} />
       <Button variant="ghost" size="icon" aria-label="Kopieren" title="Kopieren" onClick={onCopy}><Copy /></Button>
       <Button variant="ghost" size="icon" aria-label="Löschen" title="Löschen" onClick={onDelete}><Trash2 /></Button>
       <Button variant="ghost" size="icon" aria-label="Auswahl aufheben" title="Fertig" onClick={onDone}><Check /></Button>

@@ -1,6 +1,7 @@
 //! SQLite-Persistenz (SPEC §3). Zugriff ausschließlich über Tauri-Commands.
 
 pub mod models;
+pub mod onenote;
 pub mod repo;
 
 use rusqlite::Connection;
@@ -15,6 +16,10 @@ pub enum Error {
     NotFound(String),
     #[error("Ungültig: {0}")]
     Invalid(String),
+    #[error("Dateifehler: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("Datenformat: {0}")]
+    Json(#[from] serde_json::Error),
 }
 
 impl serde::Serialize for Error {
@@ -26,7 +31,10 @@ impl serde::Serialize for Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Geordnete Migrationen; Index + 1 = `PRAGMA user_version` nach Anwendung.
-const MIGRATIONS: &[&str] = &[include_str!("../../migrations/0001_init.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("../../migrations/0001_init.sql"),
+    include_str!("../../migrations/0002_onenote.sql"),
+];
 
 pub struct Db {
     conn: Mutex<Connection>,
@@ -47,6 +55,7 @@ impl Db {
     fn init(mut conn: Connection) -> Result<Self> {
         conn.pragma_update(None, "foreign_keys", true)?;
         migrate(&mut conn)?;
+        onenote::maintenance(&mut conn)?;
         Ok(Self { conn: Mutex::new(conn) })
     }
 
