@@ -85,3 +85,12 @@ Bilder werden in die Tiles gerendert (Tinte liegt darüber), Text und Tabellen l
 - **Termine** nach SPEC §3: Klassenarbeit, Test, Abgabe, Sonstiges – mit Fach (Fachfarbe), Datum, optional Uhrzeit/Ende (ohne Uhrzeit ganztägig), Notiz.
 - **Erinnerungen** als Windows-Benachrichtigung (`tauri-plugin-notification`): Vorlauf wählbar (Beginn … 1 Woche, Vorschlag je Typ). Ein Rust-Hintergrund-Thread prüft alle 20 s; jede Erinnerung kommt genau einmal, Verschieben des Termins setzt sie zurück.
 - **Startseiten-Widget „Nächste Klassenarbeiten“** mit Tages-Countdown (rot ab 3 Tagen), minütlich aktualisiert.
+
+### WebUntis & Moodle BW (Phase 6)
+- **Startseite → Konten:** WebUntis (Server, Schulkürzel, Benutzer, Passwort) und Moodle BW (Adresse + Benutzer/Passwort oder Token für SSO-Konten) verbinden. Passwort bzw. Moodle-Token liegen nur im Windows Credential Manager (`keyring`), in SQLite stehen nur Server/Schule/Benutzername.
+- **Fächer zuordnen:** Noteforge-Fach ↔ WebUntis-Fach ↔ Moodle-Kurs, mit automatischem Vorschlag nach Namen.
+- **Stundenplan** (inkl. Vertretungen/Ausfälle) wird im Rust-Backend per JSON-RPC geholt, in SQLite gecacht (Vorwoche bis +5 Wochen) und alle 15 min beim Öffnen der Startseite abgeglichen. Er erscheint in der Wochenansicht des Kalenders und als „Heute“-Leiste auf der Startseite.
+- **„Aktuelle Stunde öffnen“** springt ins zugeordnete Fach (zuletzt bearbeitetes Blatt); vor Unterrichtsbeginn heißt der Knopf „Nächste Stunde öffnen“.
+- **Moodle-Abgaben** (`core_calendar_get_action_events_by_timesort`) werden als Termine vom Typ „Abgabe“ mit Erinnerung 1 Tag vorher übernommen; eigene Notizen bleiben beim Abgleich erhalten, entfallene Abgaben werden entfernt.
+- **PDF aus Moodle:** Themengruppen-Menü → „PDF aus Moodle …“ listet die PDFs des zugeordneten Kurses; der Download läuft über das Backend (Token verlässt die Instanz nie) und wird wie ein lokales PDF als A4-Blatt importiert.
+- Im Browser (`pnpm dev`) ersetzt ein Demo-Backend beide Dienste durch einen erfundenen Stundenplan.

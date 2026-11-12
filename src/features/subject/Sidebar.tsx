@@ -5,7 +5,7 @@ import {
 } from "@dnd-kit/core";
 import {
   ChevronDown, ChevronRight, CornerDownRight, FileText, FilePlus, FolderPlus, GripVertical,
-  FileUp, IndentDecrease, IndentIncrease, LayoutTemplate, MoreVertical, Palette, Pencil, Trash2,
+  FileUp, GraduationCap, IndentDecrease, IndentIncrease, LayoutTemplate, MoreVertical, Palette, Pencil, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +32,7 @@ export interface SidebarActions {
   movePage(id: string, drop: PageDrop): void;
   createFromTemplate(sectionId: string, parentPageId: string | null): void;
   importPdf(sectionId: string): void;
+  importMoodle(sectionId: string): void;
   openTrash(): void;
 }
 
@@ -279,6 +280,7 @@ function SectionBlock(props: {
             <DropdownMenuItem onSelect={() => actions.createPage(sec.id, null)}><FilePlus /> Neues Blatt</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => actions.createFromTemplate(sec.id, null)}><LayoutTemplate /> Blatt aus Vorlage …</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => actions.importPdf(sec.id)}><FileUp /> PDF als Blatt importieren …</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => actions.importMoodle(sec.id)}><GraduationCap /> PDF aus Moodle …</DropdownMenuItem>
             <DropdownMenuItem onSelect={props.onRename}><Palette /> Umbenennen / Farbe</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={props.onDelete}><Trash2 /> Löschen</DropdownMenuItem>

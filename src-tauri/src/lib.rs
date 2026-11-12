@@ -1,4 +1,5 @@
 mod commands;
+mod integrations;
 mod reminders;
 pub mod db;
 
@@ -43,6 +44,10 @@ pub fn run() {
             commands::restore_version, commands::delete_version,
             commands::list_templates, commands::save_template, commands::delete_template,
             commands::create_page_from_template, commands::write_export,
+            integrations::integration_status, integrations::untis_connect, integrations::untis_disconnect,
+            integrations::moodle_connect, integrations::moodle_disconnect, integrations::integrations_sync,
+            integrations::list_lessons, integrations::list_untis_subjects, integrations::moodle_courses,
+            integrations::moodle_course_files, integrations::moodle_download,
         ])
         .run(tauri::generate_context!())
         .expect("Fehler beim Starten von Noteforge");

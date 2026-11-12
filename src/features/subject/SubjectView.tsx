@@ -14,6 +14,7 @@ import { TemplateDialog, createFromTemplate } from "@/features/pages/TemplateDia
 import { TrashDialog } from "@/features/pages/TrashDialog";
 import { layoutPdfPages, orientationOf, pdfToImages } from "@/features/pages/pdf-import";
 import { objToElement } from "@/canvas/core/objects";
+import { MoodleImportDialog } from "./MoodleImportDialog";
 
 export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; pageId: string | null; focus?: string }) {
   const go = useNav((s) => s.go);
@@ -21,6 +22,7 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
   const [tpl, setTpl] = useState<{ sectionId: string; parent: string | null } | null>(null);
   const [trash, setTrash] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [moodleTarget, setMoodleTarget] = useState<string | null>(null);
   const [rev, setRev] = useState(0);
   const pdfRef = useRef<HTMLInputElement>(null);
   const pdfTarget = useRef<string | null>(null);
@@ -66,17 +68,18 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
       pdfTarget.current = sectionId;
       pdfRef.current?.click();
     },
+    importMoodle: (sectionId) => setMoodleTarget(sectionId),
     openTrash: () => setTrash(true),
   };
 
   /** PDF → neues A4-Blatt mit festen Hintergrundseiten. */
-  const importPdf = async (file: File, sectionId: string) => {
+  const importPdf = async (bytes: ArrayBuffer, fileName: string, sectionId: string) => {
     setBusy("PDF wird gelesen …");
     try {
-      const imgs = await pdfToImages(await file.arrayBuffer(), (d, n) => setBusy(`PDF-Seite ${d} von ${n} …`));
+      const imgs = await pdfToImages(bytes, (d, n) => setBusy(`PDF-Seite ${d} von ${n} …`));
       if (!imgs.length) throw new Error("Die PDF enthält keine Seiten");
       const orientation = orientationOf(imgs[0]);
-      const p = await api.createPage(sectionId, null, file.name.replace(/\.pdf$/i, ""));
+      const p = await api.createPage(sectionId, null, fileName.replace(/\.pdf$/i, ""));
       await api.updatePage(p.id, { mode: "a4", orientation, background: "blank" });
       const objs = layoutPdfPages(imgs, { mode: "a4", orientation, z: 0 });
       await api.saveElements(p.id, objs.map((o) => objToElement(o, p.id)), []);
@@ -173,10 +176,12 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
         onChange={(e) => {
           const f = e.target.files?.[0];
           e.target.value = "";
-          if (f && pdfTarget.current) void importPdf(f, pdfTarget.current);
+          if (f && pdfTarget.current) { const t = pdfTarget.current; void f.arrayBuffer().then((b) => importPdf(b, f.name, t)); }
         }} />
       <TemplateDialog open={!!tpl} onOpenChange={(o) => !o && setTpl(null)}
         onPick={(id) => tpl && void mutate(async () => select((await createFromTemplate(tpl.sectionId, tpl.parent, id)).id), reload)} />
+      <MoodleImportDialog open={!!moodleTarget} onOpenChange={(o) => !o && setMoodleTarget(null)} subject={subject}
+        onImport={(bytes, name) => moodleTarget && void importPdf(bytes, name, moodleTarget)} />
       <TrashDialog open={trash} onOpenChange={setTrash} subjectId={subjectId}
         onChanged={(restored) => { reload(); if (restored) select(restored); }} />
       {busy && (

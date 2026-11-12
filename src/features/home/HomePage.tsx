@@ -5,7 +5,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CalendarDays, MoreVertical, PenLine, Pencil, Plus, Search, Tags, Trash2 } from "lucide-react";
+import { CalendarDays, KeyRound, MoreVertical, PenLine, Pencil, Plus, Search, Tags, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -20,6 +20,9 @@ import { mutate, useAsync } from "@/lib/use-async";
 import { useNav } from "@/store/nav";
 import { SubjectDialog } from "./SubjectDialog";
 import { UpcomingExams } from "./UpcomingExams";
+import { TodayTimetable } from "./TodayTimetable";
+import { AccountsDialog } from "@/features/settings/AccountsDialog";
+import { MappingDialog } from "@/features/settings/MappingDialog";
 
 export function useDragSensors() {
   return useSensors(
@@ -37,6 +40,8 @@ export function HomePage() {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Subject | null>(null);
   const [deleting, setDeleting] = useState<Subject | null>(null);
+  const [accounts, setAccounts] = useState(false);
+  const [mapping, setMapping] = useState(false);
   const sensors = useDragSensors();
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
@@ -55,6 +60,7 @@ export function HomePage() {
         <Button variant="ghost" onClick={() => go({ view: "search" })} title="Suche (Strg+K)"><Search /> Suche</Button>
         <Button variant="ghost" onClick={() => go({ view: "calendar" })}><CalendarDays /> Kalender</Button>
         <Button variant="ghost" onClick={() => go({ view: "tags" })}><Tags /> Tags</Button>
+        <Button variant="ghost" onClick={() => setAccounts(true)}><KeyRound /> Konten</Button>
         <Button variant="ghost" onClick={() => go({ view: "pen-test" })}>
           <PenLine /> Stift-Test
         </Button>
@@ -62,6 +68,7 @@ export function HomePage() {
       </header>
 
       <main className="flex-1 overflow-auto p-6">
+        <TodayTimetable subjects={subjects ?? []} onSetup={() => setAccounts(true)} />
         <UpcomingExams subjects={subjects ?? []} />
         <h2 className="mb-4 text-lg font-medium">Meine Fächer</h2>
         {error && <p className="mb-4 text-destructive">{error}</p>}
@@ -107,6 +114,8 @@ export function HomePage() {
         initial={editing ?? undefined}
         onSubmit={(v) => editing && void mutate(() => api.updateSubject(editing.id, v), reload)}
       />
+      <AccountsDialog open={accounts} onOpenChange={setAccounts} onMapping={() => { setAccounts(false); setMapping(true); }} />
+      <MappingDialog open={mapping} onOpenChange={(o) => { setMapping(o); if (!o) void reload(); }} />
       <ConfirmDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}

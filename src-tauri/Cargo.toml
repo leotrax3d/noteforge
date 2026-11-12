@@ -28,6 +28,12 @@ thiserror = "2.0.21"
 flate2 = "1.1.11"
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "cookies", "rustls-tls-native-roots", "http2", "charset"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+base64 = "0.22"
+
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

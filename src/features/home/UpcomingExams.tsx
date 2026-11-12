@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import type { Subject } from "@/lib/types";
 import { useAsync } from "@/lib/use-async";
 import { useNav } from "@/store/nav";
+import { useSyncRev } from "@/lib/integrations";
 import { DAY, KIND_LABEL, countdown, fmtDate, fmtTime, isAllDay } from "@/features/calendar/dates";
 
 const HORIZON = 120 * DAY;
@@ -19,7 +20,8 @@ export function UpcomingExams({ subjects }: { subjects: Subject[] }) {
     return () => window.clearInterval(t);
   }, []);
   const dayKey = Math.floor(now / DAY);
-  const { data } = useAsync(() => api.listEvents(Date.now() - 3 * 3600_000, Date.now() + HORIZON), [dayKey]);
+  const rev = useSyncRev((s) => s.rev);
+  const { data } = useAsync(() => api.listEvents(Date.now() - 3 * 3600_000, Date.now() + HORIZON), [dayKey, rev]);
   const subj = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects]);
   const list = (data ?? [])
     .filter((e) => (e.type === "exam" || e.type === "test") && (e.end ?? e.start + 2 * 3600_000) > now)

@@ -6,8 +6,10 @@ import { api } from "@/lib/api";
 import type { CalendarEvent, Subject } from "@/lib/types";
 import { mutate, useAsync } from "@/lib/use-async";
 import { useNav } from "@/store/nav";
+import { integrations, useSyncRev, type Lesson } from "@/lib/integrations";
+import { openLessonSubject } from "@/features/home/TodayTimetable";
 import {
-  MONTHS, WEEKDAYS, addDays, eventsOn, fmtDate, isAllDay, isoWeek, monthGrid, sameDay, startOfDay, startOfWeek,
+  MONTHS, WEEKDAYS, addDays, eventsOn, fmtDate, fmtTime, isAllDay, isoWeek, monthGrid, sameDay, startOfDay, startOfWeek,
 } from "./dates";
 import { EventChip } from "./EventChip";
 import { EventDialog, newEvent } from "./EventDialog";
@@ -28,7 +30,9 @@ export function CalendarPage({ date: initial, mode: initialMode }: { date?: numb
     [mode, cursor],
   );
   const from = days[0].getTime(), to = addDays(days[days.length - 1], 1).getTime();
-  const { data: events, reload } = useAsync(() => api.listEvents(from, to), [from, to]);
+  const rev = useSyncRev((s) => s.rev);
+  const { data: events, reload } = useAsync(() => api.listEvents(from, to), [from, to, rev]);
+  const { data: lessons } = useAsync(() => (mode === "week" ? integrations.listLessons(from, to) : Promise.resolve([])), [mode, from, to, rev]);
   const { data: subjects } = useAsync(() => api.listSubjects(), []);
   const subj = useMemo(() => new Map((subjects ?? []).map((s) => [s.id, s] as [string, Subject])), [subjects]);
 
@@ -66,7 +70,8 @@ export function CalendarPage({ date: initial, mode: initialMode }: { date?: numb
           onCreate={create} onOpen={setEditing}
           onDay={(d) => { setCursor(d); setMode("week"); }} />
       ) : (
-        <WeekView days={days} today={today} events={events ?? []} subj={subj} onCreate={create} onOpen={setEditing} />
+        <WeekView days={days} today={today} events={events ?? []} subj={subj} onCreate={create} onOpen={setEditing}
+          lessons={lessons ?? []} onLesson={(id) => void openLessonSubject(id, go)} />
       )}
 
       <EventDialog
@@ -123,7 +128,7 @@ function MonthView({ days, month, today, events, subj, onCreate, onOpen, onDay }
   );
 }
 
-function WeekView({ days, today, events, subj, onCreate, onOpen }: ViewProps) {
+function WeekView({ days, today, events, subj, onCreate, onOpen, lessons, onLesson }: ViewProps & { lessons: Lesson[]; onLesson: (subjectId: string) => void }) {
   const hours = Array.from({ length: LAST_HOUR - FIRST_HOUR }, (_, i) => FIRST_HOUR + i);
   const [now] = useState(() => new Date());
   return (
@@ -151,6 +156,7 @@ function WeekView({ days, today, events, subj, onCreate, onOpen }: ViewProps) {
         </div>
         {days.map((d) => {
           const timed = eventsOn(events, d).filter((e) => !isAllDay(e));
+          const dayLessons = lessons.filter((l) => sameDay(new Date(l.start), d));
           return (
             <div key={d.getTime()} className="relative border-l" style={{ height: hours.length * HOUR_PX }}>
               {hours.map((h) => (
@@ -162,6 +168,24 @@ function WeekView({ days, today, events, subj, onCreate, onOpen }: ViewProps) {
                 <div aria-hidden className="pointer-events-none absolute inset-x-0 border-t-2 border-red-500"
                   style={{ top: (now.getHours() - FIRST_HOUR + now.getMinutes() / 60) * HOUR_PX }} />
               )}
+              {dayLessons.map((l) => {
+                const s = new Date(l.start), en = new Date(l.end);
+                const a = s.getHours() + s.getMinutes() / 60, b = en.getHours() + en.getMinutes() / 60;
+                if (b <= FIRST_HOUR || a >= LAST_HOUR) return null;
+                const sub = l.subjectId ? subj.get(l.subjectId) : undefined;
+                const cancelled = l.state === "cancelled";
+                const label = sub?.name ?? (l.subjectLong || l.subjectName);
+                return (
+                  <button key={`${l.id}:${l.start}`} type="button" data-testid="lesson"
+                    aria-label={`Stunde ${fmtTime(l.start)} ${label}${cancelled ? " entfällt" : ""}${sub ? " – Fach öffnen" : ""}`}
+                    onClick={() => (sub ? onLesson(sub.id) : onCreate(d, s.getHours()))}
+                    className={`absolute left-0.5 w-[calc(50%-2px)] overflow-hidden rounded border-l-4 bg-muted px-1 text-left text-[11px] leading-tight text-muted-foreground outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 ${cancelled ? "line-through opacity-60" : ""} ${l.state === "irregular" ? "text-destructive" : ""}`}
+                    style={{ top: (Math.max(FIRST_HOUR, a) - FIRST_HOUR) * HOUR_PX, height: Math.max(44, (Math.min(LAST_HOUR, b) - Math.max(FIRST_HOUR, a)) * HOUR_PX - 1), borderLeftColor: sub?.color ?? "var(--border)" }}>
+                    <span className="block truncate font-medium text-foreground">{label}</span>
+                    <span className="block truncate">{cancelled ? "entfällt" : l.rooms}</span>
+                  </button>
+                );
+              })}
               {timed.map((e) => {
                 const s = new Date(e.start);
                 const startH = sameDay(s, d) ? s.getHours() + s.getMinutes() / 60 : FIRST_HOUR;
@@ -171,7 +195,7 @@ function WeekView({ days, today, events, subj, onCreate, onOpen }: ViewProps) {
                 const top = (Math.max(FIRST_HOUR, Math.min(LAST_HOUR - 0.5, startH)) - FIRST_HOUR) * HOUR_PX;
                 const h = Math.max(44, (Math.min(LAST_HOUR, endH) - Math.max(FIRST_HOUR, startH)) * HOUR_PX);
                 return (
-                  <div key={e.id} className="absolute inset-x-0.5 overflow-hidden [&>button]:h-full [&>button]:items-start [&>button]:pt-1" style={{ top, height: h }}>
+                  <div key={e.id} className={`absolute right-0.5 ${dayLessons.length ? "left-1/2" : "left-0.5"} overflow-hidden [&>button]:h-full [&>button]:items-start [&>button]:pt-1`} style={{ top, height: h }}>
                     <EventChip e={e} subject={e.subjectId ? subj.get(e.subjectId) : undefined} onClick={() => onOpen(e)} />
                   </div>
                 );
@@ -180,7 +204,7 @@ function WeekView({ days, today, events, subj, onCreate, onOpen }: ViewProps) {
           );
         })}
       </div>
-      <p className="mt-2 text-sm text-muted-foreground">Der Stundenplan erscheint hier, sobald WebUntis verbunden ist (Phase 6).</p>
+      {lessons.length === 0 && <p className="mt-2 text-sm text-muted-foreground">Verbinde WebUntis (Startseite → Konten), um hier deinen Stundenplan zu sehen.</p>}
     </main>
   );
 }
