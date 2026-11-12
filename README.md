@@ -22,3 +22,12 @@ Tauri 2 · Rust · React · TypeScript · Tailwind · shadcn/ui · SQLite
 - [docs/SPEC.md](docs/SPEC.md) – Spezifikation
 - [docs/PROMPTS.md](docs/PROMPTS.md) – Phasen-Prompts für Claude Code
 - [CLAUDE.md](CLAUDE.md) – Regeln für KI-Agenten
+
+## Entwicklung
+
+```bash
+pnpm install
+pnpm tauri dev      # App starten (Stift-Latenztest)
+pnpm test           # Frontend-Tests (Vitest)
+pnpm tauri build    # Windows-Installer (NSIS + MSI)
+```
