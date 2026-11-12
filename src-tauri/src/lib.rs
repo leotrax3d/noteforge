@@ -1,3 +1,4 @@
+mod window_fx;
 mod commands;
 mod integrations;
 mod journal;
@@ -56,6 +57,18 @@ pub fn run() {
                 Err(e) => eprintln!("Journal-Wiederherstellung fehlgeschlagen: {e}"),
                 _ => {}
             }
+            // Fenstermaterial (Glas) vor dem Anzeigen setzen
+            {
+                let conn = db.conn();
+                let material = onboarding::app_setting(&conn, "app.windowMaterial").unwrap_or_else(|| "off".into());
+                let dark = onboarding::app_setting(&conn, "app.windowDark").as_deref() != Some("0");
+                drop(conn);
+                if material != "off" {
+                    if let Some(w) = app.get_webview_window("main") {
+                        window_fx::apply(&w, &material, dark);
+                    }
+                }
+            }
             app.manage(db);
             // Protokoll noteforge:// (Installer registriert es; im Entwicklungsmodus zur Laufzeit)
             #[cfg(all(desktop, debug_assertions))]
@@ -78,7 +91,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            app_version, updater_enabled,
+            app_version, updater_enabled, window_fx::set_window_material, window_fx::system_transparency,
             journal::journal_write, journal::journal_commit, journal::journal_recovered,
             onboarding::data_location, onboarding::check_data_dir, onboarding::set_data_dir, onboarding::restart_app,
             onboarding::app_settings, onboarding::set_app_setting, onboarding::untis_search_schools,

@@ -42,8 +42,10 @@ keyring = { version = "3", features = ["windows-native"] }
 windows = { version = "0.62", features = [
   "Foundation", "Foundation_Collections", "Globalization", "Graphics_Imaging", "Media_Ocr",
   "Security_Cryptography", "Storage_Streams", "UI_Input_Inking", "UI_Input_Inking_Analysis",
-  "Win32_System_WinRT",
+  "Win32_System_WinRT", "Win32_System_Registry",
 ] }
+# Fenstermaterial Mica/Acrylic (Glas-Design)
+window-vibrancy = "0.6"
 windows-collections = "0.3"
 windows-numerics = "0.3"
 

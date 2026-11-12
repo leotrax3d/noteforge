@@ -1,7 +1,6 @@
 // Weichgezeichneter, abgedunkelter Hintergrund hinter den Glasflächen (nur wenn „Glas“ aktiv).
 import { useEffect, useState } from "react";
-import { getAsset } from "@/lib/api";
-import { applyGlass, BACKGROUNDS, imageStops, useGlass } from "@/lib/glass";
+import { applyGlass, BACKGROUNDS, imageStops, loadGlassImage, useGlass } from "@/lib/glass";
 import { useSetup } from "@/store/setup";
 
 export function GlassBackdrop() {
@@ -9,12 +8,9 @@ export function GlassBackdrop() {
   const [img, setImg] = useState<string | null>(null);
   useEffect(() => {
     if (!enabled || background !== "custom" || !customAsset) { setImg(null); return; }
-    let url: string | null = null;
-    void getAsset(customAsset).then((b) => {
-      url = URL.createObjectURL(new Blob([b as BlobPart]));
-      setImg(url);
-    }).catch(() => setImg(null));
-    return () => { if (url) URL.revokeObjectURL(url); };
+    let alive = true;
+    void loadGlassImage().then((u) => { if (alive) setImg(u); }).catch(() => setImg(null));
+    return () => { alive = false; };
   }, [enabled, background, customAsset]);
   // Kontrast-Untergrenze und optional Akzentfarbe aus dem Hintergrund
   useEffect(() => {

@@ -16,7 +16,7 @@ export interface GlassSettings {
   material: Material;
   /** Hintergrund: Preset-ID, "custom" (eigenes Bild) oder "none" */
   background: string;
-  /** eigenes Bild (Asset-ID aus put_asset) */
+  /** Kennung des eigenen Bilds (ändert sich bei jedem Hochladen); das Bild selbst liegt in `app.glassImage` */
   customAsset: string | null;
   /** Akzentfarbe aus dem Hintergrund ableiten */
   autoAccent: boolean;
@@ -197,6 +197,38 @@ export async function imageStops(url: string): Promise<{ stops: string[]; accent
   const pick = (f: number) => byLum[Math.min(byLum.length - 1, Math.floor(f * byLum.length))];
   const accent = [...px].sort((a, b) => sat(b) - sat(a))[0] ?? [37, 99, 235];
   return { stops: [pick(0.02), pick(0.25), pick(0.5), pick(0.75), pick(0.98)].map(hex), accent: hex(accent) };
+}
+
+// ---------- Eigenes Hintergrundbild ----------
+
+let memImage: string | null = null;
+/** Bild verkleinern (max. 1920 px, JPEG) und über Tauri speichern. */
+export async function saveGlassImage(file: Blob): Promise<void> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const k = Math.min(1, 1920 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(img.naturalWidth * k));
+    c.height = Math.max(1, Math.round(img.naturalHeight * k));
+    c.getContext("2d")?.drawImage(img, 0, 0, c.width, c.height);
+    const data = c.toDataURL("image/jpeg", 0.85);
+    if (inTauriWin()) {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("set_app_setting", { key: "app.glassImage", value: data });
+    } else memImage = data;
+    useGlass.getState().set({ background: "custom", customAsset: String(Date.now()) });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+export async function loadGlassImage(): Promise<string | null> {
+  if (!inTauriWin()) return memImage;
+  const { invoke } = await import("@tauri-apps/api/core");
+  const all = await invoke<Record<string, string>>("app_settings");
+  return all["app.glassImage"] ?? null;
 }
 
 // ---------- Günstiger Modus beim Schreiben ----------
