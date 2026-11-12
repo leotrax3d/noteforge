@@ -13,7 +13,7 @@ import { useTheme } from "@/components/theme/theme-provider";
 import { setupApi } from "@/lib/setup-api";
 import { ACCENTS } from "@/features/onboarding/accents";
 import { BackupSection } from "@/features/backup/BackupSection";
-import { powerSaving, usePower, type PowerSetting } from "@/lib/power";
+import { usePower, type PowerSetting } from "@/lib/power";
 
 const INTERVALS = [
   { v: 0, label: "Nur manuell" }, { v: 5, label: "Alle 5 Minuten" }, { v: 15, label: "Alle 15 Minuten" },
@@ -23,12 +23,11 @@ const selectCls = "h-11 w-full rounded-md border bg-background px-3 text-base ou
 const stamp = (t: number) => new Date(t).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
 const clean = (e: unknown) => String(e).replace(/^Error: /, "");
 
-function Switch({ id, checked, onChange, label, hint }: { id: string; checked: boolean; onChange: (v: boolean) => void; label: string; hint: string }) {
+function Switch({ id, checked, onChange, label }: { id: string; checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <div className="flex items-center gap-3">
       <div className="mr-auto">
         <Label htmlFor={id}>{label}</Label>
-        <p className="text-xs text-muted-foreground">{hint}</p>
       </div>
       <button id={id} type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)}
         className="flex h-11 w-16 shrink-0 items-center rounded-full px-1 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
@@ -67,10 +66,6 @@ function PowerSection() {
             className={cn("h-11", p.setting === o.v && "ring-2 ring-ring")} onClick={() => p.setSetting(o.v)}>{o.label}</Button>
         ))}
       </div>
-      <p className="text-xs text-muted-foreground">
-        Reduziert Animationen und Übergänge und drosselt die Hintergrund-Erkennung (Handschrift/OCR). Der Stift bleibt immer in voller Qualität.
-        {" "}Status: {p.onBattery == null ? "kein Akku erkannt" : p.onBattery ? "Akkubetrieb" : "Netzbetrieb"} · Sparmodus {powerSaving(p) ? "aktiv" : "aus"}.
-      </p>
     </section>
   );
 }
@@ -111,7 +106,6 @@ function PenSection() {
               className={cn("h-11 flex-1", s.pressureGamma === g && "ring-2 ring-ring")} onClick={() => s.set({ pressureGamma: g })}>{l}</Button>
           ))}
         </div>
-        <p className="text-xs text-muted-foreground">Kalibrierung: {s.pressureMax < 1 ? `voller Strich ab ${Math.round(s.pressureMax * 100)} % Druck` : "Standard"} – neu kalibrieren im Einrichtungsassistenten.</p>
       </div>
       <div className="grid gap-1.5">
         <Label htmlFor="barrel">Stifttaste</Label>
@@ -130,9 +124,9 @@ function NotifySection() {
   return (
     <section className="grid gap-3 rounded-lg border p-3" aria-labelledby="notify-h">
       <h3 id="notify-h" className="font-medium">Erinnerungen & Hinweise</h3>
-      <Switch id="rem" label="Erinnerungen an Termine" checked={on} hint="Windows-Benachrichtigung vor Klassenarbeiten, Tests, Abgaben und Terminen."
+      <Switch id="rem" label="Erinnerungen an Termine" checked={on}
         onChange={(v) => { setOn(v); void setupApi.setSetting("app.reminders", v ? "1" : "0"); }} />
-      <Switch id="spitz" label="Helfer „Spitz“" checked={s.spitz} hint="Kurzer Tipp beim ersten Benutzen eines Werkzeugs."
+      <Switch id="spitz" label="Helfer „Spitz“" checked={s.spitz}
         onChange={(v) => s.set({ spitz: v })} />
       <Button variant="outline" className="justify-self-start" disabled={!s.seenHints.length} onClick={() => s.set({ seenHints: [] })}>Alle Tipps wieder zeigen</Button>
     </section>
@@ -196,7 +190,7 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Einstellungen</DialogTitle>
-          <DialogDescription>Darstellung, Stift, Erinnerungen, Sync und Sicherung.</DialogDescription>
+          <DialogDescription className="sr-only">Einstellungen</DialogDescription>
         </DialogHeader>
 
         <div className="relative">
@@ -245,10 +239,6 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 {INTERVALS.map((i) => <option key={i.v} value={i.v}>{i.label}</option>)}
               </select></div>
           </div>
-          <p className="text-xs text-muted-foreground">
-            App-Passwort in Nextcloud unter Einstellungen → Sicherheit → „Neues App-Passwort“ erzeugen. Es liegt nur in der
-            Windows-Anmeldeinformationsverwaltung. Konflikte werden pro Blatt gelöst: die neuere Version gewinnt, die ältere bleibt als Seitenversion.
-          </p>
 
           {st?.config && (
             <div className="grid gap-1 rounded-md bg-muted/50 p-2 text-sm" data-testid="sync-state">
@@ -290,9 +280,9 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
         {show("pen") && <section className="grid gap-3 rounded-lg border p-3" aria-labelledby="ui-h">
           <h3 id="ui-h" className="font-medium">Bedienung</h3>
           <Switch id="left" label="Linkshänder-Modus" checked={prefs.leftHanded} onChange={toggleLeft}
-            hint="Seitenleiste rechts, senkrechte Werkzeugleiste gespiegelt – Bedienelemente auf der Seite der freien Hand." />
+            />
           <Switch id="perf" label="Leistungsanzeige" checked={prefs.perfOverlay} onChange={prefs.setPerfOverlay}
-            hint="FPS, Frame-Zeit und Stift-Latenz auf dem Blatt (Strg+Umschalt+P)." />
+            />
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => prefs.setDialog("shortcuts")}><Keyboard /> Tastenkürzel anzeigen</Button>
             <Button variant="outline" data-testid="restart-onboarding" onClick={() => { prefs.setDialog(null); useSetup.getState().set({ done: false, step: 0 }); }}>

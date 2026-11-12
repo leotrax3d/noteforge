@@ -8,8 +8,7 @@ export type Route =
   | { view: "tags"; tagId?: string }
   | { view: "calendar"; date?: number }
   | { view: "homework"; subjectId?: string }
-  | { view: "grades"; subjectId?: string }
-  | { view: "pen-test" };
+  | { view: "grades"; subjectId?: string };
 
 interface NavState {
   route: Route;

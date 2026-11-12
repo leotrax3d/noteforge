@@ -101,7 +101,7 @@ function RestoreDialog({ name, onClose, onDone }: { name: string | null; onClose
     <Dialog open={!!name} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-3xl" data-testid="restore-dialog">
         <DialogTitle>Wiederherstellen: {name && label(name)}</DialogTitle>
-        <DialogDescription>Wähle Fächer oder einzelne Blätter – oder stelle alles wieder her. Tippe auf ein Blatt für die Vorschau.</DialogDescription>
+        <DialogDescription className="sr-only">Wähle Fächer oder einzelne Blätter – oder stelle alles wieder her. Tippe auf ein Blatt für die Vorschau.</DialogDescription>
         {err && <p className="text-sm text-destructive">{err}</p>}
         {!tree && !err && <p className="text-sm text-muted-foreground">Sicherung wird gelesen …</p>}
         {tree && (
@@ -157,7 +157,7 @@ export function BackupSection() {
         <h3 id="bk-h" className="mr-auto font-medium">Sicherungen</h3>
         <Button variant="outline" className="h-11" onClick={() => void backupApi.create().then((s) => { setSt(s); setMsg("Sicherung erstellt."); }).catch((e) => setMsg(clean(e)))}>Jetzt sichern</Button>
       </div>
-      <p className="text-xs text-muted-foreground">Täglich automatisch. Ordner: <span className="font-mono break-all">{st?.dir || "–"}</span></p>
+      <p className="text-xs text-muted-foreground"><span className="font-mono break-all">{st?.dir || "–"}</span></p>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" className="h-11" onClick={() => void backupApi.pickDir().then((d) => d && save({ dir: d }))}><FolderOpen /> Ordner wählen …</Button>
         {st?.config.dir && <Button variant="ghost" className="h-11" onClick={() => save({ dir: null })}>Standardordner</Button>}

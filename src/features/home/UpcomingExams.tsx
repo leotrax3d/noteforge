@@ -28,14 +28,14 @@ export function UpcomingExams({ subjects }: { subjects: Subject[] }) {
     .slice(0, 5);
 
   return (
-    <section aria-labelledby="upcoming-h" className="mb-8">
+    <section aria-labelledby="upcoming-h" className="mb-5">
       <div className="mb-3 flex items-center gap-2">
         <h2 id="upcoming-h" className="mr-auto text-lg font-medium">Nächste Klassenarbeiten</h2>
         <Button variant="ghost" onClick={() => go({ view: "calendar" })}><CalendarDays /> Kalender</Button>
       </div>
       {list.length === 0 ? (
         <p className="rounded-xl border border-dashed p-4 text-muted-foreground">
-          Keine Klassenarbeiten oder Tests in den nächsten Wochen. Trage sie im Kalender ein.
+          Keine Klassenarbeiten
         </p>
       ) : (
         <ul className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">

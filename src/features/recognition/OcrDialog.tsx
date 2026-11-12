@@ -18,7 +18,7 @@ export function OcrDialog({ view, onOpenChange, onInsert }: {
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Text im Bild</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="sr-only">
             {view?.error ?? (empty ? "Im Bild wurde kein Text gefunden." : "Erkannter Text (Windows-OCR, offline). Er ist auch über die Suche auffindbar.")}
           </DialogDescription>
         </DialogHeader>

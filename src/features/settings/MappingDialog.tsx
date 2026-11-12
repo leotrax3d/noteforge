@@ -53,7 +53,7 @@ export function MappingDialog({ open, onOpenChange }: { open: boolean; onOpenCha
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Fächer zuordnen</DialogTitle>
-          <DialogDescription>Welches WebUntis-Fach und welcher Moodle-Kurs gehören zu welchem Fach in Noteforge?</DialogDescription>
+          <DialogDescription className="sr-only">Welches WebUntis-Fach und welcher Moodle-Kurs gehören zu welchem Fach in Noteforge?</DialogDescription>
         </DialogHeader>
         {subjects.length === 0 ? (
           <p className="text-muted-foreground">Lege zuerst Fächer auf der Startseite an.</p>

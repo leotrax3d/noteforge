@@ -103,7 +103,6 @@ function CalcTab() {
   return (
     <div className="grid gap-2 p-2">
       <ol ref={listRef} aria-label="Verlauf" className="max-h-40 min-h-12 overflow-y-auto rounded-lg bg-muted/40 p-1 text-right">
-        {history.length === 0 && <li className="p-2 text-left text-sm text-muted-foreground">Dezimalkomma, Argumente mit „;“ trennen, z. B. max(2; 3,5). Variablen: a = 4.</li>}
         {history.map((h, i) => (
           <li key={i}>
             <button type="button" className="w-full rounded-md px-2 py-1 text-right outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
@@ -264,7 +263,6 @@ function PlotTab() {
               </li>
             ))}
           </ul>
-          <p className="mt-1 text-xs text-muted-foreground">Numerisch bestimmt im sichtbaren Bereich.</p>
         </details>
       )}
 

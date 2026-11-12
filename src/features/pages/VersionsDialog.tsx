@@ -42,7 +42,7 @@ export function VersionsDialog({ open, onOpenChange, pageId, beforeAction, onRes
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Seitenversionen</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="sr-only">
             Beim Öffnen und Verlassen eines geänderten Blatts wird automatisch eine Version angelegt (höchstens alle 10 Minuten, bis zu 50).
           </DialogDescription>
         </DialogHeader>

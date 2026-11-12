@@ -141,7 +141,6 @@ export function HomeworkPage({ subjectId }: { subjectId?: string }) {
         <label className="flex h-11 items-center gap-2 px-2 text-sm">
           <input type="checkbox" className="size-5" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> Erledigte zeigen
         </label>
-        {moodle === false && <span className="ml-auto text-sm text-muted-foreground">Moodle verbinden (Startseite → Konten), um Abgaben automatisch zu übernehmen.</span>}
       </div>
 
       <main className="flex-1 overflow-auto p-3">
@@ -220,7 +219,7 @@ function HomeworkDialog({ item, subjects, onClose, onSave }: {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Hausaufgabe bearbeiten</DialogTitle>
-          <DialogDescription>{moodle ? "Aus Moodle übernommen – Titel und Frist kommen aus Moodle." : "Eigene Aufgabe"}</DialogDescription>
+          <DialogDescription className="sr-only">{moodle ? "Aus Moodle übernommen – Titel und Frist kommen aus Moodle." : "Eigene Aufgabe"}</DialogDescription>
         </DialogHeader>
         {f && (
           <form id="hw-form" className="grid gap-3" onSubmit={(e) => {

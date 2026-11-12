@@ -105,7 +105,6 @@ export function EventDialog({ event, subjects, onOpenChange, onSave, onDelete }:
               <Input id="ev-end" type="time" value={endTime} disabled={!time} onChange={(e) => setEndTime(e.target.value)} />
             </div>
           </div>
-          <p className="-mt-2 text-sm text-muted-foreground">Ohne Uhrzeit gilt der Termin ganztägig.</p>
 
           <div className="grid gap-2">
             <Label htmlFor="ev-remind">Erinnerung (Windows-Benachrichtigung)</Label>

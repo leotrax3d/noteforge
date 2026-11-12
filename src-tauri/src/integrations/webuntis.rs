@@ -38,6 +38,7 @@ pub struct Session {
     client: reqwest::Client,
     url: String,
     person: (i64, i64),
+    klasse: i64,
 }
 
 fn names(v: &Value, key: &str) -> String {
@@ -130,7 +131,7 @@ impl Session {
             normalize_server(&cfg.server),
             urlencode(cfg.school.trim())
         );
-        let mut s = Self { client, url, person: (0, 0) };
+        let mut s = Self { client, url, person: (0, 0), klasse: 0 };
         let r = s
             .call("authenticate", json!({ "user": cfg.username.trim(), "password": password, "client": "Noteforge" }))
             .await?;
@@ -138,6 +139,7 @@ impl Session {
         let pid = r.get("personId").and_then(Value::as_i64).unwrap_or(0);
         let kid = r.get("klasseId").and_then(Value::as_i64).unwrap_or(0);
         // Schülerzugänge ohne Personenbezug: Klassenstundenplan
+        s.klasse = kid;
         s.person = if pid > 0 { (pt, pid) } else { (1, kid) };
         if s.person.1 == 0 {
             return Err(IntErr::Remote("WebUntis: Zugang hat keinen eigenen Stundenplan".into()));
@@ -156,11 +158,21 @@ impl Session {
 
     /// Stundenplan inkl. Vertretungen/Ausfälle für [from, to] (yyyymmdd).
     pub async fn timetable(&self, from: i64, to: i64) -> Result<Vec<Period>, IntErr> {
+        match self.timetable_of(self.person, from, to).await {
+            // Viele Schulen sperren den persönlichen Plan für Schüler → Klassenplan
+            Err(IntErr::Remote(m)) if m.contains("keine Berechtigung") && self.klasse > 0 && self.person != (1, self.klasse) => {
+                self.timetable_of((1, self.klasse), from, to).await
+            }
+            r => r,
+        }
+    }
+
+    async fn timetable_of(&self, el: (i64, i64), from: i64, to: i64) -> Result<Vec<Period>, IntErr> {
         let r = self
             .call(
                 "getTimetable",
                 json!({ "options": {
-                    "element": { "id": self.person.1, "type": self.person.0 },
+                    "element": { "id": el.1, "type": el.0 },
                     "startDate": from, "endDate": to,
                     "showInfo": true, "showSubstText": true, "showLsText": true,
                     "subjectFields": ["id", "name", "longname"],
@@ -225,5 +237,24 @@ mod tests {
         let e = rpc_result(json!({ "error": { "code": -8504, "message": "bad credentials" } })).unwrap_err();
         assert!(e.to_string().contains("Passwort falsch"));
         assert_eq!(rpc_result(json!({ "result": 1 })).unwrap(), json!(1));
+    }
+}
+
+/// Live-Test gegen einen echten Server: `NF_UNTIS=server|schule|benutzer|passwort cargo test untis_live -- --ignored`
+#[cfg(test)]
+mod live {
+    #[test]
+    #[ignore]
+    fn untis_live() {
+        tauri::async_runtime::block_on(run());
+    }
+    async fn run() {
+        let v = std::env::var("NF_UNTIS").expect("NF_UNTIS");
+        let p: Vec<&str> = v.splitn(4, '|').collect();
+        let cfg = super::UntisConfig { server: p[0].into(), school: p[1].into(), username: p[2].into() };
+        let s = super::Session::login(&cfg, p[3]).await.unwrap();
+        let t = s.timetable(20261109, 20261113).await.unwrap();
+        assert!(!t.is_empty());
+        println!("{} Stunden, z. B. {:?}", t.len(), t[0]);
     }
 }

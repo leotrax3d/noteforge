@@ -220,7 +220,6 @@ export function MoleculeEditor({ open, initial, onOpenChange, onInsert }: {
 
         <div className="grid min-h-0 flex-1 grid-cols-[150px_1fr] gap-2 lg:grid-cols-[150px_1fr_minmax(420px,36%)]">
           <aside aria-label="Funktionelle Gruppen" className="flex flex-col gap-1 overflow-y-auto">
-            <p className="text-xs text-muted-foreground">An markiertes Atom anhängen</p>
             {GROUPS.map((g) => (
               <Button key={g.id} variant="outline" className="h-11 justify-start" title={g.hint} onClick={() => group(g.id)}>
                 {g.id === "benzene" && <Hexagon />}{g.label}

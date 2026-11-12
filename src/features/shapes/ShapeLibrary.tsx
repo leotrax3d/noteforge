@@ -184,7 +184,7 @@ export function ShapeLibrary(p: ShapeLibraryProps) {
         ))}
       </ul>
     ) : (
-      <p className="py-8 text-center text-sm text-muted-foreground">Noch keine eigenen Formen. Wähle etwas mit dem Lasso aus und tippe im Auswahlmenü auf „Als Vorlage speichern“.</p>
+      <p className="py-8 text-center text-sm text-muted-foreground">Noch keine eigenen Formen.</p>
     );
   } else {
     body = (
@@ -204,7 +204,7 @@ export function ShapeLibrary(p: ShapeLibraryProps) {
     <Dialog open={p.open} onOpenChange={p.onOpenChange}>
       <DialogContent className="sm:max-w-2xl" data-testid="shape-library">
         <DialogTitle>{p.edit ? "Form bearbeiten" : "Formen-Bibliothek"}</DialogTitle>
-        <DialogDescription>Vorlagen werden als bearbeitbare Elemente eingefügt (verschieben, skalieren, Farbe; Achsen später änderbar). Leitungen rasten an den Anschlüssen der Schaltzeichen ein.</DialogDescription>
+        <DialogDescription className="sr-only">Vorlagen werden als bearbeitbare Elemente eingefügt (verschieben, skalieren, Farbe; Achsen später änderbar). Leitungen rasten an den Anschlüssen der Schaltzeichen ein.</DialogDescription>
         {!draft && (
           <div role="tablist" aria-label="Kategorie" className="flex flex-wrap gap-1">
             {CATS.map((k) => (

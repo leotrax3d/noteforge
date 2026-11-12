@@ -5,6 +5,11 @@ import "./index.css";
 import { initPower } from "./lib/power";
 
 void initPower();
+// Natives Ziehen nur für ausdrücklich ziehbare Elemente (z. B. Leiste anpassen) und Dateien von außen
+window.addEventListener("dragstart", (e) => {
+  const t = e.target as Element | null;
+  if (!(t instanceof Element && t.closest('[draggable="true"]'))) e.preventDefault();
+}, true);
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

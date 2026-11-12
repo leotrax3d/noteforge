@@ -38,7 +38,7 @@ export function TrashDialog({ open, onOpenChange, subjectId, onChanged }: {
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Papierkorb</DialogTitle>
-          <DialogDescription>Gelöschte Blätter bleiben 30 Tage erhalten.</DialogDescription>
+          <DialogDescription className="sr-only">Gelöschte Blätter bleiben 30 Tage erhalten.</DialogDescription>
         </DialogHeader>
         {error && <p className="text-sm text-destructive">{error}</p>}
         {items?.length === 0 && <p className="text-sm text-muted-foreground">Der Papierkorb ist leer.</p>}

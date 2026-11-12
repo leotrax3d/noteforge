@@ -419,7 +419,6 @@ export function Toolbar(p: ToolbarProps) {
             options={[{ value: "stroke", label: "Ganze Striche" }, { value: "partial", label: "Teilweise" }]} />
           <Chips label="Radiergröße" value={t.eraserSize} onChange={(s) => t.setEraser({ eraserSize: s })}
             options={[{ value: 8, label: "S" }, { value: 14, label: "M" }, { value: 24, label: "L" }, { value: 40, label: "XL" }]} />
-          <p className="text-xs text-muted-foreground">Tipp: Das Radierende des Stifts wird automatisch erkannt.</p>
         </PopoverContent>
       </Popover>
 
@@ -431,9 +430,6 @@ export function Toolbar(p: ToolbarProps) {
           <Toggle label="Geodreieck" icon={<TriangleRight />} on={t.guides.setsquare} onClick={() => t.toggleGuide("setsquare")} />
           <Toggle label="Zirkel" icon={<DraftingCompass />} on={t.guides.compass} onClick={() => t.toggleGuide("compass")} />
           <Toggle label="Formmodus (immer Formen)" icon={<Shapes />} on={t.shapeMode} onClick={() => t.setShapeMode(!t.shapeMode)} />
-          <p className="pt-1 text-xs text-muted-foreground">
-            Zwei Finger drehen und verschieben Lineal und Geodreieck. Stift am Strichende kurz halten → Form.
-          </p>
         </PopoverContent>
       </Popover>
 
@@ -455,7 +451,6 @@ export function Toolbar(p: ToolbarProps) {
               {icon} {label}
             </Button>
           ))}
-          <p className="pt-1 text-xs text-muted-foreground">Bilder und PDFs auch per Strg+V oder Drag &amp; Drop.</p>
         </PopoverContent>
       </Popover>
 
@@ -464,7 +459,6 @@ export function Toolbar(p: ToolbarProps) {
         <PopoverContent side={side} className="w-80 space-y-2">
           <p className="text-sm font-medium">Pfeilspitzen</p>
           <HeadPicker head0={t.head0} head1={t.head1} onChange={t.setHeads} />
-          <p className="text-xs text-muted-foreground">Gilt für Linien am Lineal und für Freihand → Linie/Pfeil. Nachträglich: Linie mit dem Lasso auswählen.</p>
         </PopoverContent>
       </Popover>
 
@@ -488,7 +482,6 @@ export function Toolbar(p: ToolbarProps) {
                 options={[2, 3, 5, 8].map((v) => ({ value: v, label: `${v} mm` }))} />
             </>
           )}
-          <p className="text-xs text-muted-foreground">Geschlossene Form oder Freihand-Bereich antippen. Lücken bis 2 mm werden überbrückt. Die Füllung liegt unter der Tinte.</p>
         </PopoverContent>
       </Popover>
 
@@ -498,7 +491,6 @@ export function Toolbar(p: ToolbarProps) {
           <p className="text-sm font-medium">Verschwindende Tinte</p>
           <Chips label="Sichtbar für" value={t.vanishMs} onChange={t.setVanishMs}
             options={[1000, 2000, 4000, 8000].map((v) => ({ value: v, label: `${v / 1000} s` }))} />
-          <p className="text-xs text-muted-foreground">Zum Zeigen und Erklären – nichts davon wird gespeichert.</p>
         </PopoverContent>
       </Popover>
 
@@ -512,7 +504,6 @@ export function Toolbar(p: ToolbarProps) {
         <PopoverAnchor asChild><span className="absolute inset-0 -z-10" aria-hidden /></PopoverAnchor>
         <PopoverContent side={side} className="w-96 space-y-3" onInteractOutside={(e) => reorder && e.preventDefault()}>
           <p className="text-sm font-medium">Leiste anpassen</p>
-          <p className="text-xs text-muted-foreground">Elemente in der Leiste ziehen zum Umsortieren, in die Ablage ziehen (oder ×) zum Entfernen. Aus der Ablage in die Leiste ziehen oder antippen zum Hinzufügen.</p>
           <div data-tool-tray aria-label="Werkzeug-Ablage" role="group"
             className={cn("flex min-h-14 flex-wrap gap-1 rounded-lg border border-dashed p-1.5", reorder?.over === -1 && "bg-destructive/10")}>
             {hidden.length === 0 && <span className="self-center px-2 text-sm text-muted-foreground">Alle Werkzeuge sind in der Leiste.</span>}

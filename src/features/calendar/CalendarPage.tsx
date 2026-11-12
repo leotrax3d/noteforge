@@ -218,7 +218,7 @@ function WeekView({ days, today, events, subj, onCreate, onOpen, lessons, onLess
           );
         })}
       </div>
-      {lessons.length === 0 && <p className="mt-2 text-sm text-muted-foreground">Verbinde WebUntis (Startseite → Konten), um hier deinen Stundenplan zu sehen.</p>}
+      {lessons.length === 0 && <p className="mt-2 text-sm text-muted-foreground">Kein Stundenplan.</p>}
     </main>
   );
 }

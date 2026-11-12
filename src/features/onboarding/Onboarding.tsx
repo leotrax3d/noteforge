@@ -138,7 +138,6 @@ function WelcomeStep() {
     <div className="grid gap-6">
       <div className="flex items-center gap-4">
         <Logo size={72} />
-        <p className="text-muted-foreground">Deine stiftoptimierte Notiz-App für die Schule. In ein paar Schritten ist alles eingerichtet – jeden Schritt kannst du später unter <b>Einstellungen</b> wiederholen.</p>
       </div>
       <section aria-labelledby="ob-theme" className="grid gap-2">
         <h2 id="ob-theme" className="font-medium">Design</h2>
@@ -321,7 +320,6 @@ function PageStep() {
           </Choice>
         ))}
       </div>
-      <p className="text-sm text-muted-foreground">Gilt für neue Blätter. Jedes Blatt lässt sich später einzeln umstellen.</p>
     </div>
   );
 }
@@ -364,7 +362,6 @@ function UntisStep({ note }: { note: (v: string) => void }) {
 
   return (
     <div className="grid gap-4">
-      <p className="text-muted-foreground">Optional: Stundenplan, Vertretungen und Ausfälle direkt aus WebUntis. Passwörter liegen nur in der Windows-Anmeldeinformationsverwaltung.</p>
       {!school ? (
         <div className="grid gap-1.5">
           <Label htmlFor="ob-school">Schule suchen</Label>
@@ -412,7 +409,6 @@ function UntisStep({ note }: { note: (v: string) => void }) {
       {subjects && (
         <section className="grid gap-2" aria-labelledby="ob-subj">
           <h2 id="ob-subj" className="font-medium">Fächer automatisch anlegen</h2>
-          <p className="text-sm text-muted-foreground">Ausgewählte Fächer werden angelegt und mit WebUntis verknüpft. Bereits vorhandene werden nur verknüpft.</p>
           <ul className="grid gap-1 sm:grid-cols-2">
             {subjects.map((u) => {
               const m = matched.get(u.id);
@@ -468,7 +464,6 @@ function MoodleStep({ note }: { note: (v: string) => void }) {
         return `Verbindung erfolgreich – ${r.deadlines ?? 0} Abgaben übernommen.`;
       });
     }}>
-      <p className="text-muted-foreground">Optional: Abgaben und Dateien aus Moodle (z. B. Schule BW). Für Schul-Logins mit Token: später unter Einstellungen → Konten.</p>
       <div className="grid gap-1.5"><Label htmlFor="ob-m-url">Moodle-Adresse</Label>
         <Input id="ob-m-url" inputMode="url" placeholder="https://…moodle.schule-bw.de" value={m.url} onChange={(e) => setM({ ...m, url: e.target.value })} /></div>
       <div className="grid grid-cols-2 gap-3">
@@ -542,7 +537,6 @@ function OneNoteStep({ note }: { note: (v: string) => void }) {
   });
   return (
     <div className="grid gap-4">
-      <p className="text-muted-foreground">Optional: Exportiere in OneNote ein Notizbuch oder einen Abschnitt über <b>Datei → Exportieren → PDF</b>. Jede PDF wird hier ein Blatt, auf dem du weiterschreiben kannst.</p>
       <div className="grid gap-1.5">
         <Label htmlFor="ob-on-subj">In Fach</Label>
         {subjects.length ? (
@@ -550,7 +544,6 @@ function OneNoteStep({ note }: { note: (v: string) => void }) {
             {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         ) : <Input id="ob-on-subj" value={name} onChange={(e) => setName(e.target.value)} aria-describedby="ob-on-hint" />}
-        {!subjects.length && <p id="ob-on-hint" className="text-xs text-muted-foreground">Noch keine Fächer – dieses Fach wird neu angelegt.</p>}
       </div>
       <input ref={fileRef} type="file" accept="application/pdf" multiple hidden onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; if (f.length) importFiles(f); }} />
       <Button size="lg" className="justify-self-start" disabled={busy} onClick={() => fileRef.current?.click()}><FileUp /> {busy ? "Importiere …" : "PDF-Export auswählen …"}</Button>
@@ -583,7 +576,6 @@ function ReminderStep({ note }: { note: (v: string) => void }) {
             <select id="ob-lead" className="h-11 rounded-md border bg-background px-3" value={s.reminderLead} onChange={(e) => s.set({ reminderLead: Number(e.target.value) })}>
               {leads.map(([v, l]) => <option key={v} value={v}>{v ? `${l} vorher` : l}</option>)}
             </select>
-            <p className="text-xs text-muted-foreground">Klassenarbeiten erinnern 1 Woche, Tests 2 Tage und Abgaben 1 Tag vorher – pro Termin änderbar.</p>
             <Button variant="outline" className="justify-self-start" onClick={() => void requestNotifications().then(setPerm)}>Benachrichtigungen erlauben</Button>
             {perm != null && <p role="status" className={cn("text-sm", perm ? "text-emerald-700 dark:text-emerald-400" : "text-destructive")}>
               {perm ? "Benachrichtigungen sind erlaubt." : "Nicht erlaubt – in Windows unter Einstellungen → System → Benachrichtigungen freigeben."}</p>}
@@ -592,7 +584,6 @@ function ReminderStep({ note }: { note: (v: string) => void }) {
       </section>
       <section className="grid gap-2" aria-labelledby="ob-spitz">
         <h2 id="ob-spitz" className="flex items-center gap-2 font-medium"><Sparkles className="size-4" /> Helfer „Spitz“</h2>
-        <p className="text-sm text-muted-foreground">Spitz zeigt beim ersten Benutzen eines Werkzeugs einen kurzen Tipp – jederzeit abschaltbar.</p>
         <div className="flex gap-2">
           <Choice label="Spitz an" active={s.spitz} onClick={() => s.set({ spitz: true })}>An</Choice>
           <Choice label="Spitz aus" active={!s.spitz} onClick={() => s.set({ spitz: false })}>Aus</Choice>
@@ -622,7 +613,6 @@ function SummaryStep({ summary, restart }: { summary: Summary; restart: boolean 
   ];
   return (
     <div className="grid gap-4">
-      <p className="text-muted-foreground">Alles bereit. Alles lässt sich später unter <b>Einstellungen</b> ändern – dort kannst du diesen Assistenten auch erneut starten.</p>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-xl border p-4" data-testid="ob-summary">
         {rows.map(([k, v]) => <div key={k} className="contents"><dt className="font-medium">{k}</dt><dd className="text-muted-foreground">{v}</dd></div>)}
       </dl>

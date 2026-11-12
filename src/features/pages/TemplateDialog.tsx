@@ -28,7 +28,7 @@ export function TemplateDialog({ open, onOpenChange, onPick }: {
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Blatt aus Vorlage</DialogTitle>
-          <DialogDescription>Vorlagen legen Format, Hintergrund und Grundstruktur fest.</DialogDescription>
+          <DialogDescription className="sr-only">Vorlagen legen Format, Hintergrund und Grundstruktur fest.</DialogDescription>
         </DialogHeader>
         <ul className="grid gap-2 sm:grid-cols-2" aria-label="Vorlagen">
           {BUILTIN_TEMPLATES.map((t) => (

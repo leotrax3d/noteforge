@@ -7,7 +7,7 @@ export function ShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenC
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Tastenkürzel</DialogTitle>
-          <DialogDescription>Einzeltasten wirken nur auf dem Blatt, nicht beim Schreiben in Textfeldern.</DialogDescription>
+          <DialogDescription className="sr-only">Einzeltasten wirken nur auf dem Blatt, nicht beim Schreiben in Textfeldern.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-6 sm:grid-cols-2">
           {SHORTCUTS.map((g) => (

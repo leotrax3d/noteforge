@@ -3,7 +3,6 @@ import { StartupNotices } from "@/features/update/StartupNotices";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { CalendarPage } from "@/features/calendar/CalendarPage";
 import { HomePage } from "@/features/home/HomePage";
-import { PenTestPage } from "@/features/pen-test/PenTestPage";
 import { SearchPage } from "@/features/search/SearchPage";
 import { SubjectView } from "@/features/subject/SubjectView";
 import { TagsPage } from "@/features/tags/TagsPage";
@@ -81,7 +80,6 @@ export default function App() {
       {route.view === "calendar" && <CalendarPage key={route.date ?? 0} date={route.date} mode={route.date ? "week" : undefined} />}
       {route.view === "homework" && <HomeworkPage subjectId={route.subjectId} />}
       {route.view === "grades" && <GradesPage subjectId={route.subjectId} />}
-      {route.view === "pen-test" && <PenTestPage />}
       <SettingsDialog open={dialog === "settings"} onOpenChange={(o) => setDialog(o ? "settings" : null)} />
       {calcOpen && <Suspense fallback={null}><CalcPanel /></Suspense>}
       <ShortcutsDialog open={dialog === "shortcuts"} onOpenChange={(o) => setDialog(o ? "shortcuts" : null)} />

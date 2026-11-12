@@ -56,7 +56,7 @@ export function MoodleImportDialog({ open, onOpenChange, subject, onImport }: {
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>PDF aus Moodle importieren</DialogTitle>
-          <DialogDescription>Die Datei wird als neues A4-Blatt angelegt, auf dem du direkt schreiben kannst.</DialogDescription>
+          <DialogDescription className="sr-only">Die Datei wird als neues A4-Blatt angelegt, auf dem du direkt schreiben kannst.</DialogDescription>
         </DialogHeader>
         {courses.length > 0 && (
           <select aria-label="Moodle-Kurs" className={selectCls} value={course ?? ""} onChange={(e) => setCourse(Number(e.target.value))}>

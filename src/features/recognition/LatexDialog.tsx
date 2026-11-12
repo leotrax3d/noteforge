@@ -38,7 +38,7 @@ export function LatexDialog({ req, onOpenChange, onInsert }: {
         <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); if (!err) { onInsert(src.trim(), keep); onOpenChange(false); } }}>
           <DialogHeader>
             <DialogTitle>{req?.edit ? "Formel bearbeiten" : "Formel (LaTeX)"}</DialogTitle>
-            <DialogDescription>{req?.note ?? "Erkannte Formel prüfen und bei Bedarf korrigieren."}</DialogDescription>
+            <DialogDescription className="sr-only">{req?.note ?? "Erkannte Formel prüfen und bei Bedarf korrigieren."}</DialogDescription>
           </DialogHeader>
           <div aria-label="Vorschau" data-testid="latex-preview"
             className="flex min-h-24 items-center justify-center overflow-x-auto rounded-md border bg-background p-3 text-xl">

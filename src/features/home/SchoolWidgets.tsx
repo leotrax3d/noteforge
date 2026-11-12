@@ -32,14 +32,14 @@ export function SchoolWidgets({ subjects }: { subjects: Subject[] }) {
   const scale = cfg?.scale ?? "grades";
 
   return (
-    <div className="mb-8 grid gap-4 lg:grid-cols-[2fr_1fr]">
+    <div className="mb-5 grid gap-4 lg:grid-cols-[2fr_1fr]">
       <section aria-labelledby="hw-h" className="min-w-0">
         <div className="mb-2 flex items-center gap-2">
           <h2 id="hw-h" className="mr-auto text-lg font-medium">Hausaufgaben {open.length > 0 && <span className="text-muted-foreground font-normal">· {open.length} offen</span>}</h2>
           <Button variant="ghost" onClick={() => go({ view: "homework" })}><BookCheck /> Alle</Button>
         </div>
         {shown.length === 0 ? (
-          <p className="rounded-xl border border-dashed p-4 text-muted-foreground">Keine offenen Hausaufgaben.</p>
+          <p className="rounded-xl border border-dashed p-4 text-muted-foreground">Keine offenen Hausaufgaben</p>
         ) : (
           <ul className="divide-y rounded-xl border" aria-label="Offene Hausaufgaben">
             {shown.map((h) => (
@@ -63,7 +63,7 @@ export function SchoolWidgets({ subjects }: { subjects: Subject[] }) {
               {fmtGrade(overall, scale)}
             </span>
           </div>
-          {per.length === 0 ? <p className="mt-1 text-sm text-muted-foreground">Noch keine Noten eingetragen.</p> : (
+          {per.length === 0 ? null : (
             <ul className="mt-2 grid gap-0.5 text-sm">
               {per.slice(0, 6).map(({ s, avg }) => (
                 <li key={s!.id} className="flex items-center gap-2">

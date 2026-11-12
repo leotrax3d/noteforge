@@ -93,7 +93,7 @@ export function StartupNotices() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogTitle>Noteforge {upd?.version}</DialogTitle>
-          <DialogDescription>Installiert ist Version {upd?.currentVersion}. Deine Notizen bleiben unverändert.</DialogDescription>
+          <DialogDescription className="sr-only">Installiert ist Version {upd?.currentVersion}. Deine Notizen bleiben unverändert.</DialogDescription>
           <div className="max-h-72 overflow-y-auto rounded-md border bg-muted/40 p-3 text-sm whitespace-pre-wrap" aria-label="Änderungen">
             {upd?.body?.trim() || "Keine Beschreibung vorhanden."}
           </div>

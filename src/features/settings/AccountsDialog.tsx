@@ -47,7 +47,7 @@ export function AccountsDialog({ open, onOpenChange, onMapping }: { open: boolea
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Konten</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="sr-only">
             Stundenplan aus WebUntis, Abgaben und Dateien aus Moodle BW. Passwörter und Tokens liegen nur in der Windows-Anmeldeinformationsverwaltung.
           </DialogDescription>
         </DialogHeader>
@@ -75,7 +75,6 @@ export function AccountsDialog({ open, onOpenChange, onMapping }: { open: boolea
             <div className="grid gap-1.5"><Label htmlFor="u-pw">Passwort</Label>
               <Input id="u-pw" type="password" autoComplete="current-password" placeholder={st?.untis ? "gespeichert" : ""} value={u.password} onChange={(e) => setU({ ...u, password: e.target.value })} /></div>
           </div>
-          <p className="text-xs text-muted-foreground">Server und Schule stehen in der Adresszeile, wenn du WebUntis im Browser öffnest (…webuntis.com/WebUntis/?school=<b>kürzel</b>).</p>
           <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={!!busy}><Link2 /> {busy === "untis" ? "Verbinde …" : st?.untis ? "Neu verbinden" : "Verbinden"}</Button>
             {st?.untis && (
@@ -108,8 +107,7 @@ export function AccountsDialog({ open, onOpenChange, onMapping }: { open: boolea
           </label>
           {useToken ? (
             <div className="grid gap-1.5"><Label htmlFor="m-token">Token</Label>
-              <Input id="m-token" type="password" value={m.token} onChange={(e) => setM({ ...m, token: e.target.value })} />
-              <p className="text-xs text-muted-foreground">In Moodle unter Profil → Einstellungen → Sicherheitsschlüssel („Moodle mobile web service“).</p></div>
+              <Input id="m-token" type="password" value={m.token} onChange={(e) => setM({ ...m, token: e.target.value })} /></div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1.5"><Label htmlFor="m-user">Benutzername</Label>

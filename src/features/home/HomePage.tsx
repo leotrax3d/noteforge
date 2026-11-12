@@ -1,3 +1,4 @@
+import { useLabels } from "@/store/labels";
 import { useState } from "react";
 import {
   DndContext, KeyboardSensor, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors,
@@ -5,9 +6,8 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { EmptyState } from "@/components/common/EmptyState";
 import { Logo } from "@/components/common/Logo";
-import { BookOpen, BookCheck, Command, CalendarDays, GraduationCap, KeyRound, MoreVertical, PenLine, Pencil, Plus, RefreshCw, Search, Settings, Tags, Trash2 } from "lucide-react";
+import { BookCheck, Command, CalendarDays, GraduationCap, KeyRound, MoreVertical, Pencil, Plus, RefreshCw, Search, Settings, Tags, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -40,6 +40,11 @@ export function useDragSensors() {
   );
 }
 
+function NavButton({ label, icon, onClick }: { label: string; icon: React.ReactNode; onClick: () => void }) {
+  const on = useLabels((s) => s.on);
+  return <Button variant="ghost" size={on ? "default" : "icon"} className={on ? "h-11" : "size-11"} aria-label={label} title={`${label} (Alt: Beschriftung)`} onClick={onClick}>{icon}{on && label}</Button>;
+}
+
 export function HomePage() {
   const go = useNav((s) => s.go);
   const cloudRev = useCloudRev((s) => s.rev);
@@ -65,18 +70,15 @@ export function HomePage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-2 border-b px-4 py-2">
+      <header className="flex min-w-0 items-center gap-1 border-b px-4 py-2">
         <h1 className="mr-auto flex items-center gap-2 text-xl font-semibold tracking-tight"><Logo size={32} /> Noteforge</h1>
         <Button variant="ghost" size="icon" aria-label="Befehlspalette" onClick={() => usePrefs.getState().setDialog("palette")}><Command /></Button>
-        <Button variant="ghost" onClick={() => go({ view: "search" })} title="Suche (Strg+F)"><Search /> Suche</Button>
-        <Button variant="ghost" onClick={() => go({ view: "calendar" })}><CalendarDays /> Kalender</Button>
-        <Button variant="ghost" onClick={() => go({ view: "homework" })}><BookCheck /> Hausaufgaben</Button>
-        <Button variant="ghost" onClick={() => go({ view: "grades" })}><GraduationCap /> Noten</Button>
-        <Button variant="ghost" onClick={() => go({ view: "tags" })}><Tags /> Tags</Button>
-        <Button variant="ghost" onClick={() => setAccounts(true)}><KeyRound /> Konten</Button>
-        <Button variant="ghost" onClick={() => go({ view: "pen-test" })}>
-          <PenLine /> Stift-Test
-        </Button>
+        <NavButton label="Suche" icon={<Search />} onClick={() => go({ view: "search" })} />
+        <NavButton label="Kalender" icon={<CalendarDays />} onClick={() => go({ view: "calendar" })} />
+        <NavButton label="Hausaufgaben" icon={<BookCheck />} onClick={() => go({ view: "homework" })} />
+        <NavButton label="Noten" icon={<GraduationCap />} onClick={() => go({ view: "grades" })} />
+        <NavButton label="Tags" icon={<Tags />} onClick={() => go({ view: "tags" })} />
+        <NavButton label="Konten" icon={<KeyRound />} onClick={() => setAccounts(true)} />
         <Button variant="ghost" size="icon" aria-label="Einstellungen" title={cloudError ? `Sync: ${cloudError}` : "Einstellungen (Strg+,)"}
           className="relative" onClick={() => setDialog("settings")}>
           {cloudRunning ? <RefreshCw className="animate-spin" /> : <Settings />}
@@ -117,11 +119,6 @@ export function HomePage() {
             </ul>
           </SortableContext>
         </DndContext>
-        {subjects?.length === 0 && (
-          <EmptyState className="mt-4" icon={<BookOpen />} title="Noch keine Fächer"
-            text="Lege dein erstes Fach an – oder verbinde WebUntis, dann werden die Fächer aus deinem Stundenplan vorgeschlagen. Kacheln lassen sich per Ziehen sortieren."
-            action="Fach anlegen" onAction={() => setCreating(true)} />
-        )}
       </main>
 
       <SubjectDialog

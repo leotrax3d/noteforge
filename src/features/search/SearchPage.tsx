@@ -60,7 +60,6 @@ export function SearchPage({ query: initial = "" }: { query?: string }) {
       <main className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="mx-auto max-w-3xl">
           {error && <p className="text-destructive">{error}</p>}
-          {!q.trim() && <p className="text-muted-foreground">Durchsucht Blatttitel, Textfelder und Tabellen. Mehrere Wörter müssen alle vorkommen.</p>}
           {hits && hits.length === 0 && <p className="text-muted-foreground">Keine Treffer für „{q}“.</p>}
           {hits && hits.length > 0 && (
             <>

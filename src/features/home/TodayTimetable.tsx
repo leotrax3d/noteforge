@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, Settings2 } from "lucide-react";
+import { BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { currentLesson, daySlots, integrations, syncNow, useSyncRev, type Lesson } from "@/lib/integrations";
@@ -16,7 +16,7 @@ export async function openLessonSubject(subjectId: string, go: ReturnType<typeof
 }
 
 /** Startseite: heutiger Stundenplan + „Aktuelle Stunde öffnen“. */
-export function TodayTimetable({ subjects, onSetup }: { subjects: Subject[]; onSetup: () => void }) {
+export function TodayTimetable({ subjects }: { subjects: Subject[]; onSetup?: () => void }) {
   const go = useNav((s) => s.go);
   const rev = useSyncRev((s) => s.rev);
   const [now, setNow] = useState(() => Date.now());
@@ -32,19 +32,12 @@ export function TodayTimetable({ subjects, onSetup }: { subjects: Subject[]; onS
   }, [day, rev, subjects]);
   const subj = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects]);
   if (!data) return null;
-  if (!data.connected) {
-    return (
-      <section className="mb-8 flex flex-wrap items-center gap-3 rounded-xl border border-dashed p-4 text-muted-foreground">
-        <p className="mr-auto">Verbinde WebUntis, um hier deinen Stundenplan und „Aktuelle Stunde öffnen“ zu sehen.</p>
-        <Button variant="outline" onClick={onSetup}><Settings2 /> Konten einrichten</Button>
-      </section>
-    );
-  }
+  if (!data.connected) return null;
   const cur = currentLesson(data.lessons, now);
   const curSubject = cur?.lesson.subjectId ? subj.get(cur.lesson.subjectId) : undefined;
 
   return (
-    <section aria-labelledby="today-h" className="mb-8">
+    <section aria-labelledby="today-h" className="mb-5">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h2 id="today-h" className="mr-auto text-lg font-medium">Heute</h2>
         {cur && (
