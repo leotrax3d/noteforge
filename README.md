@@ -141,3 +141,19 @@ Bilder werden in die Tiles gerendert (Tinte liegt darüber), Text und Tabellen l
 - **WebUntis:** Freistunden (Lücke vs. Entfall) in Startseite und Kalender.
 - **Einrichtungsassistent** beim ersten Start (10 Schritte, erneut unter Einstellungen → Stift & Bedienung oder Befehlspalette).
 - **Logo** `assets/logo.svg`, konfigurierbare Stiftleiste, Befehlspalette **Strg+K**, Einstellungen mit Kategorien und Suche, Kontextmenüs, Helfer „Spitz“.
+
+### Google Kalender
+
+Noteforge meldet sich per OAuth 2.0 für Desktop-Apps an: Authorization Code mit PKCE, Redirect auf `http://127.0.0.1:<zufälliger Port>`, Login im Standardbrowser. Das Refresh-Token liegt nur in der Windows-Anmeldeinformationsverwaltung. Jede Installation braucht eine eigene OAuth-Client-ID:
+
+1. In der [Google Cloud Console](https://console.cloud.google.com/) oben **Projekt auswählen → Neues Projekt** anlegen, z. B. „Noteforge“.
+2. **APIs & Dienste → Bibliothek** öffnen, nach **Google Calendar API** suchen und **Aktivieren** wählen.
+3. **APIs & Dienste → OAuth-Zustimmungsbildschirm** (bzw. **Google Auth Platform**) einrichten:
+   - Nutzertyp **Extern**, App-Name, Support-E-Mail.
+   - Unter **Datenzugriff** die Bereiche `…/auth/calendar.events`, `…/auth/calendar.readonly` und `…/auth/calendar.app.created` hinzufügen. Der letzte wird nur gebraucht, um den eigenen Kalender „Noteforge – Schule“ anzulegen.
+   - Solange die App im Status **Test** ist, unter **Zielgruppe → Testnutzer** die eigenen Google-Konten eintragen. Im Testmodus laufen Refresh-Tokens nach 7 Tagen ab; danach in Noteforge einfach neu anmelden.
+4. **APIs & Dienste → Anmeldedaten → Anmeldedaten erstellen → OAuth-Client-ID** öffnen, als Anwendungstyp **Desktop-App** wählen und einen Namen vergeben. Eine Weiterleitungs-URI muss man nicht eintragen, Loopback-Adressen sind bei Desktop-Clients automatisch erlaubt.
+5. Die angezeigte **Client-ID** (`…apps.googleusercontent.com`) und das **Clientschlüssel/Client-Secret** in Noteforge unter **Einstellungen → Google Kalender → Google-Cloud-Zugang** eintragen. Google verlangt das Secret auch bei Desktop-Clients beim Token-Tausch, es gilt dort aber nicht als geheim. Noteforge speichert es trotzdem im Credential Manager.
+6. **Google-Konto verbinden** klicken, im Browser anmelden und zustimmen. Danach den Zielkalender wählen (empfohlen: eigener Kalender „Noteforge – Schule“), festlegen, was synchronisiert wird, und Kalender auswählen, die nur lesend eingeblendet werden.
+
+Es lassen sich mehrere Google-Konten verbinden. **Abmelden und Zugriff entfernen** widerruft das Token bei Google und löscht es lokal. Auf Wunsch werden vorher auch die von Noteforge angelegten Termine in Google gelöscht.

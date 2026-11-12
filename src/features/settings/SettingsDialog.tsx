@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Bell, CheckCircle2, Cloud, DatabaseBackup, Keyboard, Monitor, Moon, Palette, PenLine, Search, Sun, Wand2, Link2, RefreshCw, Unplug } from "lucide-react";
+import { AlertTriangle, Bell, CalendarDays, CheckCircle2, Cloud, DatabaseBackup, Keyboard, Monitor, Moon, Palette, PenLine, Search, Sun, Wand2, Link2, RefreshCw, Unplug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { useTheme } from "@/components/theme/theme-provider";
 import { setupApi } from "@/lib/setup-api";
 import { ACCENTS } from "@/features/onboarding/accents";
 import { BackupSection } from "@/features/backup/BackupSection";
+import { GoogleSection } from "./GoogleCalendar";
 import { usePower, type PowerSetting } from "@/lib/power";
 
 const INTERVALS = [
@@ -39,12 +40,13 @@ function Switch({ id, checked, onChange, label }: { id: string; checked: boolean
   );
 }
 
-type CatId = "look" | "pen" | "notify" | "sync" | "backup";
+type CatId = "look" | "pen" | "notify" | "sync" | "google" | "backup";
 const CATS: { id: CatId; label: string; icon: React.ReactNode; words: string }[] = [
   { id: "look", label: "Darstellung", icon: <Palette />, words: "design hell dunkel system akzent farbe theme logo" },
   { id: "pen", label: "Stift & Bedienung", icon: <PenLine />, words: "stift druck kalibrierung stifttaste linkshänder rechtshänder leistung akku energie sparmodus fps tastenkürzel assistent einrichtung" },
   { id: "notify", label: "Erinnerungen", icon: <Bell />, words: "erinnerungen benachrichtigung spitz hinweise tipps vorlaufzeit" },
   { id: "sync", label: "Sync", icon: <Cloud />, words: "nextcloud sync abgleich app-passwort server ordner" },
+  { id: "google", label: "Google Kalender", icon: <CalendarDays />, words: "google kalender calendar konto oauth client-id synchronisieren termine" },
   { id: "backup", label: "Sicherung", icon: <DatabaseBackup />, words: "backup sicherung sicherungen wiederherstellen aufbewahrung speicherort datenordner" },
 ];
 const fold = (x: string) => x.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -272,6 +274,8 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
             </>}
           </div>
         </form>}
+
+        {show("google") && <GoogleSection />}
 
         {show("backup") && <BackupSection />}
 

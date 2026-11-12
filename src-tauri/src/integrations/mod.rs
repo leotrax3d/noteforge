@@ -1,6 +1,7 @@
 //! Phase 6: WebUntis + Moodle BW (SPEC §8).
 //! Konfiguration (Server, Schule, Benutzername) in SQLite, Passwort/Token nur im Credential Manager.
 
+pub mod google;
 pub mod moodle;
 pub mod secrets;
 pub mod webuntis;
@@ -53,13 +54,13 @@ fn now_ms() -> i64 {
 
 // ---------- Einstellungen ----------
 
-fn get_setting<T: serde::de::DeserializeOwned>(conn: &Connection, key: &str) -> R<Option<T>> {
+pub(crate) fn get_setting<T: serde::de::DeserializeOwned>(conn: &Connection, key: &str) -> R<Option<T>> {
     let v: Option<String> =
         conn.query_row("SELECT value FROM setting WHERE key=?1", [key], |r| r.get(0)).optional()?;
     Ok(v.and_then(|s| serde_json::from_str(&s).ok()))
 }
 
-fn set_setting<T: Serialize>(conn: &Connection, key: &str, v: &T) -> R<()> {
+pub(crate) fn set_setting<T: Serialize>(conn: &Connection, key: &str, v: &T) -> R<()> {
     let json = serde_json::to_string(v).map_err(|e| IntErr::Other(e.to_string()))?;
     conn.execute(
         "INSERT INTO setting (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",

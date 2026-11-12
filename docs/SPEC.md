@@ -100,13 +100,51 @@ Unterseiten, Drag & Drop-Sortierung, Tags (To-Do, Wichtig, Frage, Lernen für KA
 
 ### Onboarding (Pflicht beim ersten Start)
 Vollbild-Assistent mit Fortschrittsanzeige, Zurück/Weiter, fortsetzbar (Schritt wird gespeichert); optionale Schritte haben „Überspringen“; erneut startbar unter Einstellungen → Bedienung.
-1. Willkommen + Design (Hell/Dunkel/System, Akzentfarbe) · 2. Speicherort (Standard `Dokumente\Noteforge`, Ordnerdialog, Schreibrechte-Prüfung, Warnung bei OneDrive/Nextcloud/Dropbox-Ordnern; DB wird per `VACUUM INTO` kopiert, wirksam nach Neustart; Pfad in `location.json` im App-Konfigurationsordner) · 3. Stift & Hand (Rechts-/Linkshänder, Testfeld, Druck-Kalibrierung = Maximaldruck, Druckkurve weich/normal/fest, Stifttaste: Lasso/Radierer/Radialmenü) · 4. Standard-Blatt (endlos/A4; kariert 5 mm, liniert 8 mm, punktiert, leer) · 5. WebUntis (Schulsuche über die öffentliche WebUntis-Schulsuche, Login, Verbindungstest, Fächer anlegen + verknüpfen nach Bestätigung) · 6. Moodle · 7. Nextcloud (Testverbindung) · 8. OneNote-Import (OneNote-PDF-Export → je Datei ein A4-Blatt in Thema „OneNote-Import“) · 9. Erinnerungen an/aus (`app.reminders`), Vorlaufzeit sonstiger Termine, Benachrichtigungen erlauben, Helfer „Spitz“ (Werkzeug-Tipps) · 10. Zusammenfassung.
+1. Willkommen + Design (Hell/Dunkel/System, Akzentfarbe) · 2. Speicherort (Standard `Dokumente\Noteforge`, Ordnerdialog, Schreibrechte-Prüfung, Warnung bei OneDrive/Nextcloud/Dropbox-Ordnern; DB wird per `VACUUM INTO` kopiert, wirksam nach Neustart; Pfad in `location.json` im App-Konfigurationsordner) · 3. Stift & Hand (Rechts-/Linkshänder, Testfeld, Druck-Kalibrierung = Maximaldruck, Druckkurve weich/normal/fest, Stifttaste: Lasso/Radierer/Radialmenü) · 4. Standard-Blatt (endlos/A4; kariert 5 mm, liniert 8 mm, punktiert, leer) · 5. WebUntis (Schulsuche über die öffentliche WebUntis-Schulsuche, Login, Verbindungstest, Fächer anlegen + verknüpfen nach Bestätigung) · 6. Moodle · 7. Google Kalender (optional: Client-ID, Anmeldung, Zielkalender und Auswahl, was synchronisiert wird) · 8. Nextcloud (Testverbindung) · 9. OneNote-Import (OneNote-PDF-Export → je Datei ein A4-Blatt in Thema „OneNote-Import“) · 10. Erinnerungen an/aus (`app.reminders`), Vorlaufzeit sonstiger Termine, Benachrichtigungen erlauben, Helfer „Spitz“ (Werkzeug-Tipps) · 11. Zusammenfassung.
 
 ## 8. Integrationen
 - **WebUntis:** inoffizielle JSON-RPC-API (`/WebUntis/jsonrpc.do?school=…`), Login Schulname/Benutzer/Passwort, Stundenplan + Vertretungen + Ausfälle, Cache in SQLite, Fach-Mapping. „Aktuelle Stunde öffnen“ springt ins Fach.
   - **Freistunden:** Lücken > 25 min zwischen stattfindenden Stunden („Lücke“) und entfallene Stunden zwischen zwei stattfindenden („Entfall“) werden in Startseite und Kalender-Woche als „Freistunde“ gezeigt (eigene Farbe, Streifenmuster; Entfall dichter gestreift). Lücken/Entfall vor der ersten bzw. nach der letzten Stunde sind keine Freistunden (Entfall bleibt als „entfällt“ sichtbar).
 - **Moodle BW:** Token über `/login/token.php?service=moodle_mobile_app`, Webservice-Funktionen `core_enrol_get_users_courses`, `core_course_get_contents`, `core_calendar_get_action_events_by_timesort`; PDFs als Blatt importieren.
 - Zugangsdaten im Windows Credential Manager.
+
+### 8.3 Google Kalender
+**Anmeldung**
+- OAuth 2.0 für Desktop-Apps (RFC 8252): Authorization Code mit PKCE (S256), Loopback-Redirect `http://127.0.0.1:<zufälliger Port>`, Login im Standardbrowser, `access_type=offline`.
+- Scopes: `calendar.events`, `calendar.readonly` und zusätzlich `calendar.app.created`, damit die App ihren eigenen Kalender anlegen darf.
+- Client-ID (Typ „Desktop-App“) in Einstellungen → Google Kalender; Anleitung in der README. Die Client-ID liegt in SQLite, das Client-Secret im Credential Manager.
+- Refresh-Token pro Konto im Credential Manager (`google:<E-Mail>`). Access-Tokens liegen nur im Speicher und werden automatisch erneuert, auch wenn Google das Refresh-Token rotiert.
+- Mehrere Konten möglich. Abmelden widerruft das Token bei Google (`/revoke`), löscht es lokal und entfernt auf Wunsch die angelegten Termine.
+
+**Noteforge → Google**
+- Zielkalender pro Konto: eigener Kalender „Noteforge – Schule“ (empfohlen, wird angelegt bzw. wiederverwendet) oder ein beschreibbarer bestehender Kalender.
+- Pro Typ abschaltbar:
+  - Klassenarbeiten/Tests: „KA Mathe – Thema“ bzw. „Test Mathe – Thema“; ganztägig ohne Uhrzeit, sonst 45 min.
+  - Sonstige Kalendertermine.
+  - Hausaufgaben mit Fälligkeit (nur manuelle, offene): „HA Fach – Titel“, ganztägig oder optional zur passenden Unterrichtsstunde laut Fach-Mapping.
+  - Moodle-Abgaben.
+  - Stundenplan (Standard aus): Stunden mit Raum, Vertretungen, ausgefallene Stunden als „Entfällt: …“ und Lücken ab 30 min als „Freistunde“.
+- Farbe: nächstliegende der 11 Google-Terminfarben zur Fachfarbe (gewichteter RGB-Abstand).
+- Erinnerungen: die Noteforge-Erinnerung wird als Popup-Erinnerung übernommen, bei KA/Tests optional zusätzlich 7, 3 und 1 Tag vorher. Google erlaubt höchstens 5 Erinnerungen bis 4 Wochen vorher.
+- Beschreibung: Notiz und Deep-Link `noteforge://page/<id>` (verknüpftes Blatt, wählbar im Termin-Dialog), sonst `noteforge://subject/<id>` bzw. `noteforge://calendar`/`homework`. Das Protokoll ist über `tauri-plugin-deep-link` registriert; mit `tauri-plugin-single-instance` übergibt ein zweiter Start den Link an die laufende App.
+- Abgleich-Fenster: ab 30 Tagen in der Vergangenheit. Ältere, verknüpfte Termine bleiben in Google stehen. Wird ein Typ abgeschaltet oder ein Eintrag lokal gelöscht, löscht Noteforge den Google-Termin.
+
+**Google → Noteforge**
+- Wählbare Kalender des Kontos (Familie, Verein …) werden nur lesend im Noteforge-Kalender angezeigt, in der Farbe des Google-Kalenders. Fremde Termine im Zielkalender ebenso.
+- Änderungen in Google an eigenen Kalenderterminen (Titel, Datum/Uhrzeit, Löschen) werden übernommen. Das Präfix „KA Mathe – “ wird dabei wieder entfernt.
+- Hausaufgaben, Stundenplan und Moodle-Abgaben haben ihre eigene Quelle; Google-Änderungen daran werden bei der nächsten lokalen Änderung überschrieben. In Google gelöschte Einträge dieser Art legt Noteforge erst nach einer lokalen Änderung neu an.
+- Optional erkennt Noteforge Klassenarbeiten in Google-Terminen: „KA“, „Klassenarbeit“, „Klausur“ ergeben eine Klassenarbeit; „Test“, „Lernkontrolle“ und „…test“ ergeben einen Test. Zusätzlich muss ein Fachname oder ein übliches Kürzel vorkommen. Der Vorschlag lässt sich übernehmen oder verwerfen. Liegt der Termin im Zielkalender, wird er selbst zum Noteforge-Termin, ohne Dublette.
+
+**Technik**
+- Tabellen `gcal_account`, `gcal_source`, `gcal_remote`, `gcal_link` und `event_history`, alle gerätelokal (nicht im Nextcloud-Sync). Neue Spalten `event.updated_at` und `event.page_id`.
+- Zuordnung über `extendedProperties.private.noteforgeId` (`event:<id>`, `hw:<id>`, `lesson:<id>:<start>`, `free:<start>`) und `gcal_link`. Die Google-Termin-ID ist deterministisch (`nf` + SHA-256 aus Konto und Schlüssel, base32hex), damit ein Wiederholversuch nach Verbindungsabbruch keine Duplikate erzeugt.
+- Inkrementeller Abruf mit `syncToken` (erster Abruf ab −60 Tagen, `singleEvents`, `showDeleted`). Bei 410 Gone wird vollständig neu geladen.
+- Offline-Warteschlange: Soll-Zustand gegen den zuletzt übertragenen Inhalts-Hash in `gcal_link`. Was offline geändert wurde, bleibt ausstehend (Anzeige „n Änderungen warten“) und wird beim nächsten Abgleich übertragen. Höchstens 150 Schreibzugriffe pro Durchlauf.
+- Konflikte: Die letzte Änderung gewinnt (`event.updated_at` gegen Google `updated`). Die unterlegene Version kommt in den Termin-Verlauf (`event_history`), sichtbar und wiederherstellbar im Termin-Dialog.
+- Rate-Limits: Bei 429, 5xx und 403 mit `rateLimitExceeded`/`userRateLimitExceeded` wartet Noteforge exponentiell (1, 2, 4, 8 s plus Streuung, höchstens 5 Versuche).
+- Polling: alle 5 min bei Fensterfokus, sonst alle 20 min, im Akku-Sparmodus jeweils dreifach. Beim Zurückkehren ins Fenster und bei „online“ wird nachgeholt. Nach dem Speichern oder Löschen eines Termins wird nach 4 s übertragen.
+- Status in Einstellungen → Google Kalender: zuletzt synchronisiert, ausstehende Änderungen, letzter Fehler, Button „Jetzt synchronisieren“.
+- Spitz bietet keine Lernplan-Einheiten an. Sobald es sie gibt, kommen sie als weiterer Typ dazu.
 
 ## 9. Sync
 Datenordner (SQLite + Blobs) mit Nextcloud über WebDAV; Konflikte pro Blatt (neuere Version gewinnt, ältere als PageVersion erhalten). Automatische Sicherungen siehe §10.1.

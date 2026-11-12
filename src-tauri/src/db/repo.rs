@@ -547,7 +547,7 @@ fn validate_event(e: &Event) -> Result<()> {
 
 pub fn list_events(conn: &Connection, from: i64, to: i64) -> Result<Vec<Event>> {
     let mut stmt = conn.prepare_cached(
-        r#"SELECT id, subject_id, type, title, start, "end", note, source, remind_before FROM event
+        r#"SELECT id, subject_id, type, title, start, "end", note, source, remind_before, page_id, updated_at FROM event
            WHERE start < ?2 AND COALESCE("end", start) >= ?1 ORDER BY start"#,
     )?;
     let rows = stmt.query_map([from, to], event_row)?;
@@ -565,6 +565,8 @@ fn event_row(r: &rusqlite::Row) -> rusqlite::Result<Event> {
         note: r.get(6)?,
         source: r.get(7)?,
         remind_before: r.get(8)?,
+        page_id: r.get(9)?,
+        updated_at: r.get(10)?,
     })
 }
 
@@ -573,7 +575,7 @@ fn event_row(r: &rusqlite::Row) -> rusqlite::Result<Event> {
 pub fn take_due_reminders(conn: &Connection, now: i64, grace_ms: i64) -> Result<Vec<Event>> {
     let due: Vec<Event> = {
         let mut stmt = conn.prepare_cached(
-            r#"SELECT id, subject_id, type, title, start, "end", note, source, remind_before FROM event
+            r#"SELECT id, subject_id, type, title, start, "end", note, source, remind_before, page_id, updated_at FROM event
                WHERE notified=0 AND remind_before IS NOT NULL
                  AND start - remind_before*60000 <= ?1 ORDER BY start"#,
         )?;
@@ -586,23 +588,41 @@ pub fn take_due_reminders(conn: &Connection, now: i64, grace_ms: i64) -> Result<
     Ok(due.into_iter().filter(|e| e.start + grace_ms >= now).collect())
 }
 
-/// Legt an (leere `id`) oder aktualisiert.
-pub fn save_event(conn: &Connection, mut e: Event) -> Result<Event> {
+/// Legt an (leere `id`) oder aktualisiert; `updated_at` = jetzt.
+pub fn save_event(conn: &Connection, e: Event) -> Result<Event> {
+    save_event_at(conn, e, now_ms())
+}
+
+/// Wie `save_event`, aber mit vorgegebenem Änderungszeitpunkt (Übernahme aus Google).
+pub fn save_event_at(conn: &Connection, mut e: Event, updated_at: i64) -> Result<Event> {
     validate_event(&e)?;
     if e.id.is_empty() {
         e.id = new_id();
     }
+    e.updated_at = updated_at;
     conn.execute(
-        r#"INSERT INTO event (id, subject_id, type, title, start, "end", note, source, remind_before)
-           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
+        r#"INSERT INTO event (id, subject_id, type, title, start, "end", note, source, remind_before, page_id, updated_at)
+           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)
            ON CONFLICT(id) DO UPDATE SET subject_id=excluded.subject_id, type=excluded.type,
              title=excluded.title, "end"=excluded."end", note=excluded.note, source=excluded.source,
              notified = CASE WHEN start=excluded.start AND remind_before IS excluded.remind_before
                              THEN notified ELSE 0 END,
-             start=excluded.start, remind_before=excluded.remind_before"#,
-        params![e.id, e.subject_id, e.kind, e.title.trim(), e.start, e.end, e.note, e.source, e.remind_before],
+             start=excluded.start, remind_before=excluded.remind_before,
+             page_id=excluded.page_id, updated_at=excluded.updated_at"#,
+        params![e.id, e.subject_id, e.kind, e.title.trim(), e.start, e.end, e.note, e.source, e.remind_before, e.page_id, e.updated_at],
     )?;
+    e.title = e.title.trim().to_string();
     Ok(e)
+}
+
+pub fn get_event(conn: &Connection, id: &str) -> Result<Option<Event>> {
+    Ok(conn
+        .query_row(
+            r#"SELECT id, subject_id, type, title, start, "end", note, source, remind_before, page_id, updated_at FROM event WHERE id=?1"#,
+            [id],
+            event_row,
+        )
+        .optional()?)
 }
 
 pub fn delete_event(conn: &Connection, id: &str) -> Result<()> {
@@ -773,7 +793,7 @@ mod tests {
         set_element_tag(&c, "e1", "todo", true).unwrap();
 
         let ev = save_event(&c, Event { id: String::new(), subject_id: Some(s.id.clone()), kind: "exam".into(),
-            title: "KA 1".into(), start: 1000, end: None, note: String::new(), source: "manual".into(), remind_before: None }).unwrap();
+            title: "KA 1".into(), start: 1000, end: None, note: String::new(), source: "manual".into(), remind_before: None, page_id: None, updated_at: 0 }).unwrap();
         assert_eq!(list_events(&c, 0, 2000).unwrap().len(), 1);
         assert!(list_events(&c, 1001, 2000).unwrap().is_empty());
         delete_subject(&c, &s.id).unwrap();
@@ -787,7 +807,7 @@ mod tests {
         let c = d.conn();
         const MIN: i64 = 60_000;
         let mk = |start: i64, rb: Option<i64>| Event { id: String::new(), subject_id: None, kind: "test".into(),
-            title: "Vokabeltest".into(), start, end: None, note: String::new(), source: "manual".into(), remind_before: rb };
+            title: "Vokabeltest".into(), start, end: None, note: String::new(), source: "manual".into(), remind_before: rb, page_id: None, updated_at: 0 };
         let ev = save_event(&c, mk(100 * MIN, Some(30))).unwrap();
         save_event(&c, mk(100 * MIN, None)).unwrap();
         assert!(save_event(&c, mk(0, Some(-5))).is_err());

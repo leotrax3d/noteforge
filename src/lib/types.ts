@@ -88,4 +88,8 @@ export interface CalendarEvent {
   source: "manual" | "moodle";
   /** Erinnerung in Minuten vor Beginn, null = keine. */
   remindBefore: number | null;
+  /** Verknüpftes Blatt (Deep-Link im Google-Termin). */
+  pageId?: string | null;
+  /** Letzte Änderung (ms), vom Backend gesetzt. */
+  updatedAt?: number;
 }

@@ -115,6 +115,12 @@ pub struct Event {
     /// Erinnerung in Minuten vor Beginn (None = keine).
     #[serde(default)]
     pub remind_before: Option<i64>,
+    /// Verknüpftes Blatt (Deep-Link im Google-Termin).
+    #[serde(default)]
+    pub page_id: Option<String>,
+    /// Letzte Änderung (ms); wird beim Speichern gesetzt.
+    #[serde(default)]
+    pub updated_at: i64,
 }
 
 // ---------- Phase 4 ----------

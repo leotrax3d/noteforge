@@ -24,7 +24,18 @@ fn updater_enabled(app: tauri::AppHandle) -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // Nur eine Instanz: ein zweiter Start (z. B. durch einen noteforge://-Link) übergibt den Link an die laufende App.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        if let Some(w) = app.get_webview_window("main") {
+            let _ = w.unminimize();
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
+    }));
+    builder
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
@@ -46,6 +57,12 @@ pub fn run() {
                 _ => {}
             }
             app.manage(db);
+            // Protokoll noteforge:// (Installer registriert es; im Entwicklungsmodus zur Laufzeit)
+            #[cfg(all(desktop, debug_assertions))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let _ = app.deep_link().register_all();
+            }
             app.manage(journal);
             reminders::spawn(app.handle().clone());
             sync::spawn(app.handle().clone());
@@ -95,6 +112,11 @@ pub fn run() {
             integrations::moodle_connect, integrations::moodle_disconnect, integrations::integrations_sync,
             integrations::list_lessons, integrations::list_untis_subjects, integrations::moodle_courses,
             integrations::moodle_course_files, integrations::moodle_download,
+            integrations::google::gcal_client, integrations::google::gcal_set_client, integrations::google::gcal_status,
+            integrations::google::gcal_login, integrations::google::gcal_calendars, integrations::google::gcal_configure,
+            integrations::google::gcal_disconnect, integrations::google::gcal_sync, integrations::google::gcal_events,
+            integrations::google::gcal_adopt, integrations::google::gcal_dismiss,
+            integrations::google::event_history, integrations::google::event_history_restore,
         ])
         .run(tauri::generate_context!())
         .expect("Fehler beim Starten von Noteforge");
