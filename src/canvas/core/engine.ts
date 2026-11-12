@@ -36,6 +36,7 @@ import { PdfRaster } from "./pdf-raster";
 import { getAsset } from "@/lib/api";
 import { PressureSmoother, clampPressureEdges, minDistWorld } from "./ink-filter";
 import { makeObj } from "./objects";
+import type { MolData } from "@/features/chem/mol";
 import { angleDeg, fmtDeg, type AngleSpec, type FillSpec, type Head, type LineSpec, type VecSpec } from "../vector/vec";
 import { snapToTerminal, updateVecObj, vecLinePts, vecObj } from "../vector/vec-obj";
 import { findRegion, paintRegion, type DrawWalls } from "../vector/fill";
@@ -84,6 +85,8 @@ export interface SelectionInfo {
   heads: { head0: Head; head1: Head } | null;
   /** Genau ein bearbeitbares Vektor-Element (Koordinatensystem, Zahlenstrahl …) */
   vec: VecSpec | null;
+  /** Genau eine Strukturformel ausgewählt */
+  mol: MolData | null;
 }
 
 export interface EngineEvents {
@@ -1821,6 +1824,7 @@ export class CanvasEngine {
       heads: this.selHeads(),
       vec: this.sel.objs.length === 1 && !this.sel.strokes.length && this.sel.objs[0].data.vec && this.sel.objs[0].data.vec.t !== "fill"
         ? this.sel.objs[0].data.vec : null,
+      mol: this.sel.objs.length === 1 && !this.sel.strokes.length ? this.sel.objs[0].data.mol ?? null : null,
     });
   }
 
@@ -2098,6 +2102,19 @@ export class CanvasEngine {
     this.commitSelection();
     const cur = this.store.getObj(o.id) as ImageObj;
     this.replaceSelectionWith(cur, updateVecObj(cur, spec));
+  }
+
+  /** Strukturformel unter einem Bildschirmpunkt (relativ zum Host), z. B. für Doppeltipp. */
+  molAt(p: Vec): ImageObj | null {
+    const o = this.topObjAt(this.toWorld(p.x, p.y));
+    return o?.kind === "image" && o.data.mol ? o : null;
+  }
+
+  /** Bild-Element ersetzen (ein Undo-Schritt) und auswählen. */
+  replaceImage(before: ImageObj, after: ImageObj) {
+    this.commitSelection();
+    const cur = (this.store.getObj(before.id) as ImageObj | undefined) ?? before;
+    this.replaceSelectionWith(cur, after);
   }
 
   private replaceSelectionWith(before: ImageObj, after: ImageObj) {
@@ -2448,7 +2465,7 @@ function unionAll(strokes: Stroke[], objs: CanvasObj[]): BBox {
 export function drawImageObj(ctx: CanvasRenderingContext2D, o: ImageObj, img: HTMLImageElement | undefined, dark = false) {
   ctx.save();
   // Vektor-Elemente folgen der Tinte: im Dunkelmodus Helligkeit umkehren, Farbton behalten
-  if (dark && o.data.vec) ctx.filter = "invert(1) hue-rotate(180deg)";
+  if (dark && (o.data.vec || o.data.mol)) ctx.filter = "invert(1) hue-rotate(180deg)";
   ctx.translate(o.x + o.w / 2, o.y + o.h / 2);
   if (o.angle) ctx.rotate(o.angle);
   if (img && img.complete && img.naturalWidth) ctx.drawImage(img, -o.w / 2, -o.h / 2, o.w, o.h);

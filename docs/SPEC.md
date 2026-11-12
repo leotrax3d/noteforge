@@ -63,6 +63,12 @@ Strokes: Punkte als `Float32Array` (x, y, pressure, tilt, t), Stift-ID, Farbe, B
 - **Laserpointer** (Taste **P**): leuchtender Punkt mit 300-ms-Spur, nichts wird gespeichert. **Verschwindende Tinte** (Taste **V**): Striche blenden nach 1/2/4/8 s aus (Standard 2 s), nichts wird gespeichert. Beide auch im Radialmenü.
 - Alle neuen Werkzeuge sind Elemente der konfigurierbaren Stiftleiste (Tooltips mit Tastenkürzel).
 
+### 4.4 Strukturformel (Chemie)
+- **Aufruf**: Stiftleiste → Einfügen → „Strukturformel …“ (Molekül-Symbol), Befehlspalette (Strg+K, „Strukturformel“), Formen-Bibliothek → Chemie.
+- **Editor** (fast Vollbild): Zeichenmodus „Skelettformel“ (Zickzack, C/H implizit, 120°-Raster) oder „Volle Strukturformel“ (rechtwinklig, H sichtbar); das Molekül ist in beiden Modi dasselbe. Ziehen erzeugt eine Kette (jedes Segment ein C-Atom), Ziehen von einem Atom aus einen Ast, Ziehen auf ein vorhandenes Atom schließt einen Ring. Atom antippen → Radialmenü (C, H, O, N, S, Cl, Br, I, F, P, B, Si, Löschen); Bindung antippen → Einfach/Doppel/Dreifach. Seitenleiste mit funktionellen Gruppen (–OH, –CHO, –CO–, –COOH, –COO–, –NH₂, Halogene, Benzolring) zum Anhängen am markierten Atom. H nach Wertigkeit automatisch, Valenzfehler rot mit Tooltip und Hinweis in der Infozeile. Radierer, Rückgängig/Wiederholen (Strg+Z/Y), Zoom (Tasten/Mausrad), „Aufräumen“ (2D-Layout von OpenChemLib). Infozeile: Summenformel und Molmasse (OpenChemLib).
+- **Darstellungen** (Live-Vorschau, antippen wählt): ausführliche Strukturformel (alle Atome inkl. H, rechtwinklig wie im Schulbuch), Halbstrukturformel (z. B. H₃C–CH₂–OH), Skelettformel (Zickzack). Eigenes SVG-Rendering; Ringe werden in den ersten beiden Darstellungen in der gezeichneten Geometrie gezeigt.
+- **Element im Blatt**: Bild-Element mit `data.mol = { molfile, view }` und gerendertem SVG als `src`. Doppeltipp oder Auswahlmenü → Editor; Auswahlmenü „Darstellung“ wechselt nachträglich (Lage, Drehung, Skalierung bleiben). Verschieben/Skalieren/Beschriften wie andere Elemente; im Dunkelmodus wie Vektor-Elemente invertiert, im PDF-Export schwarz auf weiß.
+
 ### 4.2 Blatt-Titel
 - Kein Titelbalken auf dem Blatt: der Canvas beginnt direkt oben. Speicherstatus, Versionen, Ink-Wiedergabe und Blatt-Aktionen (Export, Vorlage, Erstellt/Geändert) sitzen in einer kleinen Leiste oben rechts (Linkshänder: links).
 - **Umbenennen** nur in der Seitenleiste: Doppelklick/Doppeltipp auf den Namen → Inline-Eingabe (Enter oder Klick daneben speichert, Esc bricht ab), Kontextmenü „Umbenennen“, Taste **F2** für das offene Blatt.

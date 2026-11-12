@@ -5,6 +5,7 @@ import {
   Settings2, Shapes, Table, Trash2, TriangleRight, Type, Undo2, FileUp,
   Angle, MoveRight, PaintBucket, ScanSearch, Sparkles, Wand,
 } from "lucide-react";
+import { MoleculeIcon } from "@/features/chem/MoleculeIcon";
 import { HEADS, HEAD_LABELS, type Head } from "@/canvas/vector/vec";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
@@ -34,7 +35,7 @@ export interface ToolbarProps {
   onInsert: (kind: InsertKind) => void;
 }
 
-export type InsertKind = "image" | "screenshot" | "table" | "text" | "pdf" | "plot" | "calc" | "shapes";
+export type InsertKind = "image" | "screenshot" | "table" | "text" | "pdf" | "plot" | "calc" | "shapes" | "molecule";
 
 function ToolButton({ label, active, onClick, children, className }: {
   label: string; active?: boolean; onClick: () => void; children: ReactNode; className?: string;
@@ -448,6 +449,7 @@ export function Toolbar(p: ToolbarProps) {
             ["pdf", "PDF-Seiten …", <FileUp key="p" />],
             ["plot", "Funktionsgraph …", <LineChart key="g" />],
             ["calc", "Taschenrechner", <Calculator key="r" />],
+            ["molecule", "Strukturformel …", <MoleculeIcon key="m" />],
           ] as [InsertKind, string, ReactNode][]).map(([k, label, icon]) => (
             <Button key={k} variant="ghost" className="h-11 w-full justify-start" onClick={() => { setOpen(null); p.onInsert(k); }}>
               {icon} {label}

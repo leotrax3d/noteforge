@@ -3,6 +3,7 @@ import { apply, type Mat } from "./geometry";
 import type { PlotSpec } from "@/features/calc/plot";
 import type { PdfRef } from "./pdf-raster";
 import type { VecSpec } from "../vector/vec";
+import type { MolData } from "@/features/chem/mol";
 
 /** Nicht-Strich-Elemente (SPEC §3): Textcontainer, Bilder, Tabellen. */
 export type ObjKind = "text" | "image" | "table";
@@ -28,6 +29,8 @@ export interface ImageData {
   pdf?: PdfRef;
   /** Vektor-Element (Formen-Bibliothek, Linie mit Pfeilspitzen, Füllung, Winkel): `src` ist das gerenderte SVG/PNG. */
   vec?: VecSpec;
+  /** Strukturformel (SPEC §4.4): Molfile + Darstellung, `src` ist das gerenderte SVG. */
+  mol?: MolData;
 }
 export interface TableData { cells: string[][] }
 

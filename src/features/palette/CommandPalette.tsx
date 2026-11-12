@@ -4,6 +4,7 @@ import {
   BookCheck, BookOpen, Calculator, CalendarDays, Eraser, Focus, GraduationCap, Hand, Highlighter, Home, Keyboard, Lasso,
   LineChart, Monitor, Moon, PenTool, RefreshCw, Search, Settings, Sun, Tags, Type, Wand2,
 } from "lucide-react";
+import { MoleculeIcon } from "@/features/chem/MoleculeIcon";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useTheme } from "@/components/theme/theme-provider";
 import { api } from "@/lib/api";
@@ -82,6 +83,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
       tool("text", "Text", <Type />, "T", () => t.setTool("text")),
       { id: "calc", label: "Taschenrechner", group: "Aktion", icon: <Calculator />, keys: "Strg+Umschalt+R", run: () => useCalc.getState().toggle() },
       { id: "plot", label: "Funktionsplotter", group: "Aktion", icon: <LineChart />, keys: "Strg+Umschalt+G", run: () => useCalc.getState().openPlot(null, false), words: "graph funktion" },
+      { id: "molecule", label: "Strukturformel", group: "Aktion", icon: <MoleculeIcon />, run: () => window.dispatchEvent(new CustomEvent("nf-molecule")), words: "chemie molekül skelettformel einfügen" },
       { id: "focus", label: "Fokusmodus", group: "Aktion", icon: <Focus />, keys: "F11", run: () => toggleFocus() },
       { id: "sync", label: "Jetzt synchronisieren", group: "Aktion", icon: <RefreshCw />, keys: "Strg+Umschalt+S", run: () => void syncNowAndApply().catch(console.error), words: "nextcloud abgleich" },
       { id: "settings", label: "Einstellungen", group: "Aktion", icon: <Settings />, keys: "Strg+,", run: () => p.setDialog("settings") },

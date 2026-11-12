@@ -33,6 +33,9 @@ import { useSetup } from "@/store/setup";
 import { PerfOverlay } from "./PerfOverlay";
 import { ZoomWriter } from "./ZoomWriter";
 import { ShapeLibrary } from "@/features/shapes/ShapeLibrary";
+import { MoleculeEditor } from "@/features/chem/MoleculeEditor";
+import { fromMolfile, type MolData, type MolView } from "@/features/chem/mol";
+import { molSvgUrl, renderMol, type MolSvg } from "@/features/chem/render";
 import { decodeTemplate, encodeTemplate, shapesApi } from "@/features/shapes/shapes-api";
 import { vecObj } from "@/canvas/vector/vec-obj";
 import { fmtDeg, type VecSpec } from "@/canvas/vector/vec";
@@ -108,6 +111,9 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
   const [versions, setVersions] = useState(false);
   const [tplDialog, setTplDialog] = useState(false);
   const [shapes, setShapes] = useState<{ edit: VecSpec | null } | null>(null);
+  /** Strukturformel-Editor: neu (an der Ansichtsmitte) oder Bearbeiten eines vorhandenen Elements */
+  const [chem, setChem] = useState<{ edit: ImageObj | null } | null>(null);
+  const lastDown = useRef<{ t: number; x: number; y: number } | null>(null);
   const [shapeTplName, setShapeTplName] = useState(false);
   const [angle, setAngle] = useState<{ deg: number; at: Vec } | null>(null);
   const zoomWrite = useTools((s) => s.zoomWrite);
@@ -595,6 +601,34 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
     useTools.getState().setTool("lasso");
   };
 
+  /** Strukturformel einfügen bzw. ersetzen (Lage, Drehung und Skalierung bleiben erhalten). */
+  const placeMol = (d: MolData, r: MolSvg, edit: ImageObj | null) => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const src = molSvgUrl(r.svg);
+    if (edit?.data.mol) {
+      const old = renderMol(fromMolfile(edit.data.mol.molfile), edit.data.mol.view);
+      const k = edit.w / old.w;
+      engine.replaceImage(edit, makeObj<ImageObj>({ ...edit, w: r.w * k, h: r.h * k, data: { src, mol: d } }));
+    } else {
+      const c = engine.viewCenter(), g = gridStep();
+      const x = Math.round((c.x - r.w / 2) / g) * g, y = Math.round((c.y - r.h / 2) / g) * g;
+      engine.addObject(makeObj<ImageObj>({ id: uid(), kind: "image", z: engine.nextZ(), x, y, w: r.w, h: r.h, angle: 0, data: { src, mol: d } }));
+      useTools.getState().setTool("lasso");
+    }
+  };
+  const selectedMol = () => engineRef.current?.selectionInk()?.images.find((i) => i.data.mol) ?? null;
+  const setMolView = (v: MolView) => {
+    const o = selectedMol();
+    if (o?.data.mol) placeMol({ ...o.data.mol, view: v }, renderMol(fromMolfile(o.data.mol.molfile), v), o);
+  };
+
+  useEffect(() => {
+    const open = () => setChem({ edit: null });
+    window.addEventListener("nf-molecule", open);
+    return () => window.removeEventListener("nf-molecule", open);
+  }, []);
+
   useEffect(() => {
     const open = () => setShapes({ edit: null });
     window.addEventListener("nf-shapes", open);
@@ -605,6 +639,7 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
     const engine = engineRef.current;
     if (!engine) return;
     if (kind === "shapes") return setShapes({ edit: null });
+    if (kind === "molecule") return setChem({ edit: null });
     if (kind === "plot") {
       engine.commitSelection();
       useCalc.getState().openPlot(null, false);
@@ -668,6 +703,18 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
     <div className="flex h-full flex-col">
       <div ref={hostRef} data-testid="canvas-host" data-loaded={loaded} data-tool={tool}
         className="relative min-h-0 flex-1 touch-none overflow-hidden select-none"
+        onPointerDownCapture={(ev) => {
+          // Doppeltipp auf eine Strukturformel öffnet den Editor wieder
+          const r = hostRef.current!.getBoundingClientRect(), p = { x: ev.clientX - r.left, y: ev.clientY - r.top };
+          const l = lastDown.current, now = performance.now();
+          lastDown.current = { t: now, ...p };
+          if (!l || now - l.t > 400 || Math.hypot(p.x - l.x, p.y - l.y) > 24) return;
+          const o = engineRef.current?.molAt(p);
+          if (!o) return;
+          ev.stopPropagation();
+          lastDown.current = null;
+          setChem({ edit: o });
+        }}
         onDragOver={(ev) => {
           if ([...ev.dataTransfer.items].some((i) => i.type.startsWith("image/") || i.type === "application/pdf")) ev.preventDefault();
         }}
@@ -777,6 +824,8 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
             onHeads={(h) => e()?.setSelectionHeads(h)}
             onEditVec={() => setShapes({ edit: sel.vec })}
             onSaveTemplate={() => setShapeTplName(true)}
+            onEditMol={() => { const o = selectedMol(); if (o) setChem({ edit: o }); }}
+            onMolView={setMolView}
             activeTags={new Set((tagMap.get(sel.ids[0]) ?? []).map((t) => t.tagId))}
             onTag={(tagId, on) => void toggleTag(sel.ids[0], tagId, on)}
           />
@@ -804,6 +853,8 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
       <VersionsDialog open={versions} onOpenChange={setVersions} pageId={page.id}
         beforeAction={async () => { engineRef.current?.commitSelection(); await flush(); }}
         onRestored={() => onPageReplaced?.()} />
+      <MoleculeEditor open={!!chem} initial={chem?.edit?.data.mol ?? null} onOpenChange={(o) => !o && setChem(null)}
+        onInsert={(d, r) => { placeMol(d, r, chem?.edit ?? null); setChem(null); }} />
       <ShapeLibrary open={!!shapes} onOpenChange={(o) => !o && setShapes(null)} grid={gridStep()} color={useTools.getState().color}
         edit={shapes?.edit ?? null} onInsert={insertVec} onUpdate={(spec) => e()?.updateSelectedVec(spec)}
         onInsertTemplate={(t) => {

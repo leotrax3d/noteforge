@@ -6,8 +6,12 @@ import type { SelectionInfo } from "@/canvas/core/engine";
 import { ColorGrid, HeadPicker } from "./Toolbar";
 import type { Head } from "@/canvas/vector/vec";
 import { TagMenu } from "@/features/tags/TagMenu";
+import { MoleculeIcon } from "@/features/chem/MoleculeIcon";
+import { VIEW_LABELS, type MolView } from "@/features/chem/mol";
 
-export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDone, activeTags, onTag, onInkToText, onInkToLatex, onOcr, onEditPlot, onHeads, onEditVec, onSaveTemplate }: {
+export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDone, activeTags, onTag, onInkToText, onInkToLatex, onOcr, onEditPlot, onHeads, onEditVec, onSaveTemplate, onEditMol, onMolView }: {
+  onEditMol: () => void;
+  onMolView: (v: MolView) => void;
   onHeads: (h: Partial<{ head0: Head; head1: Head }>) => void;
   onEditVec: () => void;
   onSaveTemplate: () => void;
@@ -26,6 +30,7 @@ export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDo
 }) {
   const [open, setOpen] = useState(false);
   const [headsOpen, setHeadsOpen] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
   const above = sel.rect.y > 140;
   const top = above ? sel.rect.y - 64 : Math.min(hostHeight - 64, sel.rect.y + sel.rect.h + 52);
   const left = sel.rect.x + sel.rect.w / 2;
@@ -63,6 +68,22 @@ export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDo
       )}
       {sel.vec && ["coord", "numberline", "staff", "bond"].includes(sel.vec.t) && (
         <Button variant="ghost" size="icon" aria-label="Form bearbeiten" title="Form bearbeiten (Achsen, Bereich …)" onClick={onEditVec}><PencilRuler /></Button>
+      )}
+      {sel.mol && (
+        <>
+          <Button variant="ghost" size="icon" aria-label="Strukturformel bearbeiten" title="Strukturformel bearbeiten (Doppeltipp)" onClick={onEditMol}><MoleculeIcon /></Button>
+          <Popover open={viewOpen} onOpenChange={setViewOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" className="h-11" aria-label="Darstellung wechseln" title="Darstellung wechseln">Darstellung</Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 space-y-1">
+              {(Object.keys(VIEW_LABELS) as MolView[]).map((v) => (
+                <Button key={v} variant={sel.mol?.view === v ? "secondary" : "ghost"} className="h-11 w-full justify-start"
+                  aria-pressed={sel.mol?.view === v} onClick={() => { setViewOpen(false); onMolView(v); }}>{VIEW_LABELS[v]}</Button>
+              ))}
+            </PopoverContent>
+          </Popover>
+        </>
       )}
       <Button variant="ghost" size="icon" aria-label="Als Vorlage speichern" title="Als Vorlage speichern (Formen-Bibliothek → Eigene)" onClick={onSaveTemplate}><BookmarkPlus /></Button>
       {onEditPlot && <Button variant="ghost" size="icon" aria-label="Graph bearbeiten" title="Graph im Plotter bearbeiten" onClick={onEditPlot}><LineChart /></Button>}

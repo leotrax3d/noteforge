@@ -1,6 +1,7 @@
 // Formen-Bibliothek (SPEC §4.3): fachbezogene Vorlagen als bearbeitbare Vektor-Elemente + eigene Vorlagen.
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Trash2 } from "lucide-react";
+import { MoleculeIcon } from "@/features/chem/MoleculeIcon";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -188,6 +189,12 @@ export function ShapeLibrary(p: ShapeLibraryProps) {
   } else {
     body = (
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+        {cat === "chemistry" && (
+          <button type="button" className="flex h-24 flex-col items-center justify-center gap-1 rounded-lg border p-2 text-sm hover:bg-accent"
+            onClick={() => { p.onOpenChange(false); window.dispatchEvent(new CustomEvent("nf-molecule")); }}>
+            <MoleculeIcon className="size-8" /> Strukturformel …
+          </button>
+        )}
         {tiles[cat].map((x) => <Tile key={x.label} label={x.label} spec={x.spec} onClick={() => (x.configure ? configurable(x.spec) : insert(x.spec))} />)}
       </div>
     );
