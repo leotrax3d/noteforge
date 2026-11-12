@@ -30,7 +30,7 @@ import {
   drawGuide, formatNumber, hitGuide, makeGuide, nearestEdge, rotateHandle, snapRotation, snapToCircle, snapToEdge,
   type EdgeSnap, type Guide, type GuideKind,
 } from "../tools/guides";
-import { MM } from "./layout";
+import { MM, a4CamBounds, clampTo, rubber } from "./layout";
 import type { BBox } from "@/lib/types";
 import { PdfRaster } from "./pdf-raster";
 import { getAsset } from "@/lib/api";
@@ -76,10 +76,12 @@ export interface EngineEvents {
   onSelection?: (s: SelectionInfo | null) => void;
   /** Text-/Tabellenobjekte haben sich geändert (für die DOM-Ebene). */
   onObjects?: (objs: CanvasObj[]) => void;
-  /** Textwerkzeug: Tipp auf freie Stelle (Weltkoordinaten). */
-  onTextAt?: (w: Vec) => void;
+  /** Textwerkzeug-Tipp oder Doppelklick/Doppeltipp auf freie Stelle (Weltkoordinaten). `free` = Alt gedrückt (kein Einrasten). */
+  onTextAt?: (w: Vec, free: boolean) => void;
   /** Radialmenü öffnen (Bildschirmkoordinaten relativ zum Host). */
   onRadial?: (p: Vec) => void;
+  /** Maus über einem Text-/Tabellenobjekt (zeigt dessen Greifbalken), sonst null. */
+  onHoverObj?: (id: string | null) => void;
   /** Freihand → Form erkannt. */
   onShape?: (label: string) => void;
 }
@@ -107,6 +109,7 @@ const HANDLE_R = 22; // Trefferradius ≥ 44 px Durchmesser
 const ROT_OFFSET = 36;
 const TAP_MS = 350;
 const TAP_SLOP = 12;
+const DOUBLE_TAP_MS = 400;
 
 /** Wachsender Punktpuffer (x, y, p, tilt, t) ohne Allokation pro Event. */
 
@@ -269,6 +272,8 @@ export class CanvasEngine {
   destroy() {
     this.perf = null;
     this.pdf.destroy();
+    clearTimeout(this.settleTimer);
+    cancelAnimationFrame(this.settleRaf);
     cancelAnimationFrame(this.raf);
     clearTimeout(this.rescaleTimer);
     this.ro.disconnect();
@@ -377,6 +382,10 @@ export class CanvasEngine {
     return this.store.nextZ();
   }
 
+  pageSetup(): PageSetup {
+    return this.setup;
+  }
+
   setPage(setup: PageSetup) {
     const modeChanged = setup.mode !== this.setup.mode || setup.orientation !== this.setup.orientation;
     this.setup = { ...setup };
@@ -429,7 +438,51 @@ export class CanvasEngine {
     const s = clampZoom(scale);
     const wx = at.x / this.cam.s + this.cam.x, wy = at.y / this.cam.s + this.cam.y;
     this.cam = { s, x: wx - at.x / s, y: wy - at.y / s };
+    this.softBounds();
     this.cameraChanged(true);
+    clearTimeout(this.settleTimer);
+    this.settleTimer = window.setTimeout(() => this.settle(), 140);
+  }
+
+  // ---- A4-Grenzen: weiches Abbremsen am Rand, danach zurückfedern ----
+  private panRaw: Vec = { x: 0, y: 0 };
+  private settleTimer = 0;
+  private settleRaf = 0;
+
+  private camBounds() {
+    if (this.setup.mode !== "a4" || !this.W) return null;
+    return a4CamBounds(this.setup.orientation, this.pageCount, this.W / this.cam.s, this.H / this.cam.s);
+  }
+
+  private softBounds() {
+    const b = this.camBounds();
+    if (!b) return;
+    cancelAnimationFrame(this.settleRaf);
+    this.settleRaf = 0;
+    const dx = this.W / this.cam.s / 4, dy = this.H / this.cam.s / 4;
+    this.cam.x = rubber(this.cam.x, b.minX, b.maxX, dx);
+    this.cam.y = rubber(this.cam.y, b.minY, b.maxY, dy);
+  }
+
+  /** Nach dem Loslassen weich in den erlaubten Bereich zurück (rAF, keine Timer-Schleife). */
+  private settle() {
+    const b = this.camBounds();
+    if (!b) return;
+    cancelAnimationFrame(this.settleRaf);
+    const step = () => {
+      const tx = clampTo(this.cam.x, b.minX, b.maxX), ty = clampTo(this.cam.y, b.minY, b.maxY);
+      const ex = tx - this.cam.x, ey = ty - this.cam.y;
+      if (Math.abs(ex) * this.cam.s < 0.5 && Math.abs(ey) * this.cam.s < 0.5) {
+        this.settleRaf = 0;
+        if (ex || ey) { this.cam.x = tx; this.cam.y = ty; this.cameraChanged(true); }
+        return;
+      }
+      this.cam.x += ex * 0.22;
+      this.cam.y += ey * 0.22;
+      this.cameraChanged(true);
+      this.settleRaf = requestAnimationFrame(step);
+    };
+    this.settleRaf = requestAnimationFrame(step);
   }
 
   zoomBy(f: number) {
@@ -709,7 +762,14 @@ export class CanvasEngine {
       if (r) return this.beginGuideDrag(r.g, r.kind, w);
     }
 
-    // Auswahl-Griffe haben Vorrang
+    // Greifbalken über einem Bild/PDF-Element → aufnehmen und verschieben (jedes Werkzeug)
+    const grip = this.gripAt(q);
+    if (grip) {
+      this.select([], [grip]);
+      return this.beginTransform("move", q);
+    }
+
+    // Auswahl-Griffe haben Vorrang (Lasso-Auswahl lässt sich mit jedem Werkzeug direkt ziehen)
     if (this.sel && tool !== "pan") {
       const h = this.hitHandle(q);
       if (h) return this.beginTransform(h, q);
@@ -726,6 +786,7 @@ export class CanvasEngine {
       case "pan":
         this.mode = "pan";
         this.panLast = q;
+        this.panRaw = { x: this.cam.x, y: this.cam.y };
         if (e.pointerType === "touch") this.armHold();
         return;
       case "text":
@@ -769,6 +830,20 @@ export class CanvasEngine {
 
   private onHold() {
     const still = this.maxFromDown < HOLD_SLOP * 2;
+    // Finger lange gedrückt auf einem Element → aufnehmen
+    if (still && this.mode === "pan" && this.activeType === "touch") {
+      const w = this.toWorld(this.downPos.x, this.downPos.y);
+      const o = this.topObjAt(w);
+      if (o && o.kind === "image") {
+        this.select([], [o]);
+        navigator.vibrate?.(15);
+        return this.beginTransform("move", this.downPos);
+      }
+      if (o) {
+        this.events.onHoverObj?.(o.id);
+        return;
+      }
+    }
     if (still && (this.mode === "pan" || (this.mode === "draw" && !this.snap))) {
       // Long-Press → Radialmenü
       this.pts.n = 0;
@@ -921,6 +996,7 @@ export class CanvasEngine {
     }
     if (e.pointerType === "pen") this.palm.notePen(performance.now());
     if (e.pointerId !== this.activeId) {
+      if (this.mode === "idle" && e.pointerType !== "touch" && e.buttons === 0) this.updateHover(this.local(e), e.pointerType);
       if (this.mode === "idle" && e.pointerType !== "touch") {
         const eraser = this.tool.tool === "eraser" || (e.pointerType === "pen" && (e.buttons & 32) !== 0);
         if (eraser || this.hoverEraser) {
@@ -972,9 +1048,12 @@ export class CanvasEngine {
       case "pan": {
         const q = this.local(e);
         this.trackHold(q);
-        this.cam.x -= (q.x - this.panLast.x) / this.cam.s;
-        this.cam.y -= (q.y - this.panLast.y) / this.cam.s;
+        this.panRaw.x -= (q.x - this.panLast.x) / this.cam.s;
+        this.panRaw.y -= (q.y - this.panLast.y) / this.cam.s;
         this.panLast = q;
+        this.cam.x = this.panRaw.x;
+        this.cam.y = this.panRaw.y;
+        this.softBounds();
         this.cameraChanged(false);
         return;
       }
@@ -1020,15 +1099,18 @@ export class CanvasEngine {
     }
     if (e.pointerId !== this.activeId) return;
     switch (this.mode) {
-      case "draw":
+      case "draw": {
         if (!this.shaped) this.addPoint(e);
-        this.commitStroke();
+        const id = this.commitStroke();
+        // Doppelklick (Maus) / Doppeltipp (Finger) → Textfeld. Nicht mit dem Stift: Umlaut-Punkte!
+        if (this.activeType !== "pen" && this.isTap()) this.registerTap(e, id);
         break;
+      }
       case "guide":
         this.gd = null;
         break;
       case "tap":
-        if (this.maxFromDown < TAP_SLOP) this.events.onTextAt?.(this.toWorld(this.downPos.x, this.downPos.y));
+        if (this.maxFromDown < TAP_SLOP) this.events.onTextAt?.(this.toWorld(this.downPos.x, this.downPos.y), e.altKey);
         break;
       case "erase":
         this.endErase();
@@ -1038,10 +1120,19 @@ export class CanvasEngine {
         break;
       case "transform":
         this.handle = null;
+        this.snapLines = [];
         this.mode = "idle";
         this.emitSelection();
         break;
       case "pan":
+        this.settle();
+        if (this.activeType === "touch" && this.isTap()) {
+          const o = this.topObjAt(this.toWorld(this.downPos.x, this.downPos.y));
+          if (o?.kind === "image") this.hoverObj = o; // Antippen zeigt den Greifbalken
+          else this.hoverObj = null;
+          this.invalidate(false);
+          this.registerTap(e, null);
+        }
         this.emitSelection();
         break;
     }
@@ -1081,7 +1172,10 @@ export class CanvasEngine {
       const dy = e.shiftKey && !e.deltaX ? 0 : e.deltaY;
       this.cam.x += (dx * k) / this.cam.s;
       this.cam.y += (dy * k) / this.cam.s;
+      this.softBounds();
       this.cameraChanged(true);
+      clearTimeout(this.settleTimer);
+      this.settleTimer = window.setTimeout(() => this.settle(), 140);
     }
   };
 
@@ -1134,6 +1228,7 @@ export class CanvasEngine {
     const wx = this.g.mid.x / this.g.cam.s + this.g.cam.x;
     const wy = this.g.mid.y / this.g.cam.s + this.g.cam.y;
     this.cam = { s, x: wx - mid.x / s, y: wy - mid.y / s };
+    this.softBounds();
     if (Math.hypot(mid.x - this.g.mid.x, mid.y - this.g.mid.y) > TAP_SLOP || Math.abs(dist - this.g.dist) > TAP_SLOP)
       this.g.moved = true;
     this.cameraChanged(true);
@@ -1141,6 +1236,7 @@ export class CanvasEngine {
 
   private endGesture() {
     this.mode = "idle";
+    this.settle();
     const tap = !this.g.moved && performance.now() - this.g.start < TAP_MS;
     if (tap && this.g.fingers === 2) this.undo();
     else if (tap && this.g.fingers >= 3) this.redo();
@@ -1202,7 +1298,28 @@ export class CanvasEngine {
     buf.push(x, y, this.pts.n ? this.pts.data[li + 2] : raw, tilt, e.timeStamp - this.t0);
   }
 
-  private commitStroke() {
+  private lastTap: { t: number; p: Vec; stroke: string | null } | null = null;
+
+  private isTap() {
+    return this.maxFromDown < TAP_SLOP && performance.now() - this.downT < TAP_MS;
+  }
+
+  /** Zweiter Tipp kurz nach dem ersten an fast derselben Stelle → Textfeld; dabei entstandene Punkte entfernen. */
+  private registerTap(e: PointerEvent, stroke: string | null) {
+    const now = performance.now(), p = this.downPos, l = this.lastTap;
+    if (l && now - l.t < DOUBLE_TAP_MS && Math.hypot(p.x - l.p.x, p.y - l.p.y) < TAP_SLOP * 2) {
+      this.lastTap = null;
+      const ids = [l.stroke, stroke].filter((x): x is string => !!x);
+      const rm = ids.map((id) => this.store.get(id)).filter((s): s is Stroke => !!s);
+      if (rm.length) this.store.commit({ add: [], remove: rm });
+      this.events.onTextAt?.(this.toWorld(l.p.x, l.p.y), e.altKey);
+      return;
+    }
+    this.lastTap = { t: now, p, stroke };
+  }
+
+  private commitStroke(): string | null {
+    let id: string | null = null;
     if (this.tool.shapeMode && !this.shaped && !this.snap && this.pts.n > 2) this.applyShape();
     if (this.pts.n > 0) {
       if (this.livePressure) clampPressureEdges(this.pts.data, this.pts.n);
@@ -1218,9 +1335,11 @@ export class CanvasEngine {
         points: this.pts.snapshot(),
       });
       this.store.commit({ add: [s], remove: [] });
+      id = s.id;
     }
     this.pts.n = 0;
     this.pred.n = 0;
+    return id;
   }
 
   // ---- Radierer ----
@@ -1374,6 +1493,7 @@ export class CanvasEngine {
     if (this.handle === "move") {
       s.tx = g.tx + w.x - g.w.x;
       s.ty = g.ty + w.y - g.w.y;
+      this.snapMove(s);
     } else if (this.handle === "scale") {
       const d0 = Math.hypot(g.w.x - c.x, g.w.y - c.y) || 1;
       s.s = Math.min(20, Math.max(0.05, (g.s * Math.hypot(w.x - c.x, w.y - c.y)) / d0));
@@ -1385,6 +1505,146 @@ export class CanvasEngine {
       s.theta = th;
     }
     this.invalidate(false);
+  }
+
+  // ---- Elemente verschieben: Hover-Greifbalken, Einrasten, Pfeiltasten ----
+  private hoverObj: ImageObj | null = null;
+  private hoverText: string | null = null;
+  private snapLines: { x?: number; y?: number }[] = [];
+  /** Einrasten beim Verschieben aus (z. B. Alt gedrückt) */
+  snapOff = false;
+
+  private topObjAt(w: Vec): CanvasObj | null {
+    const objs = this.store.objects();
+    let best: CanvasObj | null = null;
+    for (const o of objs) {
+      if (o.kind === "image" && o.data.locked) continue;
+      if (hitObj(o, w.x, w.y) && (!best || o.z > best.z)) best = o;
+    }
+    return best;
+  }
+
+  /** Greifbalken (Bildschirm) über einem Bild/PDF: 120×44 px, mittig über der Oberkante. */
+  private gripRect(o: ImageObj) {
+    const c = objCorners(o).map((p) => this.toScreen(p.x, p.y));
+    const top = Math.min(...c.map((p) => p.y));
+    const cx = c.reduce((a, p) => a + p.x, 0) / 4;
+    return { x: cx - 60, y: top - 50, w: 120, h: 44 };
+  }
+
+  private gripAt(q: Vec): ImageObj | null {
+    const o = this.hoverObj;
+    if (!o || this.sel) return null;
+    const r = this.gripRect(o);
+    return q.x >= r.x && q.x <= r.x + r.w && q.y >= r.y && q.y <= r.y + r.h + 6 ? o : null;
+  }
+
+  private updateHover(q: Vec, type: string) {
+    if (this.gripAt(q)) return; // auf dem Balken bleiben
+    const o = this.topObjAt(this.toWorld(q.x, q.y));
+    const img = o?.kind === "image" && !this.hidden.has(o.id) ? o : null;
+    if (img !== this.hoverObj) {
+      this.hoverObj = img;
+      this.invalidate(false);
+    }
+    // Text/Tabellen nur mit der Maus (Stift schreibt sonst ins Textfeld statt aufs Blatt)
+    const txt = type === "mouse" && o && o.kind !== "image" ? o.id : null;
+    if (txt !== this.hoverText) {
+      this.hoverText = txt;
+      this.events.onHoverObj?.(txt);
+    }
+  }
+
+  private drawGrip(ctx: CanvasRenderingContext2D) {
+    const o = this.hoverObj;
+    if (!o || this.sel || this.mode !== "idle") return;
+    const r = this.gripRect(o);
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.fillStyle = this.pal.dark ? "#27272a" : "#ffffff";
+    ctx.strokeStyle = this.pal.dark ? "#52525b" : "#d4d4d8";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(r.x, r.y + 8, r.w, r.h - 16, 14);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = this.pal.dark ? "#a1a1aa" : "#71717a";
+    for (let i = 0; i < 6; i++)
+      for (let j = 0; j < 2; j++) {
+        ctx.beginPath();
+        ctx.arc(r.x + r.w / 2 - 15 + i * 6, r.y + r.h / 2 - 3 + j * 6, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+  }
+
+  /** Verschieben: Kanten/Mitten an anderen Elementen und am Raster einrasten (Hilfslinien). */
+  private snapMove(s: Selection) {
+    this.snapLines = [];
+    if (this.snapOff) return;
+    const tol = 6 / this.cam.s;
+    const hw = (s.bbox.w * s.s) / 2, hh = (s.bbox.h * s.s) / 2;
+    const cx = s.center.x + s.tx, cy = s.center.y + s.ty;
+    const xs = [cx - hw, cx, cx + hw], ys = [cy - hh, cy, cy + hh];
+    const tx: number[] = [], ty: number[] = [];
+    const sel = new Set(s.objs.map((o) => o.id));
+    for (const o of this.store.objects()) {
+      if (sel.has(o.id)) continue;
+      const b = o.bbox;
+      tx.push(b.x, b.x + b.w / 2, b.x + b.w);
+      ty.push(b.y, b.y + b.h / 2, b.y + b.h);
+    }
+    if (this.setup.mode === "a4") {
+      const { w } = a4Size(this.setup.orientation);
+      tx.push(0, w / 2, w);
+    }
+    const best = (cand: number[], targets: number[]) => {
+      let d = Infinity, at = 0;
+      for (const c of cand) for (const t of targets) if (Math.abs(t - c) < Math.abs(d)) { d = t - c; at = t; }
+      return Math.abs(d) <= tol ? { d, at } : null;
+    };
+    let bx = best(xs, tx), by = best(ys, ty);
+    // Raster (kariert/punktiert/liniert), wenn kein Element näher ist
+    if (this.setup.background !== "blank") {
+      const step = Math.max(1, this.setup.bgSpacingMm) * MM;
+      const g = (v: number) => Math.round(v / step) * step - v;
+      if (!bx && this.setup.background !== "lines") { const d = g(xs[0]); if (Math.abs(d) <= tol) bx = { d, at: NaN }; }
+      if (!by) { const d = g(ys[0]); if (Math.abs(d) <= tol) by = { d, at: NaN }; }
+    }
+    if (bx) { s.tx += bx.d; if (!Number.isNaN(bx.at)) this.snapLines.push({ x: bx.at }); }
+    if (by) { s.ty += by.d; if (!Number.isNaN(by.at)) this.snapLines.push({ y: by.at }); }
+  }
+
+  private drawSnapLines(ctx: CanvasRenderingContext2D) {
+    if (this.mode !== "transform" || !this.snapLines.length) return;
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.strokeStyle = "#ec4899";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    for (const l of this.snapLines) {
+      ctx.beginPath();
+      if (l.x !== undefined) { const p = this.toScreen(l.x, 0); ctx.moveTo(p.x, 0); ctx.lineTo(p.x, this.H); }
+      else if (l.y !== undefined) { const p = this.toScreen(0, l.y); ctx.moveTo(0, p.y); ctx.lineTo(this.W, p.y); }
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+
+  /** Auswahl per Pfeiltaste verschieben (Welteinheiten). Liefert false, wenn nichts ausgewählt ist. */
+  nudgeSelection(dx: number, dy: number): boolean {
+    const s = this.sel;
+    if (!s || this.mode !== "idle") return false;
+    s.tx += dx;
+    s.ty += dy;
+    this.invalidate(false);
+    clearTimeout(this.nudgeTimer);
+    this.events.onSelection?.(null);
+    this.nudgeTimer = window.setTimeout(() => this.emitSelection(), 250);
+    return true;
+  }
+  private nudgeTimer = 0;
+
+  /** Rasterschritt (für Umschalt+Pfeil). */
+  gridStep(): number {
+    return Math.max(1, this.setup.bgSpacingMm) * MM;
   }
 
   private emitSelection() {
@@ -1666,6 +1926,8 @@ export class CanvasEngine {
       }
     }
 
+    this.drawGrip(ctx);
+    this.drawSnapLines(ctx);
     if (this.inkDebug) this.drawInkDebug(ctx);
 
     const showEraser = this.mode === "erase" || (this.mode === "idle" && this.hover && (this.tool.tool === "eraser" || this.hoverEraser));

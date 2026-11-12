@@ -45,7 +45,11 @@ Strokes: Punkte als `Float32Array` (x, y, pressure, tilt, t), Stift-ID, Farbe, B
 - **Zirkel:** Mittelpunkt + Radius, Kreis/Bogen.
 - **Freihand → Form:** Stift am Strichende ~500 ms halten → Linie, Pfeil, Kreis/Ellipse, Rechteck, Dreieck, Polygon. Auch als dauerhafter Modus.
 - **Text:** freie Textcontainer überall (Klick/Tastatur), Rich Text, Listen, Überschriften, Tabellen.
-- **Medien:** Bilder (Einfügen, Drag & Drop, Screenshot-Ausschnitt), Dateianhänge, PDF-Import als Hintergrundseiten.
+  - Wie OneNote: Doppelklick (Maus) bzw. Doppeltipp (Finger) mit jedem Werkzeug erzeugt dort ein Textfeld (mit dem Stift nur im Textwerkzeug – Umlautpunkte würden sonst Textfelder erzeugen). Dabei entstandene Tipp-Punkte werden entfernt.
+  - Grundlinie rastet an der nächsten Linie (liniert) bzw. Rasterlinie (kariert/punktiert, dazu linker Rand an der Spalte) ein; Zeilenhöhe = Linienabstand, Schriftgröße = 0,62 × Abstand. Leeres Blatt: kein Einrasten. Alt gedrückt: Einrasten aus.
+- **A4-Grenzen:** Scrollen seitlich auf Seitenbreite + 40 px Rand (schmaler → zentriert), oben bis zur ersten Seite, unten bis zur letzten Seite + „Seite hinzufügen“-Zone. Am Rand Gummiband-Abbremsung, nach dem Loslassen federt die Ansicht zurück.
+- **Elemente verschieben:** Greifbalken über Bild/PDF bei Hover (Maus/Stift) oder Antippen; Textfelder zeigen ihren Balken bei Maus-Hover oder langem Fingerdruck. Lasso-Auswahl mit jedem Werkzeug direkt ziehbar. Finger lange drücken nimmt ein Element auf. Beim Verschieben Einrasten an Kanten/Mitten anderer Elemente, der Seitenmitte und am Raster (Hilfslinien, Alt = aus). Pfeiltasten: 1 px, mit Umschalt ein Rasterschritt. Ecken skalieren, Drehgriff.
+- **Medien:** Bilder (Einfügen, Drag & Drop, Screenshot-Ausschnitt), Dateianhänge, PDF-Import als Hintergrundseiten (A4). Im endlosen Modus (Drag & Drop oder Einfügen-Menü) wird jede PDF-Seite ein freies, verschiebbares, skalierbares und beschreibbares Element mit derselben scharfen Rendering-Pipeline.
 - **Undo/Redo:** Befehls-Stack, unbegrenzt pro Sitzung.
 - **Gesten:** 2 Finger Zoom/Pan, 2-Finger-Tipp Undo, 3-Finger-Tipp Redo.
 

@@ -7,7 +7,14 @@ import type { PdfRef } from "./pdf-raster";
 export type ObjKind = "text" | "image" | "table";
 
 /** `latex` gesetzt = Formel (KaTeX-Anzeige statt Rich-Text). */
-export interface TextData { html: string; latex?: string }
+export interface TextData {
+  html: string;
+  latex?: string;
+  /** Am Linien-/Karoraster eingerastet: Schriftgröße, Zeilenhöhe, linker Innenabstand (Welt). */
+  size?: number;
+  lh?: number;
+  padX?: number;
+}
 export interface ImageData {
   src: string;
   /** Fest im Hintergrund (importierte PDF-Seite): nicht auswählbar, Element-Typ „pdfPage“. */

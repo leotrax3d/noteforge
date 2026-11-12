@@ -31,6 +31,10 @@ import { captureScreen, encodeImage, fileToImage, type LoadedImage } from "./obj
 import { useTools } from "./tool-store";
 import { usePrefs } from "@/store/prefs";
 import { PerfOverlay } from "./PerfOverlay";
+import { measureMetrics, placeText, type FontMetrics } from "@/canvas/core/text-snap";
+
+let metricsCache: FontMetrics | null = null;
+const textMetrics = () => (metricsCache ??= measureMetrics(getComputedStyle(document.body).fontFamily || "sans-serif"));
 import { recognition, dataUrlBytes, errText, UNAVAILABLE } from "@/lib/recognition";
 import { inkToLatex } from "@/features/recognition/latex";
 import { LatexDialog, type LatexRequest } from "@/features/recognition/LatexDialog";
@@ -76,6 +80,7 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
   const [loaded, setLoaded] = useState(false);
   const [objects, setObjects] = useState<CanvasObj[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
   const [radial, setRadial] = useState<Vec | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [shot, setShot] = useState<HTMLCanvasElement | null>(null);
@@ -167,8 +172,13 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
       onObjects: (o) => setObjects([...o]),
       onRadial: setRadial,
       onShape: (label) => flash(`Form erkannt: ${label}`),
-      onTextAt: (w) => {
-        const o = makeObj<TextObj>({ id: uid(), kind: "text", z: engine.nextZ(), x: w.x, y: w.y - 16, w: 320, h: 44, angle: 0, data: { html: "" } });
+      onHoverObj: (id) => setHoverId(id),
+      onTextAt: (w, free) => {
+        const pl = placeText(engine.pageSetup(), w, free, textMetrics());
+        const o = makeObj<TextObj>({
+          id: uid(), kind: "text", z: engine.nextZ(), x: pl.x, y: pl.y, w: 320, h: pl.lineHeight ?? 44, angle: 0,
+          data: pl.lineHeight ? { html: "", size: pl.size, lh: pl.lineHeight, padX: pl.padX } : { html: "" },
+        });
         engine.addObject(o);
         setEditingId(o.id);
       },
@@ -396,12 +406,26 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
       else if ((k === "delete" || k === "backspace") && engine.hasSelection) engine.deleteSelection();
       else if (mod && k === "t" && e.shiftKey) useTools.getState().setTool("text");
       else if (k === "escape") engine.commitSelection();
+      else if (k.startsWith("arrow") && engine.hasSelection) {
+        // Pfeiltasten: 1 px fein, mit Umschalt ein Rasterschritt
+        const d = e.shiftKey ? engine.gridStep() : 1 / engine.zoom;
+        const dx = k === "arrowleft" ? -d : k === "arrowright" ? d : 0;
+        const dy = k === "arrowup" ? -d : k === "arrowdown" ? d : 0;
+        if (!engine.nudgeSelection(dx, dy)) return;
+      }
       else if (!mod && !e.altKey && toolKey(k, e.shiftKey)) { /* Werkzeug gewechselt */ }
       else return;
       e.preventDefault();
     };
+    const alt = (e: KeyboardEvent) => { if (engineRef.current) engineRef.current.snapOff = e.altKey; };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", alt);
+    window.addEventListener("keyup", alt);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", alt);
+      window.removeEventListener("keyup", alt);
+    };
   }, [flush]);
 
   const [title, setTitle] = useState(page.title);
@@ -593,6 +617,7 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
           engine={engineRef.current}
           interactive={tool === "text"}
           editingId={editingId}
+          hoverId={hoverId}
           onEditing={setEditingId}
           layerRef={(el) => {
             layerElRef.current = el;

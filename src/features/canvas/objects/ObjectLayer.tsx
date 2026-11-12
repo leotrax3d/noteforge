@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Check, GripVertical, Minus, MoveHorizontal, Plus, Trash2 } from "lucide-react";
 import type { CanvasEngine } from "@/canvas/core/engine";
 import { makeObj, type CanvasObj, type TableObj, type TextObj } from "@/canvas/core/objects";
@@ -29,6 +29,8 @@ export interface ObjectLayerProps {
   onLink: (title: string) => void;
   /** Formel antippen (Textwerkzeug) → LaTeX-Dialog. */
   onEditLatex?: (o: TextObj) => void;
+  /** Objekt unter der Maus/lange gedrückt: Greifbalken zeigen */
+  hoverId?: string | null;
 }
 
 /** DOM-Ebene für Textcontainer und Tabellen; Kamera-Transform setzt die Engine direkt. */
@@ -62,10 +64,12 @@ export function ObjectLayer(p: ObjectLayerProps) {
 type BoxProps<T> = ObjectLayerProps & { obj: T };
 
 /** Gemeinsamer Rahmen: Verschiebegriff, Breite ändern, Löschen. */
-function Frame({ obj, engine, interactive, editingId, onEditing, children, label, tags, onTag }: BoxProps<CanvasObj> & { children: ReactNode; label: string }) {
+function Frame({ obj, engine, interactive, editingId, hoverId, onEditing, children, label, tags, onTag }: BoxProps<CanvasObj> & { children: ReactNode; label: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const active = editingId === obj.id;
-  const live = interactive || active;
+  const [held, setHeld] = useState(false);
+  const hovered = hoverId === obj.id || held;
+  const live = interactive || active || hovered;
 
   // Höhe an den Inhalt anpassen (ohne Verlauf)
   useEffect(() => {
@@ -122,6 +126,8 @@ function Frame({ obj, engine, interactive, editingId, onEditing, children, label
         active ? "outline-2 outline-[var(--subject,#3b82f6)] outline-dashed" : interactive && "outline-1 outline-border outline-dashed",
       )}
       style={{ left: obj.x, top: obj.y, width: obj.w, transform: obj.angle ? `rotate(${obj.angle}rad)` : undefined }}
+      onPointerEnter={() => hovered && setHeld(true)}
+      onPointerLeave={(e) => e.pointerType === "mouse" && setHeld(false)}
       onPointerDown={(e) => {
         e.stopPropagation();
         if (!active) onEditing(obj.id);
@@ -246,7 +252,7 @@ function TextBox(p: BoxProps<TextObj>) {
     const cur = engine?.store.getObj(obj.id);
     if (!engine || !cur || cur.kind !== "text" || !ed.current) return;
     const html = sanitizeHtml(ed.current.innerHTML);
-    if (html !== cur.data.html) engine.updateObjectLive({ ...cur, data: { html } });
+    if (html !== cur.data.html) engine.updateObjectLive({ ...cur, data: { ...cur.data, html } });
   };
 
   return (
@@ -260,7 +266,11 @@ function TextBox(p: BoxProps<TextObj>) {
         suppressContentEditableWarning
         spellCheck
         lang="de"
-        className="nf-rich min-h-11 px-2 py-1.5 text-base leading-snug text-foreground outline-none"
+        className={cn("nf-rich text-foreground outline-none", obj.data.lh ? "py-0" : "min-h-11 px-2 py-1.5 text-base leading-snug")}
+        style={obj.data.lh ? {
+          fontSize: obj.data.size, lineHeight: `${obj.data.lh}px`, minHeight: obj.data.lh,
+          paddingLeft: obj.data.padX ?? 8, paddingRight: 8,
+        } : undefined}
         onFocus={(e) => {
           unlinkify(e.currentTarget);
           before.current = engine?.store.getObj(obj.id) ?? null;
