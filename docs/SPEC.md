@@ -69,6 +69,11 @@ Strokes: Punkte als `Float32Array` (x, y, pressure, tilt, t), Stift-ID, Farbe, B
 - **Darstellungen** (Live-Vorschau, antippen wählt): ausführliche Strukturformel (alle Atome inkl. H, rechtwinklig wie im Schulbuch), Halbstrukturformel (z. B. H₃C–CH₂–OH), Skelettformel (Zickzack). Eigenes SVG-Rendering; Ringe werden in den ersten beiden Darstellungen in der gezeichneten Geometrie gezeigt.
 - **Element im Blatt**: Bild-Element mit `data.mol = { molfile, view }` und gerendertem SVG als `src`. Doppeltipp oder Auswahlmenü → Editor; Auswahlmenü „Darstellung“ wechselt nachträglich (Lage, Drehung, Skalierung bleiben). Verschieben/Skalieren/Beschriften wie andere Elemente; im Dunkelmodus wie Vektor-Elemente invertiert, im PDF-Export schwarz auf weiß.
 
+### 4.5 Bedienoberfläche (v0.2.2)
+- Werkzeugleiste in Gruppen (Stifte, Radieren & Auswählen, Formen & Messen, Einfügen, Präsentieren, Verlauf, Ansicht); zugeklappt ein Symbol, die Gruppe des aktiven Werkzeugs klappt automatisch auf. Frei schwebend bleibt sie vollständig im Blatt.
+- Möglichst wenig Text: keine erklärenden Untertitel oder Hinweise. Startseiten-Leiste nur mit Symbolen; Alt blendet Beschriftungen ein/aus.
+- Kein natives Ziehen/Markieren in der Oberfläche; eigene Scrollleisten, Regler und Farbwähler statt Windows-Standardelementen.
+
 ### 4.2 Blatt-Titel
 - Kein Titelbalken auf dem Blatt: der Canvas beginnt direkt oben. Speicherstatus, Versionen, Ink-Wiedergabe und Blatt-Aktionen (Export, Vorlage, Erstellt/Geändert) sitzen in einer kleinen Leiste oben rechts (Linkshänder: links).
 - **Umbenennen** nur in der Seitenleiste: Doppelklick/Doppeltipp auf den Namen → Inline-Eingabe (Enter oder Klick daneben speichert, Esc bricht ab), Kontextmenü „Umbenennen“, Taste **F2** für das offene Blatt.

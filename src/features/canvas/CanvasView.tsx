@@ -580,7 +580,10 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
       },
     };
     useCalc.getState().setHost(host);
-    return () => { if (useCalc.getState().host === host) useCalc.getState().setHost(null); };
+    return () => {
+      // Blatt geschlossen → Rechner/Grapheditor mit schließen
+      if (useCalc.getState().host === host) { useCalc.getState().setHost(null); useCalc.getState().toggle(false); }
+    };
   }, [flash]);
 
   const gridStep = () => (page.background === "blank" ? 5 : page.bgSpacingMm) * MM;

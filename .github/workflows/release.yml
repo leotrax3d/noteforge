@@ -55,7 +55,11 @@ jobs:
             - `Noteforge_*_x64_de-DE.msi` (MSI)
 
             Neu in dieser Version:
-            - Neues Werkzeug „Strukturformel“: Moleküle zeichnen (Skelett- oder volle Strukturformel), funktionelle Gruppen, automatische H-Ergänzung, Valenzprüfung, Summenformel und Molmasse
-            - Drei Darstellungen (ausführlich, Halbstruktur, Skelett) – im Blatt per Doppeltipp bearbeitbar und nachträglich umschaltbar
+            - Behoben: App hing beim Öffnen der Einstellungen
+            - WebUntis: Stundenplan für Schülerkonten (Klassenplan)
+            - Werkzeugleiste in aufklappbaren Gruppen, bleibt immer im sichtbaren Bereich
+            - Bessere Formerkennung (Kreise, Quadrate, Dreiecke, Rauten, Vielecke)
+            - Eigener Farbwähler, schlanke Scrollleisten, weniger Text, Alt blendet Beschriftungen ein
+            - Hell/Dunkel wechselt vollständig, Rechner schließt mit dem Blatt
           releaseDraft: false
           prerelease: false  # „latest“ muss auf das neueste Release zeigen (Update-Endpunkt)

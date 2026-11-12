@@ -37,8 +37,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const root = document.documentElement;
+    // Während des Wechsels keine Übergänge: sonst bleiben in WebView2 einzelne Elemente in alten Farben stehen
+    const st = document.createElement("style");
+    st.textContent = "*,*::before,*::after{transition:none!important}";
+    document.head.appendChild(st);
     root.classList.toggle("dark", resolved === "dark");
     root.style.colorScheme = resolved;
+    void window.getComputedStyle(document.body).color; // Neuberechnung erzwingen
+    const id = requestAnimationFrame(() => requestAnimationFrame(() => st.remove()));
+    return () => { cancelAnimationFrame(id); st.remove(); };
   }, [resolved]);
 
   const setTheme = (t: Theme) => {

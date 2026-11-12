@@ -245,9 +245,28 @@ export function Toolbar(p: ToolbarProps) {
       else t.setFloat({ x: Math.min(0.95, Math.max(0.05, x)), y: Math.min(0.95, Math.max(0.05, y)) });
       setDrag(null);
     };
+    const cancel = () => { el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); setDrag(null); };
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up);
+    el.addEventListener("lostpointercapture", cancel, { once: true });
+    el.addEventListener("pointercancel", cancel, { once: true });
   };
+
+  // Frei schwebende Leiste immer vollständig im Blatt halten (auch nach Fenstergröße/Umbruch)
+  useEffect(() => {
+    if (t.dock !== "float" || drag) return;
+    const fit = () => {
+      const el = rootRef.current, parent = el?.parentElement;
+      if (!el || !parent) return;
+      const pr = parent.getBoundingClientRect(), r = el.getBoundingClientRect();
+      const hx = Math.min(0.5, r.width / 2 / pr.width + 0.01), hy = Math.min(0.5, r.height / 2 / pr.height + 0.01);
+      const x = Math.min(1 - hx, Math.max(hx, t.floatPos.x)), y = Math.min(1 - hy, Math.max(hy, t.floatPos.y));
+      if (Math.abs(x - t.floatPos.x) > 1e-3 || Math.abs(y - t.floatPos.y) > 1e-3) t.setFloat({ x, y });
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  });
 
   // Bearbeiten-Modus: Elemente per Ziehen (Stift/Finger/Maus) umsortieren, in die Ablage ziehen = entfernen
   const startReorder = (e: React.PointerEvent, item: ToolItem, fromTray: boolean) => {
