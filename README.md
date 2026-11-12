@@ -3,7 +3,7 @@
 Stiftoptimierte Schul-Notiz-App für Windows – OneNote-Funktionsumfang, WebUntis-Stundenplan, Moodle BW und Klassenarbeiten-Kalender.
 
 ## Features (Ziel)
-- Fächer → Themengruppen → Blätter (mit Unterseiten)
+- Fächer → Theman → Blätter (mit Unterseiten)
 - Endloser Canvas **oder** DIN-A4-Seiten (pro Blatt wählbar)
 - Hintergründe: kariert, liniert, punktiert, leer
 - Druckempfindliche Stifte, Textmarker, Radierer, Lasso
@@ -76,8 +76,8 @@ Bilder werden in die Tiles gerendert (Tinte liegt darüber), Text und Tabellen l
 - **Seitenvorlagen:** Cornell-Notizen, Versuchsprotokoll, Vokabelliste, Mathe (kariert), Wochenplan, Lernzettel für KA; eigene Vorlagen über Blatt-Aktionen → „Als Vorlage speichern“.
 - **Seitenversionen:** automatisch beim Öffnen/Verlassen eines geänderten Blatts (≥ 10 min Abstand, max. 50, zlib-komprimierte Snapshots), manuell sicherbar, Wiederherstellen sichert vorher den aktuellen Stand.
 - **Papierkorb:** Löschen verschiebt Blätter samt Unterseiten in den Papierkorb (30 Tage, danach automatisch endgültig gelöscht).
-- **PDF-Import:** Themengruppe → „PDF als Blatt importieren“ (neues A4-Blatt) oder Einfügen → „PDF-Seiten“ ins aktuelle Blatt. Seiten werden als feste Hintergrundseiten (`pdfPage`) gerastert (pdf.js), ihr Text ist durchsuchbar.
-- **PDF-Export:** Blatt-Aktionen → Blatt / Themengruppe / ganzes Fach. A4-Blätter 1:1, Endlosblätter auf A4-Breite eingepasst; eigener PDF-Writer (JPEG je Seite), Speichern über den Tauri-Dialog (Rust schreibt die Datei).
+- **PDF-Import:** Thema → „PDF als Blatt importieren“ (neues A4-Blatt) oder Einfügen → „PDF-Seiten“ ins aktuelle Blatt. Seiten werden als feste Hintergrundseiten (`pdfPage`) gerastert (pdf.js), ihr Text ist durchsuchbar.
+- **PDF-Export:** Blatt-Aktionen → Blatt / Thema / ganzes Fach. A4-Blätter 1:1, Endlosblätter auf A4-Breite eingepasst; eigener PDF-Writer (JPEG je Seite), Speichern über den Tauri-Dialog (Rust schreibt die Datei).
 - **Ink-Wiedergabe:** ▶ in der Blatt-Kopfzeile spielt die Handschrift in Entstehungsreihenfolge mit echtem Schreibtempo ab (1×–8×, Zeitleiste, Leertaste/Esc).
 
 ### Kalender (Phase 5)
@@ -92,7 +92,7 @@ Bilder werden in die Tiles gerendert (Tinte liegt darüber), Text und Tabellen l
 - **Stundenplan** (inkl. Vertretungen/Ausfälle) wird im Rust-Backend per JSON-RPC geholt, in SQLite gecacht (Vorwoche bis +5 Wochen) und alle 15 min beim Öffnen der Startseite abgeglichen. Er erscheint in der Wochenansicht des Kalenders und als „Heute“-Leiste auf der Startseite.
 - **„Aktuelle Stunde öffnen“** springt ins zugeordnete Fach (zuletzt bearbeitetes Blatt); vor Unterrichtsbeginn heißt der Knopf „Nächste Stunde öffnen“.
 - **Moodle-Abgaben** (`core_calendar_get_action_events_by_timesort`) werden als Termine vom Typ „Abgabe“ mit Erinnerung 1 Tag vorher übernommen; eigene Notizen bleiben beim Abgleich erhalten, entfallene Abgaben werden entfernt.
-- **PDF aus Moodle:** Themengruppen-Menü → „PDF aus Moodle …“ listet die PDFs des zugeordneten Kurses; der Download läuft über das Backend (Token verlässt die Instanz nie) und wird wie ein lokales PDF als A4-Blatt importiert.
+- **PDF aus Moodle:** Theman-Menü → „PDF aus Moodle …“ listet die PDFs des zugeordneten Kurses; der Download läuft über das Backend (Token verlässt die Instanz nie) und wird wie ein lokales PDF als A4-Blatt importiert.
 - Im Browser (`pnpm dev`) ersetzt ein Demo-Backend beide Dienste durch einen erfundenen Stundenplan.
 
 ### Erkennung (Phase 7)
@@ -104,7 +104,7 @@ Bilder werden in die Tiles gerendert (Tinte liegt darüber), Text und Tabellen l
 - **Grenzen:** Im Browser (`pnpm dev`) ist keine Erkennung verfügbar. Dort meldet der LaTeX-Dialog das, und die Formel kann von Hand eingegeben werden. Ein lokales ONNX-Formelmodell (SPEC §6) kann später als weitere Quelle für `inkToLatex` dazukommen.
 
 ### Sync & Feinschliff (Phase 8)
-- **Nextcloud-Sync (WebDAV, SPEC §9)** in `src-tauri/src/sync/`: Auf dem Server liegen `struct.json.gz` (Fächer, Themengruppen, Tags, Vorlagen, eigene Termine) und `pages/<id>.json.gz` je Blatt (inklusive Bildern und PDF-Seiten). Die Zugangsdaten sind Server, Benutzer und App-Passwort; das App-Passwort liegt nur im Credential Manager. Der Abgleich läuft manuell, alle 5, 15 oder 60 Minuten oder mit Strg+Umschalt+S.
+- **Nextcloud-Sync (WebDAV, SPEC §9)** in `src-tauri/src/sync/`: Auf dem Server liegen `struct.json.gz` (Fächer, Theman, Tags, Vorlagen, eigene Termine) und `pages/<id>.json.gz` je Blatt (inklusive Bildern und PDF-Seiten). Die Zugangsdaten sind Server, Benutzer und App-Passwort; das App-Passwort liegt nur im Credential Manager. Der Abgleich läuft manuell, alle 5, 15 oder 60 Minuten oder mit Strg+Umschalt+S.
 - **Zeitsynchronisation:**
   - Geänderte Blätter werden ohne Uhrzeit erkannt: lokal über einen Fingerabdruck je Blatt, auf dem Server über ETags. Uploads sind mit `If-Match`/`If-None-Match` geschützt.
   - Die Zeit zählt nur, wenn beide Seiten dasselbe Blatt geändert haben. Dann gewinnt die neuere Version, die ältere bleibt als Seitenversion „Sync-Konflikt …“ erhalten.
@@ -132,3 +132,12 @@ Bilder werden in die Tiles gerendert (Tinte liegt darüber), Text und Tabellen l
 - **Rechner:** Tastenfeld mit 44-px-Tasten, Dezimalkomma, `;` als Argumenttrenner, DEG/RAD, Variablen (`a = 4`), `ans`, Verlauf, „Aufs Blatt“ fügt die Rechnung als Textfeld ein. Metafunktionen (`import`, `evaluate` …) sind in Ausdrücken gesperrt.
 - **Plotter:** bis zu 6 Funktionen, Ziehen/Mausrad/Knöpfe zum Zoomen, Auto-y; Nullstellen (auch Berührpunkte, ohne Polstellen), Hoch-/Tiefpunkte und Schnittpunkte numerisch.
 - **Auf dem Blatt:** Graph als SVG-Bild mit gespeicherter Spezifikation (`data.plot`) – auswählen → „Graph bearbeiten“ öffnet ihn wieder im Plotter, „aktualisieren“ ersetzt ihn in einem Rückgängig-Schritt.
+
+### Stift, Rendering & Bedienung (Phase 12)
+- **Saubere kleine Schrift:** Eingabefilter (Mindestabstand 0,3 px, Druckglättung, Spitzenkappung, Punkt/Kapsel für i-Punkte), Vorhersagepunkte nur pro Frame; Ursachenanalyse in `docs/analysis-pen-artifacts.md`. Debug-Ansicht **Strg+Umschalt+D** (Rohpunkte, Druck, Umriss, FPS).
+- **Rendering:** nur `requestAnimationFrame` (folgt 60–144 Hz), Eingaben über `pointerrawupdate`. **Scharfe PDFs:** Original als Asset (Migration `0008_assets.sql`, mit dem Blatt synchronisiert), zoomabhängige 512-px-Kacheln (LRU, max. 192 MB), scharf nach 150 ms Ruhe.
+- **Start ohne Aufblitzen:** Fenster unsichtbar bis zum ersten Frame, Theme vor dem React-Mount.
+- **Canvas:** Doppelklick/-tipp erzeugt Textfeld mit Einrasten an Linien/Raster (Alt = frei); A4-Grenzen mit Gummiband; PDFs im Endlos-Canvas als freie Elemente; Greifbalken, Aufnehmen per langem Fingerdruck, Hilfslinien, Pfeiltasten.
+- **WebUntis:** Freistunden (Lücke vs. Entfall) in Startseite und Kalender.
+- **Einrichtungsassistent** beim ersten Start (10 Schritte, erneut unter Einstellungen → Stift & Bedienung oder Befehlspalette).
+- **Logo** `assets/logo.svg`, konfigurierbare Stiftleiste, Befehlspalette **Strg+K**, Einstellungen mit Kategorien und Suche, Kontextmenüs, Helfer „Spitz“.

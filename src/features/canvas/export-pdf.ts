@@ -1,4 +1,4 @@
-// PDF-Export (SPEC §5): Blatt, Themengruppe oder Fach.
+// PDF-Export (SPEC §5): Blatt, Thema oder Fach.
 import { elementToStroke } from "@/canvas/core/codec";
 import { elementToObj, type CanvasObj } from "@/canvas/core/objects";
 import type { Stroke } from "@/canvas/core/model";
@@ -10,7 +10,7 @@ import type { Page, Section } from "@/lib/types";
 
 export type ExportScope = "page" | "section" | "subject";
 
-/** Blätter in Baum-Reihenfolge (Unterseiten direkt nach dem Elternblatt). */
+/** Blätter in Baum-Reihenfolge (Unterblätter direkt nach dem Elternblatt). */
 export function pagesInScope(scope: ExportScope, page: Page, sections: Section[], pages: Page[]): Page[] {
   if (scope === "page") return [page];
   const secs = scope === "section" ? sections.filter((s) => s.id === page.sectionId) : sections;

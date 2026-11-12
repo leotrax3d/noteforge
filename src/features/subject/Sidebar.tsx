@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { EmptyState } from "@/components/common/EmptyState";
 import {
   DndContext, DragOverlay, pointerWithin, closestCenter, useDraggable, useDroppable,
   type CollisionDetection, type DragEndEvent, type DragMoveEvent, type DragStartEvent,
@@ -15,9 +16,9 @@ import { ConfirmDialog, NameDialog } from "@/components/common/dialogs";
 import { useDragSensors } from "@/features/home/HomePage";
 import { arrayMove, flattenSection, indentTarget, outdentTarget, pageDropTarget, type PageDrop } from "@/lib/tree";
 import type { Page, Section } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, openSoon } from "@/lib/utils";
 
-/** Horizontaler Zugweg (px), ab dem ein Blatt als Unterseite abgelegt wird. */
+/** Horizontaler Zugweg (px), ab dem ein Blatt als Unterblatt abgelegt wird. */
 export const NEST_THRESHOLD = 40;
 const INDENT = 16;
 
@@ -128,7 +129,7 @@ export function Sidebar({ subjectColor, sections, pages, selectedPageId, actions
       : pages.find((p) => p.id === activeItem?.id)?.title || "Unbenanntes Blatt";
 
   return (
-    <nav aria-label="Themengruppen und Blätter" className="flex h-full flex-col">
+    <nav aria-label="Themen und Blätter" className="flex h-full flex-col">
       <div className="flex-1 overflow-y-auto overscroll-contain p-2">
         <DndContext
           sensors={sensors}
@@ -166,12 +167,13 @@ export function Sidebar({ subjectColor, sections, pages, selectedPageId, actions
         </DndContext>
 
         {sections.length === 0 && (
-          <p className="p-3 text-sm text-muted-foreground">Noch keine Themengruppe. Lege eine an, um Blätter zu erstellen.</p>
+          <EmptyState compact icon={<FolderPlus />} title="Noch keine Themen" text="Themen bündeln die Blätter eines Fachs, z. B. „Funktionen“."
+            action="Thema anlegen" onAction={() => setDialog({ kind: "new-section" })} />
         )}
       </div>
       <div className="flex border-t p-2">
         <Button variant="ghost" className="flex-1 justify-start" onClick={() => setDialog({ kind: "new-section" })}>
-          <FolderPlus /> Themengruppe
+          <FolderPlus /> Thema
         </Button>
         <Button variant="ghost" onClick={actions.openTrash}>
           <Trash2 /> Papierkorb
@@ -181,7 +183,7 @@ export function Sidebar({ subjectColor, sections, pages, selectedPageId, actions
       <NameDialog
         open={dialog?.kind === "new-section"}
         onOpenChange={(o) => !o && setDialog(null)}
-        title="Neue Themengruppe"
+        title="Neues Thema"
         initialColor={subjectColor}
         withColor
         submitLabel="Anlegen"
@@ -190,7 +192,7 @@ export function Sidebar({ subjectColor, sections, pages, selectedPageId, actions
       <NameDialog
         open={dialog?.kind === "rename-section"}
         onOpenChange={(o) => !o && setDialog(null)}
-        title="Themengruppe bearbeiten"
+        title="Thema bearbeiten"
         initial={dialog?.kind === "rename-section" ? dialog.section.name : ""}
         initialColor={dialog?.kind === "rename-section" ? dialog.section.color : subjectColor}
         withColor
@@ -200,14 +202,14 @@ export function Sidebar({ subjectColor, sections, pages, selectedPageId, actions
         open={dialog?.kind === "delete-section"}
         onOpenChange={(o) => !o && setDialog(null)}
         title={`„${dialog?.kind === "delete-section" ? dialog.section.name : ""}“ löschen?`}
-        description="Die Themengruppe und alle enthaltenen Blätter werden endgültig gelöscht."
+        description="Das Thema und alle enthaltenen Blätter werden endgültig gelöscht."
         onConfirm={() => dialog?.kind === "delete-section" && actions.deleteSection(dialog.section.id)}
       />
       <ConfirmDialog
         open={dialog?.kind === "delete-page"}
         onOpenChange={(o) => !o && setDialog(null)}
         title={`„${dialog?.kind === "delete-page" ? dialog.page.title || "Unbenanntes Blatt" : ""}“ löschen?`}
-        description="Das Blatt und alle Unterseiten kommen in den Papierkorb und können 30 Tage lang wiederhergestellt werden."
+        description="Das Blatt und alle Unterblätter kommen in den Papierkorb und können 30 Tage lang wiederhergestellt werden."
         confirmLabel="In den Papierkorb"
         onConfirm={() => dialog?.kind === "delete-page" && actions.deletePage(dialog.page.id)}
       />
@@ -244,6 +246,7 @@ function SectionBlock(props: {
   const { section: sec, actions } = props;
   const id: DragId = `s:${sec.id}`;
   const dd = useDragDrop(id);
+  const [menu, setMenu] = useState(false);
   const open = !props.collapsed.has(sec.id);
   const isOver = props.preview?.overId === id;
   const dragKind = props.draggingId ? parse(props.draggingId).kind : null;
@@ -255,7 +258,8 @@ function SectionBlock(props: {
         {...dd.attributes}
         {...dd.listeners}
         role="group"
-        aria-label={`Themengruppe ${sec.name}`}
+        aria-label={`Thema ${sec.name}`}
+        onContextMenu={(e) => { e.preventDefault(); openSoon(setMenu); }}
         className={cn(
           "group flex h-11 touch-manipulation items-center rounded-md hover:bg-accent/60",
           isOver && dragKind === "p" && "bg-accent ring-2 ring-primary",
@@ -272,9 +276,9 @@ function SectionBlock(props: {
           onClick={() => actions.createPage(sec.id, null)}>
           <FilePlus />
         </Button>
-        <DropdownMenu>
+        <DropdownMenu open={menu} onOpenChange={setMenu}>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label={`Optionen für ${sec.name}`}><MoreVertical /></Button>
+            <Button variant="ghost" size="icon" aria-label={`Optionen für ${sec.name}`} title="Optionen (Rechtsklick / lange drücken)"><MoreVertical /></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={() => actions.createPage(sec.id, null)}><FilePlus /> Neues Blatt</DropdownMenuItem>
@@ -327,6 +331,7 @@ function PageRow(props: {
   const { page, depth, hasChildren } = props.item;
   const { actions } = props;
   const dd = useDragDrop(`p:${page.id}`);
+  const [menu, setMenu] = useState(false);
   const indent = indentTarget(props.pages, page.id);
   const outdent = outdentTarget(props.pages, page.id);
 
@@ -342,6 +347,7 @@ function PageRow(props: {
         role="button"
         tabIndex={0}
         onClick={() => actions.selectPage(page.id)}
+        onContextMenu={(e) => { e.preventDefault(); openSoon(setMenu); }}
         onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), actions.selectPage(page.id))}
         style={{ paddingLeft: 12 + depth * INDENT }}
         className={cn(
@@ -352,7 +358,7 @@ function PageRow(props: {
         )}
       >
         {hasChildren ? (
-          <Button variant="ghost" size="icon" aria-label={props.collapsed ? "Unterseiten zeigen" : "Unterseiten verbergen"}
+          <Button variant="ghost" size="icon" aria-label={props.collapsed ? "Unterblätter zeigen" : "Unterblätter verbergen"}
             onClick={(e) => (e.stopPropagation(), props.onToggle())}>
             {props.collapsed ? <ChevronRight /> : <ChevronDown />}
           </Button>
@@ -364,9 +370,9 @@ function PageRow(props: {
         <span className={cn("flex-1 truncate", !page.title && "text-muted-foreground italic")}>
           {page.title || "Unbenanntes Blatt"}
         </span>
-        <DropdownMenu>
+        <DropdownMenu open={menu} onOpenChange={setMenu}>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label={`Optionen für ${page.title || "Blatt"}`}
+            <Button variant="ghost" size="icon" aria-label={`Optionen für ${page.title || "Blatt"}`} title="Optionen (Rechtsklick / lange drücken)"
               onClick={(e) => e.stopPropagation()}
               className="opacity-60 group-hover:opacity-100 focus-visible:opacity-100">
               <MoreVertical />
@@ -374,8 +380,8 @@ function PageRow(props: {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
             <DropdownMenuItem onSelect={() => actions.selectPage(page.id)}><Pencil /> Öffnen</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => actions.createPage(page.sectionId, page.id)}><FilePlus /> Unterseite hinzufügen</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => actions.createFromTemplate(page.sectionId, page.id)}><LayoutTemplate /> Unterseite aus Vorlage …</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => actions.createPage(page.sectionId, page.id)}><FilePlus /> Unterblatt hinzufügen</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => actions.createFromTemplate(page.sectionId, page.id)}><LayoutTemplate /> Unterblatt aus Vorlage …</DropdownMenuItem>
             <DropdownMenuItem disabled={!indent} onSelect={() => indent && actions.movePage(page.id, indent)}>
               <IndentIncrease /> Einrücken
             </DropdownMenuItem>

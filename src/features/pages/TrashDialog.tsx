@@ -51,7 +51,7 @@ export function TrashDialog({ open, onOpenChange, subjectId, onChanged }: {
                   <span className="block truncate font-medium">{t.page.title || "Unbenanntes Blatt"}</span>
                   <span className="block text-xs text-muted-foreground">
                     {t.sectionName} · gelöscht {new Date(t.deletedAt).toLocaleString("de-DE")}
-                    {t.childCount > 0 && ` · ${t.childCount} Unterseite${t.childCount === 1 ? "" : "n"}`} · noch {left} Tag{left === 1 ? "" : "e"}
+                    {t.childCount > 0 && ` · ${t.childCount} Unterbl${t.childCount === 1 ? "att" : "ätter"}`} · noch {left} Tag{left === 1 ? "" : "e"}
                   </span>
                 </span>
                 <Button variant="ghost" onClick={() => void run(() => api.restorePage(t.page.id), t.page.id)}>

@@ -5,7 +5,9 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { BookCheck, CalendarDays, GraduationCap, KeyRound, MoreVertical, PenLine, Pencil, Plus, RefreshCw, Search, Settings, Tags, Trash2 } from "lucide-react";
+import { EmptyState } from "@/components/common/EmptyState";
+import { Logo } from "@/components/common/Logo";
+import { BookOpen, BookCheck, Command, CalendarDays, GraduationCap, KeyRound, MoreVertical, PenLine, Pencil, Plus, RefreshCw, Search, Settings, Tags, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -20,6 +22,7 @@ import { mutate, useAsync } from "@/lib/use-async";
 import { useCloudRev } from "@/lib/sync";
 import { usePrefs } from "@/store/prefs";
 import { useNav } from "@/store/nav";
+import { openSoon } from "@/lib/utils";
 import { SubjectDialog } from "./SubjectDialog";
 import { UpcomingExams } from "./UpcomingExams";
 import { TodayTimetable } from "./TodayTimetable";
@@ -63,8 +66,9 @@ export function HomePage() {
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-2 border-b px-4 py-2">
-        <h1 className="mr-auto text-xl font-semibold tracking-tight">Noteforge</h1>
-        <Button variant="ghost" onClick={() => go({ view: "search" })} title="Suche (Strg+K)"><Search /> Suche</Button>
+        <h1 className="mr-auto flex items-center gap-2 text-xl font-semibold tracking-tight"><Logo size={32} /> Noteforge</h1>
+        <Button variant="ghost" size="icon" aria-label="Befehlspalette" onClick={() => usePrefs.getState().setDialog("palette")}><Command /></Button>
+        <Button variant="ghost" onClick={() => go({ view: "search" })} title="Suche (Strg+F)"><Search /> Suche</Button>
         <Button variant="ghost" onClick={() => go({ view: "calendar" })}><CalendarDays /> Kalender</Button>
         <Button variant="ghost" onClick={() => go({ view: "homework" })}><BookCheck /> Hausaufgaben</Button>
         <Button variant="ghost" onClick={() => go({ view: "grades" })}><GraduationCap /> Noten</Button>
@@ -114,7 +118,9 @@ export function HomePage() {
           </SortableContext>
         </DndContext>
         {subjects?.length === 0 && (
-          <p className="mt-6 text-muted-foreground">Lege dein erstes Fach an. Kacheln lassen sich per Ziehen sortieren.</p>
+          <EmptyState className="mt-4" icon={<BookOpen />} title="Noch keine Fächer"
+            text="Lege dein erstes Fach an – oder verbinde WebUntis, dann werden die Fächer aus deinem Stundenplan vorgeschlagen. Kacheln lassen sich per Ziehen sortieren."
+            action="Fach anlegen" onAction={() => setCreating(true)} />
         )}
       </main>
 
@@ -135,7 +141,7 @@ export function HomePage() {
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}
         title={`„${deleting?.name}“ löschen?`}
-        description="Alle Themengruppen und Blätter dieses Fachs werden endgültig gelöscht."
+        description="Alle Themen und Blätter dieses Fachs werden endgültig gelöscht."
         onConfirm={() => deleting && void mutate(() => api.deleteSubject(deleting.id), reload)}
       />
     </div>
@@ -146,6 +152,7 @@ function SubjectTile(props: { subject: Subject; onOpen: () => void; onEdit: () =
   const { subject: s } = props;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: s.id });
   const Icon = subjectIcon(s.icon);
+  const [menu, setMenu] = useState(false);
   return (
     <li
       ref={setNodeRef}
@@ -159,6 +166,7 @@ function SubjectTile(props: { subject: Subject; onOpen: () => void; onEdit: () =
         onClick={props.onOpen}
         aria-label={`${s.name} öffnen`}
         aria-roledescription="sortierbare Kachel"
+        onContextMenu={(e) => { e.preventDefault(); openSoon(setMenu); }}
         className="flex aspect-[4/3] w-full touch-manipulation flex-col justify-between rounded-xl p-4 text-left text-white shadow-sm outline-none transition-shadow hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/70 data-[dragging=true]:shadow-xl"
         data-dragging={isDragging}
         style={{ background: s.color }}
@@ -166,9 +174,9 @@ function SubjectTile(props: { subject: Subject; onOpen: () => void; onEdit: () =
         <Icon className="size-9 opacity-90" />
         <span className="line-clamp-2 text-lg font-semibold">{s.name}</span>
       </button>
-      <DropdownMenu>
+      <DropdownMenu open={menu} onOpenChange={setMenu}>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" aria-label={`Optionen für ${s.name}`}
+          <Button variant="ghost" size="icon" aria-label={`Optionen für ${s.name}`} title="Optionen (Rechtsklick / lange drücken)"
             className="absolute top-1 right-1 text-white hover:bg-white/20 hover:text-white">
             <MoreVertical />
           </Button>

@@ -14,6 +14,7 @@ import { listenCloud, syncNowAndApply } from "@/lib/sync";
 import { typing } from "@/lib/shortcuts";
 import { SettingsDialog } from "@/features/settings/SettingsDialog";
 import { useSetup } from "@/store/setup";
+import { CommandPalette } from "@/features/palette/CommandPalette";
 const Onboarding = lazy(() => import("@/features/onboarding/Onboarding").then((m) => ({ default: m.Onboarding })));
 import { ShortcutsDialog } from "@/features/settings/ShortcutsDialog";
 import { useCalc } from "@/features/calc/calc-store";
@@ -43,7 +44,8 @@ export default function App() {
       const mod = e.ctrlKey || e.metaKey;
       const k = e.key.toLowerCase();
       const p = usePrefs.getState();
-      if (mod && !e.shiftKey && (k === "k" || k === "f")) {
+      if (mod && !e.shiftKey && k === "k") p.setDialog(p.dialog === "palette" ? null : "palette");
+      else if (mod && !e.shiftKey && k === "f") {
         if (useNav.getState().route.view !== "search") go({ view: "search" });
       } else if (mod && !e.shiftKey && k === ",") p.setDialog("settings");
       else if (e.key === "F1" || (e.key === "?" && !mod && !typing(e.target))) p.setDialog("shortcuts");
@@ -82,6 +84,7 @@ export default function App() {
       <SettingsDialog open={dialog === "settings"} onOpenChange={(o) => setDialog(o ? "settings" : null)} />
       {calcOpen && <Suspense fallback={null}><CalcPanel /></Suspense>}
       <ShortcutsDialog open={dialog === "shortcuts"} onOpenChange={(o) => setDialog(o ? "shortcuts" : null)} />
+      <CommandPalette open={dialog === "palette"} onOpenChange={(o) => setDialog(o ? "palette" : null)} />
       {!setupDone && <Suspense fallback={null}><Onboarding onDone={() => go({ view: "home" })} /></Suspense>}
     </ThemeProvider>
   );

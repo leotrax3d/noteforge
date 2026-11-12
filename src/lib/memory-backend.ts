@@ -42,7 +42,7 @@ export class MemoryBackend implements Backend {
   }
   private section(id: string) {
     const s = this.sections.find((x) => x.id === id);
-    if (!s) throw new Error(`Nicht gefunden: Themengruppe ${id}`);
+    if (!s) throw new Error(`Nicht gefunden: Thema ${id}`);
     return s;
   }
   private page(id: string) {
@@ -135,7 +135,7 @@ export class MemoryBackend implements Backend {
   async createPage(sectionId: string, parentPageId: string | null, title: string) {
     this.section(sectionId);
     if (parentPageId && this.page(parentPageId).sectionId !== sectionId)
-      throw new Error("Ungültig: Unterseite muss in derselben Themengruppe liegen");
+      throw new Error("Ungültig: Unterblatt muss im selben Thema liegen");
     const now = Date.now();
     const p: Page = {
       id: uid(), sectionId, parentPageId, title: title.trim(),
@@ -174,7 +174,7 @@ export class MemoryBackend implements Backend {
     if (parentPageId && (parentPageId === id || desc.includes(parentPageId)))
       throw new Error("Ungültig: Ein Blatt kann nicht in sich selbst verschoben werden");
     if (parentPageId && this.page(parentPageId).sectionId !== sectionId)
-      throw new Error("Ungültig: Unterseite muss in derselben Themengruppe liegen");
+      throw new Error("Ungültig: Unterblatt muss im selben Thema liegen");
 
     const old = { sectionId: p.sectionId, parentPageId: p.parentPageId };
     Object.assign(p, { sectionId, parentPageId, updatedAt: Date.now() });

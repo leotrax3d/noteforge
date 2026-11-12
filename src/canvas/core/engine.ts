@@ -54,6 +54,8 @@ export interface ToolState {
   shapeMode: boolean;
   /** Eingeblendete Zeichenhilfen. */
   guides: Record<GuideKind, boolean>;
+  /** Deckkraft aus Stift-Preset (null/fehlt = Standard des Stifts). */
+  opacity?: number | null;
 }
 
 export interface SelectionInfo {
@@ -206,6 +208,7 @@ export class CanvasEngine {
   private livePen: PenKind = "fountain";
   private liveColor = "#000";
   private liveWidth = 2;
+  private liveOpacity = 1;
   private livePressure = false;
   private smooth = new PressureSmoother();
   private lastP = 0.5;
@@ -819,7 +822,19 @@ export class CanvasEngine {
     e.preventDefault();
     if (this.mode !== "idle") return;
     this.rect = this.active.getBoundingClientRect();
-    this.events.onRadial?.({ x: e.clientX - this.rect.left, y: e.clientY - this.rect.top });
+    const q = { x: e.clientX - this.rect.left, y: e.clientY - this.rect.top };
+    // Rechtsklick/langes Drücken auf ein Bild/PDF: auswählen → Auswahlmenü (Kontextmenü des Elements)
+    const o = this.topObjAt(this.toWorld(q.x, q.y));
+    if (o?.kind === "image") {
+      this.select([], [o]);
+      return;
+    }
+    if (o) {
+      this.events.onHoverObj?.(o.id);
+      return;
+    }
+    if (this.sel) return this.emitSelection();
+    this.events.onRadial?.(q);
   };
 
   /** Bewegung für Halten-Erkennung verfolgen (ohne Timer pro Event). */
@@ -1272,6 +1287,7 @@ export class CanvasEngine {
     this.livePen = t.pen;
     this.liveColor = t.color;
     this.liveWidth = t.width;
+    this.liveOpacity = t.opacity ?? PENS[t.pen].opacity;
     this.livePressure = e.pointerType === "pen" && t.pen !== "ballpoint" && t.pen !== "highlighter";
     this.t0 = e.timeStamp;
     this.pts.n = 0;
@@ -1350,7 +1366,7 @@ export class CanvasEngine {
         pen: this.livePen,
         color: this.liveColor,
         width: this.liveWidth,
-        opacity: PENS[this.livePen].opacity,
+        opacity: this.liveOpacity,
         pressure: this.livePressure,
         points: this.pts.snapshot(),
       });
@@ -1878,7 +1894,7 @@ export class CanvasEngine {
       this.pred.n = 0; // Vorhersage nur für diesen Frame, nie in den Strich übernehmen
       const path = buildPath(this.livePen, this.liveWidth, this.livePressure, pts, false,
         this.pts.n < 3 ? { data: this.pts.data, n: this.pts.n } : undefined);
-      drawStroke(ctx, { pen: this.livePen, color: this.liveColor, opacity: PENS[this.livePen].opacity } as Stroke, dark, path);
+      drawStroke(ctx, { pen: this.livePen, color: this.liveColor, opacity: this.liveOpacity } as Stroke, dark, path);
     }
 
     if (this.sel) {

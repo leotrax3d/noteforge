@@ -1,5 +1,5 @@
 //! Sync-Dokumente: ein gzip-JSON pro Blatt (`pages/<id>.json.gz`) und eines für die Struktur
-//! (`struct.json.gz`: Fächer, Themengruppen, Tags, Vorlagen, eigene Termine).
+//! (`struct.json.gz`: Fächer, Themen, Tags, Vorlagen, eigene Termine).
 //!
 //! Zeilen werden generisch über die Spaltennamen übertragen; unbekannte Spalten (neuere
 //! App-Version auf einem anderen Gerät) werden beim Einlesen ignoriert.

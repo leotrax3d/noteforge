@@ -12,7 +12,7 @@ Desktop-App für Windows (Lenovo Yoga mit Stift), die OneNote für den Schulallt
 ## 3. Datenmodell
 ```
 Subject      id, name, color, icon, order, webuntisSubjectId?, moodleCourseId?
-Section      id, subjectId, name, color, order          (= Themengruppe)
+Section      id, subjectId, name, color, order          (= Thema)
 Page         id, sectionId, parentPageId?, title, order,
              mode: "infinite" | "a4", orientation: "portrait" | "landscape",
              background: "grid" | "lines" | "dots" | "blank",
@@ -54,7 +54,7 @@ Strokes: Punkte als `Float32Array` (x, y, pressure, tilt, t), Stift-ID, Farbe, B
 - **Gesten:** 2 Finger Zoom/Pan, 2-Finger-Tipp Undo, 3-Finger-Tipp Redo.
 
 ## 5. OneNote-Funktionen
-Unterseiten, Drag & Drop-Sortierung, Tags (To-Do, Wichtig, Frage, Lernen für KA, eigene) mit Tag-Übersicht, Seitenlinks `[[…]]`, Volltextsuche (Text + erkannte Handschrift + OCR), Seitenvorlagen, Seitenversionen, Papierkorb, Ink-Wiedergabe, PDF-Export (Blatt/Themengruppe/Fach), Drucken.
+Unterseiten, Drag & Drop-Sortierung, Tags (To-Do, Wichtig, Frage, Lernen für KA, eigene) mit Tag-Übersicht, Seitenlinks `[[…]]`, Volltextsuche (Text + erkannte Handschrift + OCR), Seitenvorlagen, Seitenversionen, Papierkorb, Ink-Wiedergabe, PDF-Export (Blatt/Thema/Fach), Drucken.
 
 ## 6. KI-/Erkennungsfunktionen (lokal bevorzugt)
 - **Handschrift → Text / Suche:** Windows.UI.Input.Inking `InkAnalyzer` über Rust-WinRT-Bindings (offline, Deutsch).
@@ -65,11 +65,14 @@ Unterseiten, Drag & Drop-Sortierung, Tags (To-Do, Wichtig, Frage, Lernen für KA
 - shadcn/ui, Hell + Dunkel + System; Akzentfarbe = Fachfarbe.
 - Stiftoptimiert: Touch-Ziele ≥ 44 px, schwebende andockbare Werkzeugleiste, Radialmenü (Stifttaste / Long-Press), Linkshänder-Modus, Fokusmodus.
 - Dunkler Canvas: Seite dunkel, Tinte intelligent invertiert (Luminanz-Inversion, Farbton bleibt), gespeichert wird Originalfarbe.
-- **Screens:** Startseite (Fächer-Kacheln, heutiger Stundenplan, nächste Klassenarbeiten mit Countdown, zuletzt bearbeitet), Fach-Ansicht (Sidebar Themengruppen/Blätter + Canvas), Kalender (Monat/Woche mit Stundenplan), Suche, Einstellungen.
+- **Logo:** `assets/logo.svg` (Notizblatt + Federspitze + Funke), daraus alle App-Icons (`pnpm tauri icon assets/logo.svg`); in Fenster/Taskleiste, Onboarding, Startseite, Spitz-Hinweisen.
+- **Stiftleiste konfigurierbar:** Bearbeiten-Modus („Leiste anpassen“) mit Werkzeug-Ablage – Elemente per Ziehen hinzufügen, entfernen, umsortieren (Stift, Finger, Maus); Presets anlegen/bearbeiten/löschen (Typ, Farbe, Breite, Deckkraft; Rechtsklick/langes Drücken auf ein Preset); Ausrichtung horizontal/vertikal; oben, links, rechts angedockt oder frei schwebend; Größe klein/mittel/groß (Touch-Ziele ≥ 44 px); „Zurücksetzen“. Gespeichert gerätelokal.
+- **Bedienung:** Alle Icon-Buttons mit Tooltip (Name + Tastenkürzel). Einheitliche Kontextmenüs per Rechtsklick/langem Drücken auf Fach, Thema, Blatt und Element (Bild/PDF → Auswahlmenü, Text → Greifbalken). Leere Zustände mit Erklärung + Aktion. Einstellungen in Kategorien (Darstellung, Stift & Bedienung, Erinnerungen, Sync, Sicherung) mit Suchfeld. Befehlspalette **Strg+K** (Suche: Strg+F). Helfer „Spitz“: kurzer, abschaltbarer Tipp beim ersten Benutzen eines Werkzeugs. Begriffe überall: **Fach → Thema → Blatt** (Unterblatt).
+- **Screens:** Startseite (Fächer-Kacheln, heutiger Stundenplan, nächste Klassenarbeiten mit Countdown, zuletzt bearbeitet), Fach-Ansicht (Sidebar Theman/Blätter + Canvas), Kalender (Monat/Woche mit Stundenplan), Suche, Einstellungen.
 
 ### Onboarding (Pflicht beim ersten Start)
 Vollbild-Assistent mit Fortschrittsanzeige, Zurück/Weiter, fortsetzbar (Schritt wird gespeichert); optionale Schritte haben „Überspringen“; erneut startbar unter Einstellungen → Bedienung.
-1. Willkommen + Design (Hell/Dunkel/System, Akzentfarbe) · 2. Speicherort (Standard `Dokumente\Noteforge`, Ordnerdialog, Schreibrechte-Prüfung, Warnung bei OneDrive/Nextcloud/Dropbox-Ordnern; DB wird per `VACUUM INTO` kopiert, wirksam nach Neustart; Pfad in `location.json` im App-Konfigurationsordner) · 3. Stift & Hand (Rechts-/Linkshänder, Testfeld, Druck-Kalibrierung = Maximaldruck, Druckkurve weich/normal/fest, Stifttaste: Lasso/Radierer/Radialmenü) · 4. Standard-Blatt (endlos/A4; kariert 5 mm, liniert 8 mm, punktiert, leer) · 5. WebUntis (Schulsuche über die öffentliche WebUntis-Schulsuche, Login, Verbindungstest, Fächer anlegen + verknüpfen nach Bestätigung) · 6. Moodle · 7. Nextcloud (Testverbindung) · 8. OneNote-Import (OneNote-PDF-Export → je Datei ein A4-Blatt in Themengruppe „OneNote-Import“) · 9. Erinnerungen an/aus (`app.reminders`), Vorlaufzeit sonstiger Termine, Benachrichtigungen erlauben, Helfer „Spitz“ (Werkzeug-Tipps) · 10. Zusammenfassung.
+1. Willkommen + Design (Hell/Dunkel/System, Akzentfarbe) · 2. Speicherort (Standard `Dokumente\Noteforge`, Ordnerdialog, Schreibrechte-Prüfung, Warnung bei OneDrive/Nextcloud/Dropbox-Ordnern; DB wird per `VACUUM INTO` kopiert, wirksam nach Neustart; Pfad in `location.json` im App-Konfigurationsordner) · 3. Stift & Hand (Rechts-/Linkshänder, Testfeld, Druck-Kalibrierung = Maximaldruck, Druckkurve weich/normal/fest, Stifttaste: Lasso/Radierer/Radialmenü) · 4. Standard-Blatt (endlos/A4; kariert 5 mm, liniert 8 mm, punktiert, leer) · 5. WebUntis (Schulsuche über die öffentliche WebUntis-Schulsuche, Login, Verbindungstest, Fächer anlegen + verknüpfen nach Bestätigung) · 6. Moodle · 7. Nextcloud (Testverbindung) · 8. OneNote-Import (OneNote-PDF-Export → je Datei ein A4-Blatt in Thema „OneNote-Import“) · 9. Erinnerungen an/aus (`app.reminders`), Vorlaufzeit sonstiger Termine, Benachrichtigungen erlauben, Helfer „Spitz“ (Werkzeug-Tipps) · 10. Zusammenfassung.
 
 ## 8. Integrationen
 - **WebUntis:** inoffizielle JSON-RPC-API (`/WebUntis/jsonrpc.do?school=…`), Login Schulname/Benutzer/Passwort, Stundenplan + Vertretungen + Ausfälle, Cache in SQLite, Fach-Mapping. „Aktuelle Stunde öffnen“ springt ins Fach.

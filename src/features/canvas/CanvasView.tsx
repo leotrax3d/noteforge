@@ -32,6 +32,7 @@ import { useTools } from "./tool-store";
 import { usePrefs } from "@/store/prefs";
 import { useSetup } from "@/store/setup";
 import { PerfOverlay } from "./PerfOverlay";
+import { SpitzHint } from "./SpitzHint";
 import { measureMetrics, placeText, type FontMetrics } from "@/canvas/core/text-snap";
 
 let metricsCache: FontMetrics | null = null;
@@ -387,7 +388,7 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
     await flush();
     const list = pagesInScope(scope, page, sections, pages).map((p) => (p.id === page.id ? page : p));
     const name = scope === "page" ? page.title || "Blatt"
-      : scope === "section" ? sections.find((x) => x.id === page.sectionId)?.name ?? "Themengruppe" : subjectName || "Fach";
+      : scope === "section" ? sections.find((x) => x.id === page.sectionId)?.name ?? "Thema" : subjectName || "Fach";
     const bytes = await exportPdf(list, name, setBusy);
     setBusy(null);
     if (await saveExport(bytes, pdfFileName(name))) flash("PDF exportiert");
@@ -593,7 +594,7 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
             <DropdownMenuContent align="end" className="w-64">
               <DropdownMenuLabel>Als PDF exportieren</DropdownMenuLabel>
               <DropdownMenuItem onSelect={() => void doExport("page")}><Download /> Dieses Blatt</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void doExport("section")}><Download /> Ganze Themengruppe</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void doExport("section")}><Download /> Ganzes Thema</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => void doExport("subject")}><Download /> Ganzes Fach</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => pdfRef.current?.click()}><FileUp /> PDF-Seiten einfügen …</DropdownMenuItem>
@@ -616,6 +617,7 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
         }}>
         <canvas ref={baseRef} className="absolute inset-0" />
         {perfOn && loaded && <PerfOverlay engine={engineRef.current} />}
+        {loaded && <SpitzHint />}
         <canvas ref={activeRef} data-testid="canvas-input" className="absolute inset-0" style={{ touchAction: "none" }} />
         <ObjectLayer
           objects={objects}

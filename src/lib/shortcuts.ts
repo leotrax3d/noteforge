@@ -6,7 +6,8 @@ export const SHORTCUTS: ShortcutGroup[] = [
   {
     title: "Allgemein",
     items: [
-      { keys: ["Strg", "K"], label: "Suche (auch Strg+F)" },
+      { keys: ["Strg", "K"], label: "Befehlspalette" },
+      { keys: ["Strg", "F"], label: "Suche" },
       { keys: ["Strg", ","], label: "Einstellungen" },
       { keys: ["F1"], label: "Diese Übersicht (auch ?)" },
       { keys: ["F11"], label: "Fokusmodus ein/aus (auch Strg+Umschalt+F)" },
@@ -23,7 +24,7 @@ export const SHORTCUTS: ShortcutGroup[] = [
   {
     title: "Blatt",
     items: [
-      { keys: ["Strg", "N"], label: "Neues Blatt in der Themengruppe" },
+      { keys: ["Strg", "N"], label: "Neues Blatt im Thema" },
       { keys: ["Strg", "S"], label: "Sofort speichern" },
       { keys: ["Strg", "Z"], label: "Rückgängig" },
       { keys: ["Strg", "Y"], label: "Wiederholen (auch Strg+Umschalt+Z)" },

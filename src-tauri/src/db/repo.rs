@@ -178,7 +178,7 @@ pub fn get_section(conn: &Connection, id: &str) -> Result<Section> {
         section_row,
     )
     .optional()?
-    .ok_or_else(|| Error::NotFound(format!("Themengruppe {id}")))
+    .ok_or_else(|| Error::NotFound(format!("Thema {id}")))
 }
 
 pub fn create_section(conn: &Connection, subject_id: &str, name: &str, color: &str) -> Result<Section> {
@@ -210,7 +210,7 @@ pub fn update_section(conn: &Connection, id: &str, p: SectionPatch) -> Result<Se
 }
 
 pub fn delete_section(conn: &Connection, id: &str) -> Result<()> {
-    changed(conn.execute("DELETE FROM section WHERE id=?1", [id])?, "Themengruppe", id)
+    changed(conn.execute("DELETE FROM section WHERE id=?1", [id])?, "Thema", id)
 }
 
 pub fn reorder_sections(conn: &mut Connection, subject_id: &str, order: &[String]) -> Result<()> {
@@ -243,7 +243,7 @@ fn page_row(r: &Row) -> rusqlite::Result<Page> {
     })
 }
 
-/// Alle Blätter eines Fachs (über alle Themengruppen), nach Gruppe/Elternteil/Reihenfolge.
+/// Alle Blätter eines Fachs (über alle Theman), nach Gruppe/Elternteil/Reihenfolge.
 pub fn list_pages(conn: &Connection, subject_id: &str) -> Result<Vec<Page>> {
     let mut stmt = conn.prepare_cached(&format!(
         "SELECT {PAGE_COLS} FROM page p JOIN section s ON s.id = p.section_id
@@ -267,7 +267,7 @@ fn check_parent(conn: &Connection, section_id: &str, parent: Option<&str>) -> Re
     if let Some(pid) = parent {
         let p = get_page(conn, pid)?;
         if p.section_id != section_id {
-            return Err(Error::Invalid("Unterseite muss in derselben Themengruppe liegen".into()));
+            return Err(Error::Invalid("Unterblatt muss im selben Thema liegen".into()));
         }
     }
     Ok(())

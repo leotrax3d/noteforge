@@ -1,7 +1,7 @@
 //! Phase 8 (SPEC §9): Nextcloud-Sync über WebDAV + tägliches lokales Backup.
 //!
 //! Ablage auf dem Server (`<Ordner>/`):
-//!   struct.json.gz        Fächer, Themengruppen, Tags, Vorlagen, eigene Termine
+//!   struct.json.gz        Fächer, Themen, Tags, Vorlagen, eigene Termine
 //!   pages/<id>.json.gz    je Blatt: Zeile, Elemente (inkl. Bilder/PDF-Seiten), Tags
 //!
 //! Änderungserkennung ist **uhrunabhängig**: lokal über einen Fingerabdruck je Blatt,
@@ -282,7 +282,7 @@ async fn sync_pages<Rm: Remote>(db: &Db, rm: &Rm, device: &str, clk: Clock, remo
         (local, states(&c)?)
     };
     let ids: BTreeSet<&String> = local.keys().chain(st.keys()).chain(remote.keys()).collect();
-    // Downloads, deren Eltern (Themengruppe/Oberseite) noch fehlen, werden am Ende erneut versucht.
+    // Downloads, deren Eltern (Thema/Oberseite) noch fehlen, werden am Ende erneut versucht.
     let mut retry: Vec<(PageDoc, String)> = Vec::new();
     for id in ids {
         let (l, s, r) = (local.get(id), st.get(id), remote.get(id));
@@ -359,7 +359,7 @@ async fn sync_pages<Rm: Remote>(db: &Db, rm: &Rm, device: &str, clk: Clock, remo
         }
     }
     for (d, _) in retry {
-        rep.errors.push(format!("Blatt „{}“: Themengruppe fehlt auf diesem Gerät", d.page.get("title").and_then(|v| v.as_str()).unwrap_or("?")));
+        rep.errors.push(format!("Blatt „{}“: Thema fehlt auf diesem Gerät", d.page.get("title").and_then(|v| v.as_str()).unwrap_or("?")));
     }
     Ok(())
 }

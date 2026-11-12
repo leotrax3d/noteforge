@@ -13,7 +13,7 @@ interface Prefs {
   /** Fokusmodus: nur Blatt + Werkzeugleiste (nicht gespeichert) */
   focus: boolean;
   /** Offene globale Dialoge */
-  dialog: "settings" | "shortcuts" | null;
+  dialog: "settings" | "shortcuts" | "palette" | null;
   setDialog: (d: Prefs["dialog"]) => void;
   setLeftHanded: (v: boolean) => void;
   setPerfOverlay: (v: boolean) => void;

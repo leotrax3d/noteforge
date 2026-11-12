@@ -177,7 +177,7 @@ fn loeschen_und_struktur() {
     let (a, b, ra, rb, page) = setup();
     sync(&a, &ra, "A");
     sync(&b, &rb, "B");
-    // A: Fach umbenennen; B: neue Themengruppe + Blatt endgültig löschen
+    // A: Fach umbenennen; B: neues Thema + Blatt endgültig löschen
     let subj = repo::list_subjects(&a.conn()).unwrap()[0].id.clone();
     a.conn().execute("UPDATE subject SET name='Mathematik' WHERE id=?1", [&subj]).unwrap();
     repo::create_section(&b.conn(), &subj, "Geometrie", "#111").unwrap();

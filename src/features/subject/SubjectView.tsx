@@ -6,6 +6,7 @@ import { typing } from "@/lib/shortcuts";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { api, putAsset } from "@/lib/api";
+import { EmptyState } from "@/components/common/EmptyState";
 import { subjectIcon } from "@/lib/catalog";
 import { mutate, useAsync } from "@/lib/use-async";
 import { useNav } from "@/store/nav";
@@ -60,7 +61,7 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudRev]);
 
-  // Strg+N: neues Blatt in der Themengruppe des offenen Blatts
+  // Strg+N: neues Blatt im Thema des offenen Blatts
   const newPageRef = useRef<() => void>(() => {});
   newPageRef.current = () => {
     const sectionId = page?.sectionId ?? sections[0]?.id;
@@ -129,7 +130,7 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
     }
   };
 
-  /** Seitenlink [[Titel]] öffnen; fehlt das Blatt, wird es in der aktuellen Themengruppe angelegt. */
+  /** Seitenlink [[Titel]] öffnen; fehlt das Blatt, wird es im aktuellen Thema angelegt. */
   const openLink = async (title: string) => {
     try {
       const hit = await api.findPage(title, subjectId);
@@ -171,7 +172,7 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
         {page && (
           <Button variant="ghost" size="icon" aria-label="Fokusmodus" title="Fokusmodus (F11)" onClick={() => toggleFocus(true)}><Maximize2 /></Button>
         )}
-        <Button variant="ghost" size="icon" aria-label="Suche" title="Suche (Strg+K)" onClick={() => go({ view: "search" })}><Search /></Button>
+        <Button variant="ghost" size="icon" aria-label="Suche" title="Suche (Strg+F)" onClick={() => go({ view: "search" })}><Search /></Button>
         <Button variant="ghost" size="icon" aria-label="Tag-Übersicht" title="Tags" onClick={() => go({ view: "tags" })}><Tags /></Button>
         <ThemeToggle />
       </header>
@@ -210,10 +211,15 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
               }}
             />
           ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
-              <FileText className="size-10" />
-              <p>{sections.length ? "Wähle links ein Blatt aus oder lege ein neues an." : "Lege links eine Themengruppe an."}</p>
-            </div>
+            sections.length ? (
+              <EmptyState className="h-full" icon={<FileText />} title="Kein Blatt geöffnet"
+                text="Wähle links ein Blatt aus oder lege ein neues an. Tipp: Strg+N legt ein Blatt im aktuellen Thema an."
+                action="Neues Blatt" onAction={() => actions.createPage(sections[0].id, null)} />
+            ) : (
+              <EmptyState className="h-full" icon={<FileText />} title="Noch keine Themen"
+                text="Lege links ein Thema an (z. B. „Funktionen“), darin entstehen deine Blätter."
+                action="Thema „Allgemein“ anlegen" onAction={() => actions.createSection("Allgemein", subject?.color ?? "#2563eb")} />
+            )
           )}
         </main>
       </div>

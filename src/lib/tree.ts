@@ -1,4 +1,4 @@
-// Reine Baumlogik für die Fach-Sidebar (Blätter + Unterseiten). Ohne React, testbar.
+// Reine Baumlogik für die Fach-Sidebar (Blätter + Unterblätter). Ohne React, testbar.
 import type { Page } from "./types";
 
 export interface FlatPage {
@@ -9,7 +9,7 @@ export interface FlatPage {
 
 const byOrder = (a: Page, b: Page) => a.order - b.order;
 
-/** Blätter einer Themengruppe in Anzeige-Reihenfolge (Tiefensuche); eingeklappte Äste fehlen. */
+/** Blätter eines Themas in Anzeige-Reihenfolge (Tiefensuche); eingeklappte Äste fehlen. */
 export function flattenSection(pages: Page[], sectionId: string, collapsed: ReadonlySet<string> = new Set()): FlatPage[] {
   const inSection = pages.filter((p) => p.sectionId === sectionId);
   const children = new Map<string | null, Page[]>();
@@ -47,7 +47,7 @@ export interface PageDrop {
 
 /**
  * Ziel für das Ablegen von `activeId` auf `overId`.
- * - `nest`: als letzte Unterseite von `over`
+ * - `nest`: als letzte Unterblatt von `over`
  * - sonst: an die Stelle von `over` unter dessen Elternteil (nach unten gezogen: dahinter)
  * Liefert `null`, wenn das Ablegen keinen Sinn ergibt (auf sich selbst / eigene Unterseite).
  */
@@ -81,7 +81,7 @@ export function outdentTarget(pages: Page[], id: string): PageDrop | null {
   return { sectionId: parent.sectionId, parentPageId: parent.parentPageId, index: sibs.findIndex((x) => x.id === parent.id) + 1 };
 }
 
-/** Ziel für „Einrücken“: letzte Unterseite des vorherigen Geschwisters. */
+/** Ziel für „Einrücken“: letzte Unterblatt des vorherigen Geschwisters. */
 export function indentTarget(pages: Page[], id: string): PageDrop | null {
   const p = pages.find((x) => x.id === id);
   if (!p) return null;

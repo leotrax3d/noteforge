@@ -55,7 +55,7 @@ describe("Seitenbaum", () => {
     expect(indentTarget(b.pages, a.id)).toBeNull();
   });
 
-  it("nimmt Unterseiten beim Gruppenwechsel mit", async () => {
+  it("nimmt Unterblätter beim Gruppenwechsel mit", async () => {
     const { b, sec, sec2, a, bb } = await setup();
     await b.movePage(a.id, sec2.id, null, 0);
     expect(titles(b, sec2.id)).toEqual(["A", "  A1"]);

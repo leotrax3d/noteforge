@@ -48,6 +48,9 @@ function Button({
     asChild?: boolean
   }) {
   const Comp = asChild ? Slot.Root : "button"
+  // Icon-Buttons immer mit Tooltip (Name + ggf. Tastenkürzel)
+  const label = props["aria-label"]
+  const title = props.title ?? (label && String(size).startsWith("icon") ? withShortcut(label) : undefined)
 
   return (
     <Comp
@@ -56,8 +59,20 @@ function Button({
       data-size={size}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
+      title={title}
     />
   )
+}
+
+/** Tastenkürzel zu häufigen Schaltflächen (einheitliche Tooltips). */
+const SHORTCUTS: Record<string, string> = {
+  "Rückgängig": "Strg+Z", "Wiederholen": "Strg+Y", "Suche": "Strg+F", "Einstellungen": "Strg+,", "Fokusmodus": "F11",
+  "Zur Startseite": "Alt+Pos1", "Zurück": "Alt+Pos1", "Befehlspalette": "Strg+K", "Tastenkürzel": "F1",
+  "Jetzt synchronisieren": "Strg+Umschalt+S", "Vergrößern": "Strg++", "Verkleinern": "Strg+-",
+}
+export function withShortcut(label: string) {
+  const k = SHORTCUTS[label]
+  return k ? `${label} (${k})` : label
 }
 
 export { Button, buttonVariants }

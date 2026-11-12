@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Cloud, DatabaseBackup, Keyboard, Wand2, Link2, RefreshCw, Unplug } from "lucide-react";
+import { AlertTriangle, Bell, CheckCircle2, Cloud, DatabaseBackup, Keyboard, Monitor, Moon, Palette, PenLine, Search, Sun, Wand2, Link2, RefreshCw, Unplug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,10 @@ import { cn } from "@/lib/utils";
 import { clockText, cloud, fmtBytes, syncNowAndApply, type CloudStatus } from "@/lib/sync";
 import { usePrefs } from "@/store/prefs";
 import { useTools } from "@/features/canvas/tool-store";
-import { useSetup } from "@/store/setup";
+import { useSetup, type BarrelAction } from "@/store/setup";
+import { useTheme } from "@/components/theme/theme-provider";
+import { setupApi } from "@/lib/setup-api";
+import { ACCENTS } from "@/features/onboarding/accents";
 
 const INTERVALS = [
   { v: 0, label: "Nur manuell" }, { v: 5, label: "Alle 5 Minuten" }, { v: 15, label: "Alle 15 Minuten" },
@@ -35,12 +38,94 @@ function Switch({ id, checked, onChange, label, hint }: { id: string; checked: b
   );
 }
 
+type CatId = "look" | "pen" | "notify" | "sync" | "backup";
+const CATS: { id: CatId; label: string; icon: React.ReactNode; words: string }[] = [
+  { id: "look", label: "Darstellung", icon: <Palette />, words: "design hell dunkel system akzent farbe theme logo" },
+  { id: "pen", label: "Stift & Bedienung", icon: <PenLine />, words: "stift druck kalibrierung stifttaste linkshänder rechtshänder leistung fps tastenkürzel assistent einrichtung" },
+  { id: "notify", label: "Erinnerungen", icon: <Bell />, words: "erinnerungen benachrichtigung spitz hinweise tipps vorlaufzeit" },
+  { id: "sync", label: "Sync", icon: <Cloud />, words: "nextcloud sync abgleich app-passwort server ordner" },
+  { id: "backup", label: "Sicherung", icon: <DatabaseBackup />, words: "backup sicherung speicherort datenordner" },
+];
+const fold = (x: string) => x.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+function matches(id: CatId, q: string) {
+  const c = CATS.find((x) => x.id === id)!;
+  const hay = fold(`${c.label} ${c.words}`);
+  return fold(q).split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
+}
+
+function AppearanceSection() {
+  const { theme, setTheme } = useTheme();
+  const { accent, set } = useSetup();
+  return (
+    <section className="grid gap-3 rounded-lg border p-3" aria-labelledby="look-h">
+      <h3 id="look-h" className="font-medium">Darstellung</h3>
+      <div role="radiogroup" aria-label="Design" className="flex gap-1">
+        {([["light", "Hell", <Sun key="s" />], ["dark", "Dunkel", <Moon key="m" />], ["system", "System", <Monitor key="c" />]] as const).map(([v, l, i]) => (
+          <Button key={v} role="radio" aria-checked={theme === v} variant={theme === v ? "secondary" : "outline"} className={cn("h-11 flex-1", theme === v && "ring-2 ring-ring")} onClick={() => setTheme(v)}>{i}{l}</Button>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Akzentfarbe">
+        <button type="button" role="radio" aria-checked={!accent} aria-label="Standard-Akzentfarbe" onClick={() => set({ accent: null })}
+          className={cn("size-11 rounded-full border-2 bg-foreground", !accent && "ring-[3px] ring-primary ring-offset-2 ring-offset-background")} />
+        {ACCENTS.map((c) => (
+          <button key={c} type="button" role="radio" aria-checked={accent === c} aria-label={`Akzentfarbe ${c}`} onClick={() => set({ accent: c })}
+            className={cn("size-11 rounded-full", accent === c && "ring-[3px] ring-primary ring-offset-2 ring-offset-background")} style={{ background: c }} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PenSection() {
+  const s = useSetup();
+  return (
+    <section className="grid gap-3 rounded-lg border p-3" aria-labelledby="pen-h">
+      <h3 id="pen-h" className="font-medium">Stift</h3>
+      <div className="grid gap-1.5">
+        <Label>Druckempfindlichkeit</Label>
+        <div role="radiogroup" aria-label="Druckempfindlichkeit" className="flex gap-1">
+          {([[0.7, "Weich"], [1, "Normal"], [1.4, "Fest"]] as const).map(([g, l]) => (
+            <Button key={l} role="radio" aria-checked={s.pressureGamma === g} variant={s.pressureGamma === g ? "secondary" : "outline"}
+              className={cn("h-11 flex-1", s.pressureGamma === g && "ring-2 ring-ring")} onClick={() => s.set({ pressureGamma: g })}>{l}</Button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">Kalibrierung: {s.pressureMax < 1 ? `voller Strich ab ${Math.round(s.pressureMax * 100)} % Druck` : "Standard"} – neu kalibrieren im Einrichtungsassistenten.</p>
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="barrel">Stifttaste</Label>
+        <select id="barrel" className={selectCls} value={s.barrel} onChange={(e) => s.set({ barrel: e.target.value as BarrelAction })}>
+          <option value="lasso">Lasso</option><option value="eraser">Radierer</option><option value="radial">Radialmenü</option>
+        </select>
+      </div>
+    </section>
+  );
+}
+
+function NotifySection() {
+  const s = useSetup();
+  const [on, setOn] = useState(true);
+  useEffect(() => { void setupApi.settings().then((x) => setOn(x["app.reminders"] !== "0")); }, []);
+  return (
+    <section className="grid gap-3 rounded-lg border p-3" aria-labelledby="notify-h">
+      <h3 id="notify-h" className="font-medium">Erinnerungen & Hinweise</h3>
+      <Switch id="rem" label="Erinnerungen an Termine" checked={on} hint="Windows-Benachrichtigung vor Klassenarbeiten, Tests, Abgaben und Terminen."
+        onChange={(v) => { setOn(v); void setupApi.setSetting("app.reminders", v ? "1" : "0"); }} />
+      <Switch id="spitz" label="Helfer „Spitz“" checked={s.spitz} hint="Kurzer Tipp beim ersten Benutzen eines Werkzeugs."
+        onChange={(v) => s.set({ spitz: v })} />
+      <Button variant="outline" className="justify-self-start" disabled={!s.seenHints.length} onClick={() => s.set({ seenHints: [] })}>Alle Tipps wieder zeigen</Button>
+    </section>
+  );
+}
+
 export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const [st, setSt] = useState<CloudStatus | null>(null);
   const [f, setF] = useState({ server: "", username: "", password: "", folder: "Noteforge", intervalMin: 15 });
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const prefs = usePrefs();
+  const [q, setQ] = useState("");
+  const [cat, setCat] = useState<CatId>("look");
+  const show = (id: CatId) => (q ? matches(id, q) : cat === id);
 
   const load = async () => {
     const s = await cloud.status();
@@ -89,10 +174,28 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Einstellungen</DialogTitle>
-          <DialogDescription>Sync, Sicherung und Bedienung auf diesem Gerät.</DialogDescription>
+          <DialogDescription>Darstellung, Stift, Erinnerungen, Sync und Sicherung.</DialogDescription>
         </DialogHeader>
 
-        <form className="grid gap-3 rounded-lg border p-3" aria-labelledby="nc-h"
+        <div className="relative">
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input aria-label="Einstellungen durchsuchen" placeholder="Einstellungen durchsuchen …" className="pl-9" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        {!q && (
+          <nav aria-label="Kategorien" className="flex flex-wrap gap-1">
+            {CATS.map((c) => (
+              <Button key={c.id} variant={cat === c.id ? "secondary" : "ghost"} className={cn("h-11", cat === c.id && "ring-2 ring-ring")}
+                aria-pressed={cat === c.id} onClick={() => setCat(c.id)}>{c.icon}{c.label}</Button>
+            ))}
+          </nav>
+        )}
+        {q && !CATS.some((c) => show(c.id)) && <p className="text-sm text-muted-foreground">Keine Einstellung gefunden.</p>}
+
+        {show("look") && <AppearanceSection />}
+        {show("pen") && <PenSection />}
+        {show("notify") && <NotifySection />}
+
+        {show("sync") && <form className="grid gap-3 rounded-lg border p-3" aria-labelledby="nc-h"
           onSubmit={(e) => {
             e.preventDefault();
             void run("connect", async () => {
@@ -156,9 +259,9 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               </Button>
             </>}
           </div>
-        </form>
+        </form>}
 
-        <section className="grid gap-3 rounded-lg border p-3" aria-labelledby="bk-h">
+        {show("backup") && <section className="grid gap-3 rounded-lg border p-3" aria-labelledby="bk-h">
           <div className="flex items-center gap-2">
             <DatabaseBackup className="size-5 text-muted-foreground" />
             <h3 id="bk-h" className="mr-auto font-medium">Backup</h3>
@@ -172,9 +275,9 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               ))}
             </ul>
           ) : <p className="text-sm text-muted-foreground">Noch kein Backup.</p>}
-        </section>
+        </section>}
 
-        <section className="grid gap-3 rounded-lg border p-3" aria-labelledby="ui-h">
+        {show("pen") && <section className="grid gap-3 rounded-lg border p-3" aria-labelledby="ui-h">
           <h3 id="ui-h" className="font-medium">Bedienung</h3>
           <Switch id="left" label="Linkshänder-Modus" checked={prefs.leftHanded} onChange={toggleLeft}
             hint="Seitenleiste rechts, senkrechte Werkzeugleiste gespiegelt – Bedienelemente auf der Seite der freien Hand." />
@@ -186,7 +289,7 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               <Wand2 /> Einrichtungsassistent starten
             </Button>
           </div>
-        </section>
+        </section>}
 
         {msg && <p role={msg.ok ? "status" : "alert"} className={msg.ok ? "text-sm text-emerald-700 dark:text-emerald-400" : "text-sm text-destructive"}>{msg.text}</p>}
       </DialogContent>
