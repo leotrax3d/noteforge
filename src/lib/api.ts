@@ -1,7 +1,7 @@
 // Einziger Zugang des Frontends zur Persistenz: Tauri-Commands.
 // Außerhalb von Tauri (Vite im Browser, Tests) springt ein In-Memory-Backend ein.
 import { invoke } from "@tauri-apps/api/core";
-import type { Page, PagePatch, Section, SectionPatch, Subject, SubjectPatch } from "./types";
+import type { CanvasElement, Page, PagePatch, Section, SectionPatch, Subject, SubjectPatch } from "./types";
 import { MemoryBackend } from "./memory-backend";
 
 export interface Backend {
@@ -22,6 +22,9 @@ export interface Backend {
   updatePage(id: string, patch: PagePatch): Promise<Page>;
   deletePage(id: string): Promise<void>;
   movePage(id: string, sectionId: string, parentPageId: string | null, index: number): Promise<Page>;
+
+  listElements(pageId: string): Promise<CanvasElement[]>;
+  saveElements(pageId: string, upserts: CanvasElement[], deletes: string[]): Promise<void>;
 }
 
 const tauri: Backend = {
@@ -43,6 +46,9 @@ const tauri: Backend = {
   deletePage: (id) => invoke("delete_page", { id }),
   movePage: (id, sectionId, parentPageId, index) =>
     invoke("move_page", { id, sectionId, parentPageId, index }),
+
+  listElements: (pageId) => invoke("list_elements", { pageId }),
+  saveElements: (pageId, upserts, deletes) => invoke("save_elements", { pageId, upserts, deletes }),
 };
 
 const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

@@ -439,6 +439,26 @@ pub fn upsert_element(conn: &Connection, e: &Element) -> Result<()> {
     Ok(())
 }
 
+/// Autospeichern: Upserts + Löschungen eines Blatts in einer Transaktion.
+pub fn save_elements(conn: &mut Connection, page_id: &str, upserts: &[Element], deletes: &[String]) -> Result<()> {
+    let tx = conn.transaction()?;
+    {
+        let mut del = tx.prepare_cached("DELETE FROM element WHERE id=?1 AND page_id=?2")?;
+        for id in deletes {
+            del.execute(params![id, page_id])?;
+        }
+        for e in upserts {
+            if e.page_id != page_id {
+                return Err(Error::Invalid("Element gehört zu einem anderen Blatt".into()));
+            }
+            upsert_element(&tx, e)?;
+        }
+        tx.execute("UPDATE page SET updated_at=?2 WHERE id=?1", params![page_id, now_ms()])?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 pub fn delete_element(conn: &Connection, id: &str) -> Result<()> {
     changed(conn.execute("DELETE FROM element WHERE id=?1", [id])?, "Element", id)
 }
@@ -541,6 +561,27 @@ mod tests {
 
     fn db() -> Db {
         Db::open_in_memory().unwrap()
+    }
+
+    #[test]
+    fn save_elements_batch() {
+        let d = db();
+        let mut c = d.conn();
+        let s = create_subject(&c, "Mathe", "#f00", "calculator").unwrap();
+        let sec = create_section(&c, &s.id, "Analysis", "#00f").unwrap();
+        let p = create_page(&c, &sec.id, None, "Blatt").unwrap();
+        let el = |id: &str, z| Element {
+            id: id.into(), page_id: p.id.clone(), kind: "stroke".into(), z,
+            bbox: BBox { x: 0.0, y: 0.0, w: 1.0, h: 1.0 }, data: vec![1, 2, 3],
+        };
+        save_elements(&mut c, &p.id, &[el("a", 0), el("b", 1)], &[]).unwrap();
+        save_elements(&mut c, &p.id, &[el("c", 2)], &["a".into()]).unwrap();
+        let ids: Vec<_> = list_elements(&c, &p.id).unwrap().into_iter().map(|e| e.id).collect();
+        assert_eq!(ids, ["b", "c"]);
+        let mut bad = el("x", 3);
+        bad.page_id = "anders".into();
+        assert!(save_elements(&mut c, &p.id, &[bad], &["b".into()]).is_err());
+        assert_eq!(list_elements(&c, &p.id).unwrap().len(), 2, "Rollback bei Fehler");
     }
 
     #[test]

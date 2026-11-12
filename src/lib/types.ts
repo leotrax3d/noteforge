@@ -39,3 +39,15 @@ export interface Page {
   updatedAt: number;
 }
 export type PagePatch = Partial<Pick<Page, "title" | "mode" | "orientation" | "background" | "bgSpacingMm" | "pageColor">>;
+
+export type ElementType = "stroke" | "shape" | "text" | "image" | "pdfPage" | "file" | "table";
+export interface BBox { x: number; y: number; w: number; h: number }
+export interface CanvasElement {
+  id: string;
+  pageId: string;
+  type: ElementType;
+  z: number;
+  bbox: BBox;
+  /** Binärdaten; über Tauri als Zahlen-Array serialisiert. */
+  data: number[];
+}

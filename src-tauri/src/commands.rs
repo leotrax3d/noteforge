@@ -67,6 +67,10 @@ pub fn list_elements(db: S, page_id: String) -> Result<Vec<Element>> {
 #[tauri::command]
 pub fn upsert_element(db: S, element: Element) -> Result<()> { repo::upsert_element(&db.conn(), &element) }
 #[tauri::command]
+pub fn save_elements(db: S, page_id: String, upserts: Vec<Element>, deletes: Vec<String>) -> Result<()> {
+    repo::save_elements(&mut db.conn(), &page_id, &upserts, &deletes)
+}
+#[tauri::command]
 pub fn delete_element(db: S, id: String) -> Result<()> { repo::delete_element(&db.conn(), &id) }
 
 #[tauri::command]

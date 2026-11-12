@@ -36,3 +36,18 @@ pnpm tauri build    # Windows-Installer (NSIS + MSI)
 
 Die Datenbank liegt unter `%APPDATA%\de.noteforge.app\noteforge.sqlite` (Tauri `app_data_dir`).
 Migrationen: `src-tauri/migrations/NNNN_*.sql`, versioniert über `PRAGMA user_version`.
+
+### Canvas (Phase 2)
+
+Engine ohne React unter `src/canvas/core/` (`engine.ts` = Eingabe, Gesten, Rendering):
+gespeicherte Striche + Hintergrund in 512-px-Tiles, aktiver Strich auf eigener `desynchronized`-Ebene.
+Striche werden binär (`codec.ts`) als `element.data` gespeichert; Autospeichern bündelt Änderungen
+über den Command `save_elements` (eine Transaktion).
+
+| Eingabe | Aktion |
+|---|---|
+| Stift / Maus / 1 Finger | aktives Werkzeug (Finger kann in den Blatteinstellungen auf „Verschieben“ gestellt werden) |
+| Stift-Radierende | Radierer · Stift-Seitentaste: Lasso |
+| 2 Finger | Zoom (10–800 %) und Verschieben · Tipp: Rückgängig · 3-Finger-Tipp: Wiederholen |
+| Strg + Mausrad / Mausrad | Zoom / Verschieben (Mittlere Maustaste: Verschieben) |
+| Strg+Z, Strg+Y, Strg+0, Entf, Esc | Rückgängig, Wiederholen, Ansicht zurücksetzen, Auswahl löschen, Auswahl aufheben |

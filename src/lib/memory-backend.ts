@@ -1,6 +1,6 @@
 // In-Memory-Nachbau der Rust-Repo-Logik für Browser-Entwicklung und Tests.
 import type { Backend } from "./api";
-import type { Page, PagePatch, Section, SectionPatch, Subject, SubjectPatch } from "./types";
+import type { CanvasElement, Page, PagePatch, Section, SectionPatch, Subject, SubjectPatch } from "./types";
 
 const uid = () => crypto.randomUUID();
 const clone = <T>(v: T): T => structuredClone(v);
@@ -15,6 +15,7 @@ export class MemoryBackend implements Backend {
   subjects: Subject[] = [];
   sections: Section[] = [];
   pages: Page[] = [];
+  elements = new Map<string, CanvasElement>();
 
   private subject(id: string) {
     const s = this.subjects.find((x) => x.id === id);
@@ -136,6 +137,7 @@ export class MemoryBackend implements Backend {
     this.page(id);
     const gone = new Set([id, ...this.descendants(id)]);
     this.pages = this.pages.filter((p) => !gone.has(p.id));
+    for (const [k, e] of this.elements) if (gone.has(e.pageId)) this.elements.delete(k);
   }
   async movePage(id: string, sectionId: string, parentPageId: string | null, index: number) {
     const p = this.page(id);
@@ -156,5 +158,18 @@ export class MemoryBackend implements Backend {
     sibs.forEach((s, i) => (s.order = i));
     this.siblings(old.sectionId, old.parentPageId, id).forEach((s, i) => (s.order = i));
     return clone(p);
+  }
+
+  async listElements(pageId: string) {
+    this.page(pageId);
+    return clone([...this.elements.values()].filter((e) => e.pageId === pageId).sort((a, b) => a.z - b.z));
+  }
+
+  async saveElements(pageId: string, upserts: CanvasElement[], deletes: string[]) {
+    const p = this.page(pageId);
+    if (upserts.some((e) => e.pageId !== pageId)) throw new Error("Ungültig: Element gehört zu einem anderen Blatt");
+    for (const id of deletes) if (this.elements.get(id)?.pageId === pageId) this.elements.delete(id);
+    for (const e of upserts) this.elements.set(e.id, clone(e));
+    p.updatedAt = Date.now();
   }
 }

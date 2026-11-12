@@ -7,7 +7,8 @@ import { subjectIcon } from "@/lib/catalog";
 import { mutate, useAsync } from "@/lib/use-async";
 import { useNav } from "@/store/nav";
 import { cn } from "@/lib/utils";
-import { CanvasPlaceholder } from "./CanvasPlaceholder";
+import { CanvasView } from "@/features/canvas/CanvasView";
+import type { PagePatch } from "@/lib/types";
 import { Sidebar, type SidebarActions } from "./Sidebar";
 
 export function SubjectView({ subjectId, pageId }: { subjectId: string; pageId: string | null }) {
@@ -91,10 +92,14 @@ export function SubjectView({ subjectId, pageId }: { subjectId: string; pageId: 
         </aside>
         <main className="min-w-0 flex-1">
           {page ? (
-            <CanvasPlaceholder
+            <CanvasView
               key={page.id}
               page={page}
               onRename={(title) => void mutate(() => api.updatePage(page.id, { title }), reload)}
+              onPageChange={(patch: PagePatch) => {
+                data.setData((d) => d && { ...d, pages: d.pages.map((x) => (x.id === page.id ? { ...x, ...patch } : x)) });
+                void mutate(() => api.updatePage(page.id, patch), reload);
+              }}
             />
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">

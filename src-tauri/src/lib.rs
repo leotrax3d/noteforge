@@ -29,6 +29,7 @@ pub fn run() {
             commands::list_pages, commands::create_page, commands::update_page,
             commands::delete_page, commands::move_page,
             commands::list_elements, commands::upsert_element, commands::delete_element,
+            commands::save_elements,
             commands::list_tags, commands::create_tag, commands::delete_tag, commands::set_element_tag,
             commands::list_events, commands::save_event, commands::delete_event,
         ])
