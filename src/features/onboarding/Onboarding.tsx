@@ -1,6 +1,7 @@
 // Einrichtungsassistent beim ersten Start (fortsetzbar, jeder optionale Schritt überspringbar).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  CalendarDays,
   AlertTriangle, ArrowLeft, ArrowRight, Bell, Check, CheckCircle2, Cloud, FileUp, FolderOpen, GraduationCap,
   Hand, Monitor, Moon, PenLine, School, Sparkles, Sun,
 } from "lucide-react";
@@ -20,14 +21,16 @@ import { objToElement } from "@/canvas/core/objects";
 import { outlinePath } from "@/canvas/core/pens";
 import { layoutPdfPages, orientationOf, pdfToImages } from "@/features/pages/pdf-import";
 import { usePrefs } from "@/store/prefs";
+import { gcal } from "@/lib/gcal";
+import { ClientIdForm, GoogleConnect } from "@/features/settings/GoogleCalendar";
 import { useSetup, type BarrelAction } from "@/store/setup";
 import type { PageBackground, PageMode, Subject } from "@/lib/types";
 
 const STEPS = [
-  "Willkommen", "Speicherort", "Stift & Hand", "Standard-Blatt", "WebUntis", "Moodle", "Nextcloud", "OneNote", "Erinnerungen", "Fertig",
+  "Willkommen", "Speicherort", "Stift & Hand", "Standard-Blatt", "WebUntis", "Moodle", "Google Kalender", "Nextcloud", "OneNote", "Erinnerungen", "Fertig",
 ] as const;
 /** Pflichtschritte ohne „Überspringen“ */
-const REQUIRED = new Set([0, 9]);
+const REQUIRED = new Set([0, 10]);
 
 import { ACCENTS } from "./accents";
 
@@ -78,10 +81,11 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         {step === 3 && <PageStep />}
         {step === 4 && <UntisStep note={(v) => note("WebUntis", v)} />}
         {step === 5 && <MoodleStep note={(v) => note("Moodle", v)} />}
-        {step === 6 && <CloudStep note={(v) => note("Nextcloud", v)} />}
-        {step === 7 && <OneNoteStep note={(v) => note("OneNote", v)} />}
-        {step === 8 && <ReminderStep note={(v) => note("Erinnerungen", v)} />}
-        {step === 9 && <SummaryStep summary={summary} restart={restart} />}
+        {step === 6 && <GoogleStep note={(v) => note("Google Kalender", v)} />}
+        {step === 7 && <CloudStep note={(v) => note("Nextcloud", v)} />}
+        {step === 8 && <OneNoteStep note={(v) => note("OneNote", v)} />}
+        {step === 9 && <ReminderStep note={(v) => note("Erinnerungen", v)} />}
+        {step === 10 && <SummaryStep summary={summary} restart={restart} />}
       </main>
 
       <footer className="flex items-center gap-2 border-t px-4 py-3">
@@ -98,7 +102,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
 const TITLES = [
   "Willkommen bei Noteforge", "Wo sollen deine Notizen liegen?", "Stift & Hand", "Dein Standard-Blatt",
-  "Schule & WebUntis", "Moodle / Schule BW", "Nextcloud-Sync", "OneNote-Import", "Erinnerungen & Helfer Spitz", "Fertig!",
+  "Schule & WebUntis", "Moodle / Schule BW", "Google Kalender verbinden", "Nextcloud-Sync", "OneNote-Import", "Erinnerungen & Helfer Spitz", "Fertig!",
 ];
 
 // ---------- Bausteine ----------
@@ -480,6 +484,20 @@ function MoodleStep({ note }: { note: (v: string) => void }) {
 
 // ---------- 7 Nextcloud ----------
 
+function GoogleStep({ note }: { note: (v: string) => void }) {
+  const [hasClient, setHasClient] = useState<boolean | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  useEffect(() => { void gcal.client().then((c) => setHasClient(!!c.clientId)); }, []);
+  return (
+    <div className="grid gap-4">
+      <p className="flex items-start gap-2 text-muted-foreground"><CalendarDays className="mt-0.5 size-5 shrink-0" />Optional: Klassenarbeiten, Hausaufgaben und Abgaben in deinem Google Kalender.</p>
+      {!hasClient && <ClientIdForm onSaved={() => void gcal.client().then((c) => setHasClient(!!c.clientId))} />}
+      {hasClient && !done && <GoogleConnect compact onConnected={(s) => { setDone(s); note("verbunden"); }} />}
+      {done && <p role="status" className="text-emerald-700 dark:text-emerald-400">Verbunden – {done}</p>}
+    </div>
+  );
+}
+
 function CloudStep({ note }: { note: (v: string) => void }) {
   const [f, setF] = useState({ server: "", username: "", password: "" });
   const { busy, msg, run } = useRun();
@@ -607,6 +625,7 @@ function SummaryStep({ summary, restart }: { summary: Summary; restart: boolean 
     ["Standard-Blatt", `${s.page.mode === "a4" ? "DIN A4" : "Endlos"}, ${bg}${s.page.background !== "blank" ? ` ${s.page.spacingMm} mm` : ""}`],
     ["WebUntis", summary.WebUntis ?? "nicht eingerichtet"],
     ["Moodle", summary.Moodle ?? "nicht eingerichtet"],
+    ["Google Kalender", summary["Google Kalender"] ?? "nicht verbunden"],
     ["Nextcloud", summary.Nextcloud ?? "nicht eingerichtet"],
     ["OneNote", summary.OneNote ?? "kein Import"],
     ["Erinnerungen", summary.Erinnerungen ?? `Spitz ${s.spitz ? "an" : "aus"}`],
