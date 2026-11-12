@@ -1,3 +1,5 @@
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { HsvPicker } from "./HsvPicker";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,9 +12,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SUBJECT_COLORS } from "@/lib/catalog";
-import { Check } from "lucide-react";
+import { Check, Plus } from "lucide-react";
 
 export function ColorPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const custom = !SUBJECT_COLORS.some((c) => c.value === value);
   return (
     <div role="radiogroup" aria-label="Farbe" className="flex flex-wrap gap-1">
       {SUBJECT_COLORS.map((c) => (
@@ -31,6 +34,18 @@ export function ColorPicker({ value, onChange }: { value: string; onChange: (v: 
           </span>
         </button>
       ))}
+      <Popover>
+        <PopoverTrigger asChild>
+          <button type="button" aria-label="Eigene Farbe" title="Eigene Farbe"
+            className="flex size-11 items-center justify-center rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+            <span className="flex size-8 items-center justify-center rounded-full"
+              style={{ background: custom ? value : "conic-gradient(#f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)" }}>
+              {custom ? <Check className="size-4 text-white" /> : <Plus className="size-4 text-white" />}
+            </span>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64"><HsvPicker value={value} onChange={onChange} /></PopoverContent>
+      </Popover>
     </div>
   );
 }

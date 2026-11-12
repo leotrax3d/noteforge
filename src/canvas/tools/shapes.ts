@@ -144,7 +144,7 @@ export function recognize(input: Vec[]): Shape | null {
   const len = pathLength(pts);
   const first = pts[0], last = pts[pts.length - 1];
   const gap = dist(first, last);
-  const closed = gap < Math.max(12, diag * 0.22) && len > diag * 1.6;
+  const closed = gap < Math.max(12, diag * 0.3) && len > diag * 1.5;
 
   if (!closed) {
     if (dist(first, last) / len > 0.93) {
@@ -186,9 +186,9 @@ export function recognize(input: Vec[]): Shape | null {
     }
     polyErr = Math.sqrt(e / q.length) / ((el.a + el.b) / 2);
   }
-  const ellipseLike = el.err < 0.1 && polyErr > el.err * 0.5 && (k > 4 || el.err < 0.06);
+  const ellipseLike = el.err < 0.15 && polyErr > el.err * 0.6 && (k > 4 || el.err < 0.08 || polyErr > el.err * 1.2);
   if (ellipseLike) {
-    if (el.b / el.a > 0.82) {
+    if (el.b / el.a > 0.78) {
       const r = (el.a + el.b) / 2;
       return { kind: "circle", points: ellipsePoints(el.c, r, r, 0) };
     }
@@ -197,14 +197,65 @@ export function recognize(input: Vec[]): Shape | null {
     if (Math.abs(rot - nearAxis) < 8 * DEG) rot = nearAxis;
     return { kind: "ellipse", points: ellipsePoints(el.c, el.a, el.b, rot) };
   }
-  if (k === 3) return { kind: "triangle", points: [...poly, poly[0]] };
+  if (k === 3) return { kind: "triangle", points: triangleFrom(poly) };
   if (k === 4) {
     const angles = poly.map((v, i) => cornerAngle(poly[(i + 3) % 4], v, poly[(i + 1) % 4]));
     if (angles.every((a) => Math.abs(a - 90) < 22)) return { kind: "rectangle", points: rectFrom(poly) };
+    const sides = poly.map((v, i) => dist(v, poly[(i + 1) % 4]));
+    if (Math.max(...sides) / Math.min(...sides) < 1.3) return { kind: "polygon", points: regularFrom(poly, true) }; // Raute
     return { kind: "polygon", points: [...poly, poly[0]] };
   }
-  if (k >= 5 && k <= 10) return { kind: "polygon", points: [...poly, poly[0]] };
+  if (k >= 5 && k <= 10) {
+    const sides = poly.map((v, i) => dist(v, poly[(i + 1) % k]));
+    if (Math.max(...sides) / Math.min(...sides) < 1.45) return { kind: "polygon", points: regularFrom(poly, false) };
+    return { kind: "polygon", points: [...poly, poly[0]] };
+  }
   return null;
+}
+
+/** Dreieck: fast rechte Winkel auf 90°, fast gleiche Seiten auf gleichseitig einrasten. */
+function triangleFrom(t: Vec[]): Vec[] {
+  const sides = t.map((v, i) => dist(v, t[(i + 1) % 3]));
+  const c = { x: (t[0].x + t[1].x + t[2].x) / 3, y: (t[0].y + t[1].y + t[2].y) / 3 };
+  if (Math.max(...sides) / Math.min(...sides) < 1.18) {
+    const r = sides.reduce((a, b) => a + b) / 3 / Math.sqrt(3);
+    const a0 = Math.atan2(t[0].y - c.y, t[0].x - c.x);
+    const snap = Math.round((a0 + Math.PI / 2) / (Math.PI / 3)) * (Math.PI / 3) - Math.PI / 2; // Spitze nach oben/unten
+    const pts = [0, 1, 2].map((i) => ({ x: c.x + r * Math.cos(snap + (i * 2 * Math.PI) / 3), y: c.y + r * Math.sin(snap + (i * 2 * Math.PI) / 3) }));
+    return [...pts, pts[0]];
+  }
+  for (let i = 0; i < 3; i++) {
+    const a = t[(i + 2) % 3], b = t[i], d = t[(i + 1) % 3];
+    if (Math.abs(cornerAngle(a, b, d) - 90) < 12) {
+      // Katheten achsparallel, falls beinahe; rechten Winkel exakt machen
+      let ang = Math.atan2(d.y - b.y, d.x - b.x);
+      const near = Math.round(ang / (90 * DEG)) * 90 * DEG;
+      if (Math.abs(ang - near) < 10 * DEG) ang = near;
+      const l1 = dist(b, d), l2 = dist(b, a);
+      const side = Math.sign((d.x - b.x) * (a.y - b.y) - (d.y - b.y) * (a.x - b.x)) || 1;
+      const p1 = { x: b.x + l1 * Math.cos(ang), y: b.y + l1 * Math.sin(ang) };
+      const p2 = { x: b.x + l2 * Math.cos(ang + side * 90 * DEG), y: b.y + l2 * Math.sin(ang + side * 90 * DEG) };
+      return [b, p1, p2, b];
+    }
+  }
+  return [...t, t[0]];
+}
+
+/** Regelmäßiges Vieleck (bzw. Raute) um den Schwerpunkt, gleiche Seiten. */
+function regularFrom(q: Vec[], rhombus: boolean): Vec[] {
+  const n = q.length, c = { x: q.reduce((a, v) => a + v.x, 0) / n, y: q.reduce((a, v) => a + v.y, 0) / n };
+  if (rhombus) {
+    // Diagonalen achsparallel, Halbachsen aus den gegenüberliegenden Ecken
+    const hx = (Math.abs(q[0].x - q[2].x) + Math.abs(q[1].x - q[3].x)) / 2 / 2 + 0;
+    const hy = (Math.abs(q[0].y - q[2].y) + Math.abs(q[1].y - q[3].y)) / 2 / 2 + 0;
+    const pts = [{ x: c.x, y: c.y - hy }, { x: c.x + hx, y: c.y }, { x: c.x, y: c.y + hy }, { x: c.x - hx, y: c.y }];
+    return [...pts, pts[0]];
+  }
+  const r = q.reduce((a, v) => a + dist(v, c), 0) / n;
+  const dir = Math.sign(q.reduce((a, v, i) => { const w = q[(i + 1) % n]; return a + (v.x * w.y - w.x * v.y); }, 0)) || 1;
+  const a0 = Math.atan2(q[0].y - c.y, q[0].x - c.x);
+  const pts = Array.from({ length: n }, (_, i) => ({ x: c.x + r * Math.cos(a0 + (dir * i * 2 * Math.PI) / n), y: c.y + r * Math.sin(a0 + (dir * i * 2 * Math.PI) / n) }));
+  return [...pts, pts[0]];
 }
 
 /** Rechteck aus vier Ecken: Ausrichtung an der längsten Kante, achsparallel einrasten. */
@@ -222,6 +273,11 @@ function rectFrom(q: Vec[]): Vec[] {
   for (const p of q) {
     const u = p.x * cos + p.y * sin, v = -p.x * sin + p.y * cos;
     u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v);
+  }
+  // Fast quadratisch → Quadrat
+  if (Math.abs((u1 - u0) - (v1 - v0)) < 0.12 * Math.max(u1 - u0, v1 - v0)) {
+    const m = ((u1 - u0) + (v1 - v0)) / 2, cu = (u0 + u1) / 2, cv = (v0 + v1) / 2;
+    u0 = cu - m / 2; u1 = cu + m / 2; v0 = cv - m / 2; v1 = cv + m / 2;
   }
   const back = (u: number, v: number) => ({ x: u * cos - v * sin, y: u * sin + v * cos });
   const c = [back(u0, v0), back(u1, v0), back(u1, v1), back(u0, v1)];

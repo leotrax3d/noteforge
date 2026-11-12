@@ -42,3 +42,24 @@ describe("Formerkennung", () => {
     expect(recognize(scribble)).toBeNull();
   });
 });
+
+describe("bessere Erkennung", () => {
+  const wobble = (n: number, f: (t: number) => { x: number; y: number }) => Array.from({ length: n }, (_, i) => f(i / (n - 1)));
+  it("zittriger, leicht überzeichneter Kreis", () => {
+    let seed = 3; const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280 - 0.5);
+    const pts = wobble(120, (t) => { const a = t * 2.15 * Math.PI, r = 100 + rnd() * 14; return { x: 200 + r * Math.cos(a), y: 200 + r * 0.93 * Math.sin(a) }; });
+    expect(recognize(pts)?.kind).toBe("circle");
+  });
+  it("Kreis mit Lücke am Ende", () => {
+    const pts = wobble(80, (t) => { const a = t * 1.8 * Math.PI; return { x: 100 * Math.cos(a), y: 100 * Math.sin(a) }; });
+    expect(recognize(pts)?.kind).toBe("circle");
+  });
+  it("fast gleichseitiges Dreieck wird gleichseitig", () => {
+    const c = [{ x: 0, y: 100 }, { x: 52, y: 8 }, { x: 103, y: 98 }];
+    const pts = [...c, c[0]].flatMap((v, i, a) => i ? Array.from({ length: 20 }, (_, k) => ({ x: a[i - 1].x + (v.x - a[i - 1].x) * k / 20, y: a[i - 1].y + (v.y - a[i - 1].y) * k / 20 })) : []);
+    const r = recognize(pts)!;
+    expect(r.kind).toBe("triangle");
+    const s = [0, 1, 2].map((i) => Math.hypot(r.points[i + 1].x - r.points[i].x, r.points[i + 1].y - r.points[i].y));
+    expect(Math.max(...s) - Math.min(...s)).toBeLessThan(0.01);
+  });
+});
