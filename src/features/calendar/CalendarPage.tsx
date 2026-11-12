@@ -13,6 +13,8 @@ import {
 } from "./dates";
 import { EventChip } from "./EventChip";
 import { EventDialog, newEvent } from "./EventDialog";
+import { RemoteEventDialog } from "./RemoteEventDialog";
+import { gcal, useGcal, type RemoteEvent } from "@/lib/gcal";
 
 type Mode = "month" | "week";
 const HOUR_PX = 48;
@@ -34,7 +36,27 @@ export function CalendarPage({ date: initial, mode: initialMode }: { date?: numb
   const { data: events, reload } = useAsync(() => api.listEvents(from, to), [from, to, rev]);
   const { data: lessons } = useAsync(() => (mode === "week" ? integrations.listLessons(from, to) : Promise.resolve([])), [mode, from, to, rev]);
   const { data: subjects } = useAsync(() => api.listSubjects(), []);
-  const subj = useMemo(() => new Map((subjects ?? []).map((s) => [s.id, s] as [string, Subject])), [subjects]);
+  const grev = useGcal((s) => s.rev);
+  const { data: remote, reload: reloadRemote } = useAsync(() => gcal.events(from, to), [from, to, rev, grev]);
+  const [openRemote, setOpenRemote] = useState<RemoteEvent | null>(null);
+  // Google-Termine (nur lesend) als Pseudo-Termine mit eigener Farbe in die Ansichten mischen
+  const remoteById = useMemo(() => new Map((remote ?? []).map((r) => [`gcal:${r.account}:${r.calendarId}:${r.id}`, r])), [remote]);
+  const allEvents = useMemo<CalendarEvent[]>(() => [
+    ...(events ?? []),
+    ...[...remoteById].map(([id, r]) => ({
+      id, subjectId: `gcal-cal:${r.account}:${r.calendarId}`, type: "other" as const, title: r.suggestion ? `${r.title} ✦` : r.title,
+      start: r.start, end: r.allDay ? null : r.end, note: "", source: "manual" as const, remindBefore: null,
+    })),
+  ], [events, remoteById]);
+  const subj = useMemo(() => {
+    const m = new Map((subjects ?? []).map((s) => [s.id, s] as [string, Subject]));
+    for (const r of remote ?? []) {
+      const id = `gcal-cal:${r.account}:${r.calendarId}`;
+      if (!m.has(id)) m.set(id, { id, name: r.calendarName, color: r.color, icon: "", order: 0, webuntisSubjectId: null, moodleCourseId: null } as Subject);
+    }
+    return m;
+  }, [subjects, remote]);
+  const open = (e: CalendarEvent) => { const r = remoteById.get(e.id); if (r) setOpenRemote(r); else setEditing(e); };
 
   const step = (n: number) => setCursor((c) => (mode === "month" ? new Date(c.getFullYear(), c.getMonth() + n, 1) : addDays(c, 7 * n)));
   const title = mode === "month"
@@ -66,11 +88,11 @@ export function CalendarPage({ date: initial, mode: initialMode }: { date?: numb
       </header>
 
       {mode === "month" ? (
-        <MonthView days={days} month={cursor.getMonth()} today={today} events={events ?? []} subj={subj}
-          onCreate={create} onOpen={setEditing}
+        <MonthView days={days} month={cursor.getMonth()} today={today} events={allEvents} subj={subj}
+          onCreate={create} onOpen={open}
           onDay={(d) => { setCursor(d); setMode("week"); }} />
       ) : (
-        <WeekView days={days} today={today} events={events ?? []} subj={subj} onCreate={create} onOpen={setEditing}
+        <WeekView days={days} today={today} events={allEvents} subj={subj} onCreate={create} onOpen={open}
           lessons={lessons ?? []} onLesson={(id) => void openLessonSubject(id, go)} />
       )}
 
@@ -81,6 +103,8 @@ export function CalendarPage({ date: initial, mode: initialMode }: { date?: numb
         onSave={(e) => void mutate(() => api.saveEvent(e), reload)}
         onDelete={(e) => void mutate(() => api.deleteEvent(e.id), reload)}
       />
+      <RemoteEventDialog event={openRemote} subjects={subjects ?? []} onOpenChange={(o) => !o && setOpenRemote(null)}
+        onChanged={() => { setOpenRemote(null); reload(); reloadRemote(); }} />
     </div>
   );
 }
