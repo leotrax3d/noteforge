@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import type { CalendarEvent, Subject } from "@/lib/types";
 import { mutate, useAsync } from "@/lib/use-async";
 import { useNav } from "@/store/nav";
-import { integrations, useSyncRev, type Lesson } from "@/lib/integrations";
+import { daySlots, integrations, useSyncRev, type Lesson } from "@/lib/integrations";
 import { openLessonSubject } from "@/features/home/TodayTimetable";
 import {
   MONTHS, WEEKDAYS, addDays, eventsOn, fmtDate, fmtTime, isAllDay, isoWeek, monthGrid, sameDay, startOfDay, startOfWeek,
@@ -168,7 +168,21 @@ function WeekView({ days, today, events, subj, onCreate, onOpen, lessons, onLess
                 <div aria-hidden className="pointer-events-none absolute inset-x-0 border-t-2 border-red-500"
                   style={{ top: (now.getHours() - FIRST_HOUR + now.getMinutes() / 60) * HOUR_PX }} />
               )}
-              {dayLessons.map((l) => {
+              {daySlots(dayLessons).filter((x) => x.kind === "free").map((x) => {
+                const s = new Date(x.start), en = new Date(x.end);
+                const a = s.getHours() + s.getMinutes() / 60, b = en.getHours() + en.getMinutes() / 60;
+                if (x.kind !== "free" || b <= FIRST_HOUR || a >= LAST_HOUR) return null;
+                return (
+                  <div key={`free:${x.start}`} data-testid="free-period" data-reason={x.reason}
+                    aria-label={`Freistunde ${fmtTime(x.start)}${x.reason === "cancelled" ? " (Entfall)" : ""}`}
+                    className="nf-free pointer-events-none absolute left-0.5 w-[calc(50%-2px)] overflow-hidden rounded border-l-4 border-dashed px-1 text-[11px] leading-tight"
+                    style={{ top: (Math.max(FIRST_HOUR, a) - FIRST_HOUR) * HOUR_PX, height: Math.max(22, (Math.min(LAST_HOUR, b) - Math.max(FIRST_HOUR, a)) * HOUR_PX - 1) }}>
+                    <span className="block truncate font-medium">Freistunde</span>
+                    <span className="block truncate text-muted-foreground">{x.reason === "cancelled" ? "Entfall" : "Lücke"}</span>
+                  </div>
+                );
+              })}
+              {dayLessons.filter((l) => !daySlots(dayLessons).some((x) => x.kind === "free" && x.lesson === l)).map((l) => {
                 const s = new Date(l.start), en = new Date(l.end);
                 const a = s.getHours() + s.getMinutes() / 60, b = en.getHours() + en.getMinutes() / 60;
                 if (b <= FIRST_HOUR || a >= LAST_HOUR) return null;

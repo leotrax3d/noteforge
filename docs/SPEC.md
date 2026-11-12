@@ -69,6 +69,7 @@ Unterseiten, Drag & Drop-Sortierung, Tags (To-Do, Wichtig, Frage, Lernen für KA
 
 ## 8. Integrationen
 - **WebUntis:** inoffizielle JSON-RPC-API (`/WebUntis/jsonrpc.do?school=…`), Login Schulname/Benutzer/Passwort, Stundenplan + Vertretungen + Ausfälle, Cache in SQLite, Fach-Mapping. „Aktuelle Stunde öffnen“ springt ins Fach.
+  - **Freistunden:** Lücken > 25 min zwischen stattfindenden Stunden („Lücke“) und entfallene Stunden zwischen zwei stattfindenden („Entfall“) werden in Startseite und Kalender-Woche als „Freistunde“ gezeigt (eigene Farbe, Streifenmuster; Entfall dichter gestreift). Lücken/Entfall vor der ersten bzw. nach der letzten Stunde sind keine Freistunden (Entfall bleibt als „entfällt“ sichtbar).
 - **Moodle BW:** Token über `/login/token.php?service=moodle_mobile_app`, Webservice-Funktionen `core_enrol_get_users_courses`, `core_course_get_contents`, `core_calendar_get_action_events_by_timesort`; PDFs als Blatt importieren.
 - Zugangsdaten im Windows Credential Manager.
 

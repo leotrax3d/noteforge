@@ -156,6 +156,42 @@ export function syncNow(force = false): Promise<SyncReport> {
   return inflight;
 }
 
+/** Pausen bis zu dieser Länge gelten nicht als Freistunde. */
+export const MIN_FREE_MS = 25 * 60_000;
+
+export type FreeReason = "gap" | "cancelled";
+export type DaySlot =
+  | { kind: "lesson"; start: number; end: number; lesson: Lesson }
+  | { kind: "free"; start: number; end: number; reason: FreeReason; lesson?: Lesson };
+
+/**
+ * Stundenplan eines Tages mit Freistunden: Lücken zwischen stattfindenden Stunden (länger als eine
+ * Pause) und entfallene Stunden *zwischen* zwei stattfindenden werden als Freistunde markiert –
+ * „cancelled“ (Entfall) vs. „gap“ (reguläre Lücke). Entfall am Tagesrand ist keine Freistunde,
+ * sondern bleibt eine entfallene Stunde; Lücken vor der ersten/nach der letzten Stunde erscheinen nicht.
+ */
+export function daySlots(lessons: Lesson[]): DaySlot[] {
+  const sorted = [...lessons].sort((a, b) => a.start - b.start || a.end - b.end);
+  const active = sorted.filter((l) => l.state !== "cancelled");
+  if (!active.length) return sorted.map((l) => ({ kind: "lesson", start: l.start, end: l.end, lesson: l }));
+  const first = active[0].start, last = Math.max(...active.map((l) => l.end));
+  const out: DaySlot[] = [];
+  for (const l of sorted) {
+    if (l.state === "cancelled") {
+      const inside = l.start >= first && l.end <= last && !active.some((a) => a.start < l.end && l.start < a.end);
+      out.push(inside ? { kind: "free", start: l.start, end: l.end, reason: "cancelled", lesson: l } : { kind: "lesson", start: l.start, end: l.end, lesson: l });
+    } else out.push({ kind: "lesson", start: l.start, end: l.end, lesson: l });
+  }
+  // Reguläre Lücken: Zeiträume ohne Stunde (weder aktiv noch entfallen) zwischen erster und letzter Stunde
+  let cover = first;
+  for (const l of sorted) {
+    if (l.start >= last) break;
+    if (l.start - cover >= MIN_FREE_MS) out.push({ kind: "free", start: cover, end: l.start, reason: "gap" });
+    cover = Math.max(cover, l.end);
+  }
+  return out.sort((a, b) => a.start - b.start);
+}
+
 /** Die laufende bzw. nächste Stunde des Tages. */
 export function currentLesson(lessons: Lesson[], now: number): { lesson: Lesson; running: boolean } | null {
   const active = lessons.filter((l) => l.state !== "cancelled");

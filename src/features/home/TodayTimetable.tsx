@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BookOpen, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import { currentLesson, integrations, syncNow, useSyncRev, type Lesson } from "@/lib/integrations";
+import { currentLesson, daySlots, integrations, syncNow, useSyncRev, type Lesson } from "@/lib/integrations";
 import type { Subject } from "@/lib/types";
 import { useAsync } from "@/lib/use-async";
 import { useNav } from "@/store/nav";
@@ -61,8 +61,10 @@ export function TodayTimetable({ subjects, onSetup }: { subjects: Subject[]; onS
         <p className="rounded-xl border border-dashed p-4 text-muted-foreground">Heute kein Unterricht laut WebUntis.</p>
       ) : (
         <ol className="flex gap-2 overflow-x-auto pb-1" aria-label="Stundenplan heute">
-          {data.lessons.map((l) => <LessonCard key={`${l.id}:${l.start}`} l={l} s={l.subjectId ? subj.get(l.subjectId) : undefined}
-            now={now} onOpen={(id) => void openLessonSubject(id, go)} />)}
+          {daySlots(data.lessons).map((x) => x.kind === "free"
+            ? <FreeCard key={`free:${x.start}`} start={x.start} end={x.end} reason={x.reason} now={now} />
+            : <LessonCard key={`${x.lesson.id}:${x.lesson.start}`} l={x.lesson} s={x.lesson.subjectId ? subj.get(x.lesson.subjectId) : undefined}
+              now={now} onOpen={(id) => void openLessonSubject(id, go)} />)}
         </ol>
       )}
     </section>
@@ -84,6 +86,21 @@ function LessonCard({ l, s, now, onOpen }: { l: Lesson; s?: Subject; now: number
           {cancelled ? "entfällt" : l.state === "irregular" ? `Vertretung${l.info ? `: ${l.info}` : ""}` : [l.rooms, l.teachers].filter(Boolean).join(" · ")}
         </span>
       </button>
+    </li>
+  );
+}
+
+/** Freistunde: eigene Farbe/Streifen; „Entfall“ vs. reguläre Lücke. */
+export function FreeCard({ start, end, reason, now }: { start: number; end: number; reason: "gap" | "cancelled"; now: number }) {
+  const running = start <= now && now < end;
+  return (
+    <li className="shrink-0" data-testid="free-period" data-reason={reason}>
+      <div data-reason={reason} aria-label={`Freistunde ${fmtTime(start)} bis ${fmtTime(end)}${reason === "cancelled" ? " (Entfall)" : ""}`}
+        className={`nf-free flex min-h-16 w-36 flex-col items-start rounded-lg border-l-4 border-dashed p-2 text-sm ${running ? "ring-2 ring-primary" : ""} ${end < now ? "opacity-60" : ""}`}>
+        <span className="text-xs tabular-nums text-muted-foreground">{fmtTime(start)} – {fmtTime(end)}</span>
+        <span className="font-medium">Freistunde</span>
+        <span className="text-xs text-muted-foreground">{reason === "cancelled" ? "Stunde entfällt" : "Lücke im Plan"}</span>
+      </div>
     </li>
   );
 }

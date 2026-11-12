@@ -98,3 +98,14 @@
   .nf-link .nf-br { display: none; }
   .nf-rich:empty::before { content: "Text eingeben …"; color: var(--muted-foreground); }
 }
+
+/* Freistunden (WebUntis): eigene Farbe + Streifenmuster; Entfall stärker als reguläre Lücke */
+:root { --free: oklch(0.7 0.12 175); }
+.dark { --free: oklch(0.62 0.1 175); }
+.nf-free {
+  border-color: var(--free);
+  background: repeating-linear-gradient(135deg, color-mix(in oklch, var(--free) 16%, transparent) 0 6px, transparent 6px 12px);
+}
+.nf-free[data-reason="cancelled"] {
+  background: repeating-linear-gradient(135deg, color-mix(in oklch, var(--free) 30%, transparent) 0 4px, transparent 4px 8px);
+}
