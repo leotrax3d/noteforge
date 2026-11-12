@@ -55,11 +55,10 @@ jobs:
             - `Noteforge_*_x64_de-DE.msi` (MSI)
 
             Neu in dieser Version:
-            - Behoben: App hing beim Öffnen der Einstellungen
-            - WebUntis: Stundenplan für Schülerkonten (Klassenplan)
-            - Werkzeugleiste in aufklappbaren Gruppen, bleibt immer im sichtbaren Bereich
-            - Bessere Formerkennung (Kreise, Quadrate, Dreiecke, Rauten, Vielecke)
-            - Eigener Farbwähler, schlanke Scrollleisten, weniger Text, Alt blendet Beschriftungen ein
-            - Hell/Dunkel wechselt vollständig, Rechner schließt mit dem Blatt
+            - Textmarker wird beim Übermalen nicht mehr dunkler
+            - Textfelder: schlichter Rahmen, Verschieben per Gedrückthalten, bleiben auf den Linien
+            - Tab macht aus einem Textfeld eine Tabelle; Tab springt durch die Zellen
+            - Automatische Listen mit „- “ und „1. “
+            - Strukturformel direkt in der Werkzeugleiste
           releaseDraft: false
           prerelease: false  # „latest“ muss auf das neueste Release zeigen (Update-Endpunkt)
