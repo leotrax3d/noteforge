@@ -70,3 +70,18 @@ describe("Rich-Text-Bereinigung", () => {
     expect(out).toBe('<h1>T</h1>alert(1)<span style="color: #dc2626">r</span>l');
   });
 });
+
+import { lengthFrom, rulerLen, sizeHandle } from "./guides";
+describe("Lineal vergrößern", () => {
+  it("verlängert symmetrisch in ganzen cm, Kante wächst mit", () => {
+    const g = makeGuide("ruler", { x: 0, y: 0 });
+    const h = sizeHandle(g)!;
+    expect(h.x).toBeLessThan(0);
+    const MMv = rulerLen(g) / 300;
+    g.len = lengthFrom(g, { x: -240 * MMv, y: 0 });
+    expect(Math.round(g.len / MMv)).toBe(500);
+    expect(nearestEdge(g, { x: -240 * MMv, y: -20 * MMv - 1 }, 5)).not.toBeNull();
+    g.len = lengthFrom(g, { x: 0, y: 0 });
+    expect(Math.round(g.len / MMv)).toBe(100);
+  });
+});

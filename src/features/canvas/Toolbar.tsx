@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
-  Calculator, Check, LineChart, Palette, RotateCcw, SlidersHorizontal, X, ZoomIn,
+  Grid3x3, Calculator, Check, LineChart, Palette, RotateCcw, SlidersHorizontal, X, ZoomIn,
   Crop, DraftingCompass, Eraser, GripVertical, Hand, Highlighter, ImagePlus, Lasso, Pen, PenTool, Pencil, Plus, Redo2, Ruler,
   Settings2, Shapes, Table, Trash2, TriangleRight, Type, Undo2, FileUp,
   Angle, MoveRight, PaintBucket, ScanSearch, Sparkles, Wand,
@@ -544,6 +544,7 @@ export function Toolbar(p: ToolbarProps) {
           <Toggle label="Geodreieck" icon={<TriangleRight />} on={t.guides.setsquare} onClick={() => t.toggleGuide("setsquare")} />
           <Toggle label="Zirkel" icon={<DraftingCompass />} on={t.guides.compass} onClick={() => t.toggleGuide("compass")} />
           <Toggle label="Formmodus (immer Formen)" icon={<Shapes />} on={t.shapeMode} onClick={() => t.setShapeMode(!t.shapeMode)} />
+          <Toggle label="Am Raster einrasten" icon={<Grid3x3 />} on={!!t.gridSnap} onClick={() => t.setGridSnap(!t.gridSnap)} />
         </PopoverContent>
       </Popover>
 

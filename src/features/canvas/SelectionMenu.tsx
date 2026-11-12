@@ -31,8 +31,9 @@ export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDo
   const [open, setOpen] = useState(false);
   const [headsOpen, setHeadsOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
-  const above = sel.rect.y > 140;
-  const top = above ? sel.rect.y - 64 : Math.min(hostHeight - 64, sel.rect.y + sel.rect.h + 52);
+  // Platz für den Drehgriff (36 px über der Auswahl) lassen
+  const above = sel.rect.y > 180;
+  const top = above ? sel.rect.y - 112 : Math.min(hostHeight - 64, sel.rect.y + sel.rect.h + 52);
   const left = sel.rect.x + sel.rect.w / 2;
   return (
     <div role="toolbar" aria-label="Auswahl" className="absolute z-30 flex -translate-x-1/2 items-center gap-1 rounded-xl border bg-card p-1 shadow-lg"

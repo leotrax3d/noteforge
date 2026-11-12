@@ -13,6 +13,8 @@ export interface Guide {
   angle: number;
   /** Nur Zirkel: Radius in Welteinheiten. */
   r: number;
+  /** Länge (Lineal) bzw. Hypotenuse (Geodreieck); die mm-Skala wird verlängert, nicht gestreckt. */
+  len?: number;
 }
 
 export const GUIDE_LABELS: Record<GuideKind, string> = { ruler: "Lineal", setsquare: "Geodreieck", compass: "Zirkel" };
@@ -21,6 +23,9 @@ export const RULER_LEN = 300 * MM;
 export const RULER_W = 40 * MM;
 export const SQ_HYP = 160 * MM;
 const DEG = Math.PI / 180;
+export const LEN_LIMITS: Record<"ruler" | "setsquare", [number, number]> = { ruler: [100 * MM, 600 * MM], setsquare: [80 * MM, 400 * MM] };
+export const rulerLen = (g: Guide) => g.len ?? RULER_LEN;
+export const sqHyp = (g: Guide) => g.len ?? SQ_HYP;
 
 export function makeGuide(kind: GuideKind, at: Vec): Guide {
   return { kind, x: at.x, y: at.y, angle: 0, r: 40 * MM };
@@ -39,11 +44,11 @@ export function fromLocal(g: Guide, u: number, v: number): Vec {
 /** Kanten zum Anlegen (lokale Koordinaten). */
 function localEdges(g: Guide): [Vec, Vec][] {
   if (g.kind === "ruler") {
-    const l = RULER_LEN / 2, w = RULER_W / 2;
+    const l = rulerLen(g) / 2, w = RULER_W / 2;
     return [[{ x: -l, y: -w }, { x: l, y: -w }], [{ x: -l, y: w }, { x: l, y: w }]];
   }
   if (g.kind === "setsquare") {
-    const h = SQ_HYP / 2;
+    const h = sqHyp(g) / 2;
     return [[{ x: -h, y: 0 }, { x: h, y: 0 }], [{ x: -h, y: 0 }, { x: 0, y: h }], [{ x: h, y: 0 }, { x: 0, y: h }]];
   }
   return [];
@@ -52,10 +57,10 @@ function localEdges(g: Guide): [Vec, Vec][] {
 /** Umriss in lokalen Koordinaten. */
 function outline(g: Guide): Vec[] {
   if (g.kind === "ruler") {
-    const l = RULER_LEN / 2, w = RULER_W / 2;
+    const l = rulerLen(g) / 2, w = RULER_W / 2;
     return [{ x: -l, y: -w }, { x: l, y: -w }, { x: l, y: w }, { x: -l, y: w }];
   }
-  const h = SQ_HYP / 2;
+  const h = sqHyp(g) / 2;
   return [{ x: -h, y: 0 }, { x: h, y: 0 }, { x: 0, y: h }];
 }
 
@@ -127,9 +132,26 @@ export function snapToCircle(g: Guide, r: number, p: Vec): Vec {
 
 /** Drehgriff (Welt) für Maus/Stift. */
 export function rotateHandle(g: Guide): Vec {
-  if (g.kind === "ruler") return fromLocal(g, RULER_LEN / 2 - 12 * MM, 0);
-  if (g.kind === "setsquare") return fromLocal(g, 0, SQ_HYP / 2 - 16 * MM);
+  if (g.kind === "ruler") return fromLocal(g, rulerLen(g) / 2 - 12 * MM, 0);
+  if (g.kind === "setsquare") return fromLocal(g, 0, sqHyp(g) / 2 - 16 * MM);
   return fromLocal(g, g.r, 0);
+}
+
+/** Griff zum Vergrößern (Lineal: linkes Ende, Geodreieck: rechte Hypotenusen-Ecke). */
+export function sizeHandle(g: Guide): Vec | null {
+  if (g.kind === "ruler") return fromLocal(g, -rulerLen(g) / 2 + 10 * MM, 0);
+  if (g.kind === "setsquare") return fromLocal(g, sqHyp(g) / 2 - 18 * MM, 6 * MM);
+  return null;
+}
+
+/** Neue Länge aus der Zeigerposition (symmetrisch um die Mitte, auf ganze cm gerundet). */
+export function lengthFrom(g: Guide, p: Vec): number {
+  if (g.kind === "compass") return g.len ?? 0;
+  const q = toLocal(g, p);
+  const off = g.kind === "ruler" ? 10 * MM : 18 * MM;
+  const raw = 2 * (Math.abs(q.x) + off);
+  const [lo, hi] = LEN_LIMITS[g.kind];
+  return Math.min(hi, Math.max(lo, Math.round(raw / (10 * MM)) * 10 * MM));
 }
 
 /** Drehung auf 15°-Schritte einrasten (±2°), sonst auf ganze Grad runden für die Anzeige. */
@@ -207,8 +229,9 @@ export function drawGuide(ctx: CanvasRenderingContext2D, g: Guide, st: GuideDraw
   ctx.font = font(11);
 
   if (g.kind === "ruler") {
-    const l = RULER_LEN / 2, w = RULER_W / 2;
-    for (let mm = 0; mm <= 300; mm++) {
+    const l = rulerLen(g) / 2, w = RULER_W / 2;
+    const total = Math.floor(rulerLen(g) / MM + 1e-6);
+    for (let mm = 0; mm <= total; mm++) {
       if (!showMm && mm % 5) continue;
       const x = -l + mm * MM;
       const len = mm % 10 === 0 ? 7 * MM : mm % 5 === 0 ? 4.5 * MM : 2.5 * MM;
@@ -221,9 +244,10 @@ export function drawGuide(ctx: CanvasRenderingContext2D, g: Guide, st: GuideDraw
       if (mm % 10 === 0 && st.k * MM * 10 > 18) ctx.fillText(String(mm / 10), x, -w + 8 * MM);
     }
   } else {
-    const h = SQ_HYP / 2;
+    const h = sqHyp(g) / 2;
     // mm-Skala auf der Hypotenuse, vom Mittelpunkt aus (wie beim echten Geodreieck)
-    for (let mm = -80; mm <= 80; mm++) {
+    const half = Math.floor(h / MM + 1e-6);
+    for (let mm = -half; mm <= half; mm++) {
       if (!showMm && mm % 5) continue;
       const x = mm * MM;
       const len = mm % 10 === 0 ? 5 * MM : mm % 5 === 0 ? 3.5 * MM : 2 * MM;
@@ -273,8 +297,27 @@ export function drawGuide(ctx: CanvasRenderingContext2D, g: Guide, st: GuideDraw
   ctx.arc(rh.x, rh.y, 7 * px, -Math.PI * 0.9, Math.PI * 0.4);
   ctx.stroke();
 
+  // Größengriff (Doppelpfeil)
+  const sh = sizeHandle(g);
+  if (sh) {
+    const lp = toLocal(g, sh);
+    ctx.beginPath();
+    ctx.arc(lp.x, lp.y, 14 * px, 0, Math.PI * 2);
+    ctx.fillStyle = st.dark ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.9)";
+    ctx.fill();
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = px * 1.5;
+    ctx.stroke();
+    const a = 7 * px, b = 3 * px;
+    ctx.beginPath();
+    ctx.moveTo(lp.x - a, lp.y); ctx.lineTo(lp.x + a, lp.y);
+    ctx.moveTo(lp.x - a + b, lp.y - b); ctx.lineTo(lp.x - a, lp.y); ctx.lineTo(lp.x - a + b, lp.y + b);
+    ctx.moveTo(lp.x + a - b, lp.y - b); ctx.lineTo(lp.x + a, lp.y); ctx.lineTo(lp.x + a - b, lp.y + b);
+    ctx.stroke();
+  }
+
   // Winkelanzeige
-  const labelPos = g.kind === "ruler" ? { x: 0, y: 0 } : { x: 0, y: SQ_HYP * 0.16 };
+  const labelPos = g.kind === "ruler" ? { x: 0, y: 0 } : { x: 0, y: sqHyp(g) * 0.16 };
   const txt = `${displayAngle(g.angle)}°` + (st.label ? `  ·  ${st.label}` : "");
   badge(ctx, txt, labelPos, px, st.dark, -g.angle);
   ctx.restore();

@@ -27,7 +27,7 @@ const FULL_BUDGET_MS = 32;
 import { hitObj, objCorners, transformObj, type CanvasObj, type ImageObj } from "./objects";
 import { recognize, densify, SHAPE_LABELS } from "../tools/shapes";
 import {
-  drawGuide, formatNumber, hitGuide, makeGuide, nearestEdge, rotateHandle, snapRotation, snapToCircle, snapToEdge,
+  drawGuide, formatNumber, hitGuide, lengthFrom, makeGuide, sizeHandle, nearestEdge, rotateHandle, snapRotation, snapToCircle, snapToEdge,
   type EdgeSnap, type Guide, type GuideKind,
 } from "../tools/guides";
 import { MM, a4CamBounds, clampTo, rubber } from "./layout";
@@ -57,6 +57,8 @@ export interface ToolState {
   fingerDraws: boolean;
   /** Finger und Maus mit Zeichenwerkzeug: Tippen = Textfeld, Ziehen = Verschieben; danach gilt wieder das gewählte Werkzeug. */
   pointerGrab: boolean;
+  /** Am Raster einrasten: Formen, Lineal-Striche und Zeichenhilfen springen auf Rasterpunkte. */
+  gridSnap?: boolean;
   /** Dauerhafter Formmodus: jeder Strich wird, wenn möglich, zur Form. */
   shapeMode: boolean;
   /** Eingeblendete Zeichenhilfen. */
@@ -117,7 +119,7 @@ type Mode = "idle" | "draw" | "erase" | "lasso" | "transform" | "pan" | "gesture
 
 interface GuideDrag {
   g: Guide;
-  kind: "move" | "rotate" | "radius" | "two";
+  kind: "move" | "rotate" | "radius" | "two" | "length";
   start: Vec;
   gx: number;
   gy: number;
@@ -958,6 +960,24 @@ export class CanvasEngine {
     for (let i = 0; i < this.pts.n; i++) pts.push({ x: d[i * PSTRIDE], y: d[i * PSTRIDE + 1] });
     const shape = recognize(pts);
     if (!shape) return false;
+    if (this.gridOn()) {
+      if (shape.kind === "circle" || shape.kind === "ellipse") {
+        // Mittelpunkt aufs Raster, Radius auf ganze Rasterschritte
+        const n = shape.points.length;
+        const c = shape.points.reduce((a, p) => ({ x: a.x + p.x / n, y: a.y + p.y / n }), { x: 0, y: 0 });
+        const g = this.toGrid(c), st = this.gridStep();
+        const f = (d: number) => Math.max(st, Math.round(d / st) * st) / Math.max(1e-6, d);
+        const rx = Math.max(...shape.points.map((p) => Math.abs(p.x - c.x))), ry = Math.max(...shape.points.map((p) => Math.abs(p.y - c.y)));
+        const sx = f(rx), sy = shape.kind === "circle" ? sx : f(ry);
+        shape.points = shape.points.map((p) => ({ x: g.x + (p.x - c.x) * sx, y: g.y + (p.y - c.y) * sy }));
+      } else if (shape.kind !== "arrow") {
+        shape.points = shape.points.map((p) => this.toGrid(p));
+      } else {
+        const d = this.toGrid(shape.points[0]);
+        const dx = d.x - shape.points[0].x, dy = d.y - shape.points[0].y;
+        shape.points = shape.points.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+      }
+    }
     const h0 = this.tool.head0 ?? "none", h1 = this.tool.head1 ?? "none";
     const nearTerminal = shape.kind === "line" && this.store.objects().some((o) => o.kind === "image" && o.data.vec?.t === "symbol" &&
       [shape.points[0], shape.points[1]].some((p) => snapToTerminal(p, [o], 16 / this.cam.s) !== p));
@@ -998,6 +1018,8 @@ export class CanvasEngine {
       }
       const rh = rotateHandle(g);
       if (Math.hypot(w.x - rh.x, w.y - rh.y) <= tol) return { g, kind: "rotate" };
+      const sz = sizeHandle(g);
+      if (sz && Math.hypot(w.x - sz.x, w.y - sz.y) <= tol) return { g, kind: "length" };
       if (hitGuide(g, w)) return { g, kind: "move" };
     }
     if (compass && drawing) {
@@ -1037,10 +1059,14 @@ export class CanvasEngine {
     if (gd.kind === "move") {
       g.x = gd.gx + w.x - gd.start.x;
       g.y = gd.gy + w.y - gd.start.y;
+      if (this.gridOn()) { const p = this.toGrid(g); g.x = p.x; g.y = p.y; }
     } else if (gd.kind === "rotate") {
       g.angle = snapRotation(gd.angle + Math.atan2(w.y - g.y, w.x - g.x) - gd.a0);
+    } else if (gd.kind === "length") {
+      g.len = lengthFrom(g, w);
     } else if (gd.kind === "radius") {
       g.r = Math.max(2 * MM, Math.hypot(w.x - g.x, w.y - g.y));
+      if (this.gridOn()) g.r = Math.max(this.gridStep(), Math.round(g.r / this.gridStep()) * this.gridStep());
       g.angle = Math.atan2(w.y - g.y, w.x - g.x);
     }
     this.invalidate(false);
@@ -1393,7 +1419,8 @@ export class CanvasEngine {
     let x = q.x / this.cam.s + this.cam.x, y = q.y / this.cam.s + this.cam.y;
     const sn = this.snap;
     if (sn) {
-      const v = sn.edge ? snapToEdge(sn.g, sn.edge, { x, y }) : snapToCircle(sn.g, sn.r!, { x, y });
+      const at = sn.edge && this.gridOn() ? this.toGrid({ x, y }) : { x, y };
+      const v = sn.edge ? snapToEdge(sn.g, sn.edge, at) : snapToCircle(sn.g, sn.r!, at);
       x = v.x;
       y = v.y;
       if (sn.r && buf === this.pts) sn.g.angle = Math.atan2(y - sn.g.y, x - sn.g.x);
@@ -1801,6 +1828,17 @@ export class CanvasEngine {
     return true;
   }
   private nudgeTimer = 0;
+
+  /** Einrasten aktiv (nur auf karierten/punktierten/linierten Blättern)? */
+  private gridOn(): boolean {
+    return !!this.tool.gridSnap && this.setup.background !== "blank";
+  }
+  /** Punkt auf den nächsten Rasterpunkt (liniert: nur senkrecht auf die Linie). */
+  private toGrid(v: Vec): Vec {
+    const st = this.gridStep();
+    const r = (n: number) => Math.round(n / st) * st;
+    return this.setup.background === "lines" ? { x: v.x, y: r(v.y) } : { x: r(v.x), y: r(v.y) };
+  }
 
   /** Rasterschritt (für Umschalt+Pfeil). */
   gridStep(): number {
