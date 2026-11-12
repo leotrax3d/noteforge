@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, FileUp, History, LayoutTemplate, MoreVertical, PlayCircle } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -37,6 +36,9 @@ import { measureMetrics, placeText, type FontMetrics } from "@/canvas/core/text-
 
 let metricsCache: FontMetrics | null = null;
 const textMetrics = () => (metricsCache ??= measureMetrics(getComputedStyle(document.body).fontFamily || "sans-serif"));
+import { readingOrder, titleFromText, titleFromTexts, UNTITLED } from "@/lib/auto-title";
+import { backgroundDelayFactor, shouldThrottleBackground } from "@/lib/power";
+import { cn } from "@/lib/utils";
 import { recognition, dataUrlBytes, errText, UNAVAILABLE } from "@/lib/recognition";
 import { inkToLatex } from "@/features/recognition/latex";
 import { LatexDialog, type LatexRequest } from "@/features/recognition/LatexDialog";
@@ -51,14 +53,19 @@ const SAVE_MAX_WAIT = 5000;
 const VERSION_INTERVAL = 10 * 60_000;
 /** Ruhezeit nach dem Speichern, bevor Handschrift/Bilder für die Suche erkannt werden. */
 const RECOGNIZE_DELAY = 4000;
+/** Auto-Titel aus Handschrift: 2 s nach dem letzten Strich (gespeichert) */
+const AUTO_TITLE_DELAY = 2000;
 
 const escapeHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const textHtml = (t: string) => t.split("\n").map((l) => `<div>${escapeHtml(l) || "<br>"}</div>`).join("");
 
 /** Zeichenfläche eines Blatts: Engine + Werkzeugleiste + Autospeichern. */
-export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, onPageReplaced, sections = [], pages = [], subjectName = "" }: {
+export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus, onOpenLink, onPageReplaced, sections = [], pages = [], subjectName = "" }: {
   page: Page;
-  onRename: (title: string) => void;
+  /** Automatisch gebildeter Titel (nur bei titleSource "auto") */
+  onAutoTitle?: (title: string) => void;
+  /** Erhöhen → Auto-Titel sofort neu bilden ("Automatischen Titel wiederherstellen") */
+  autoRev?: number;
   onPageChange: (patch: PagePatch) => void;
   /** Element, auf das nach dem Laden zentriert wird. */
   focus?: string;
@@ -131,7 +138,8 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
         // Erkennung für die Suche (Handschrift + OCR) im Hintergrund, erst nach einer Ruhepause
         clearTimeout(recTimer.current);
         const pid = page.id;
-        recTimer.current = window.setTimeout(() => void recognition.recognizePage(pid).catch(console.error), RECOGNIZE_DELAY);
+        recTimer.current = window.setTimeout(() => void recognition.recognizePage(pid).catch(console.error), RECOGNIZE_DELAY * backgroundDelayFactor());
+        autoTitleSoon.current();
         if (batch.deletes.length) {
           const gone = new Set(batch.deletes);
           setPageTags((t) => (t.some((x) => gone.has(x.elementId)) ? t.filter((x) => !gone.has(x.elementId)) : t));
@@ -144,6 +152,41 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
       });
     return s.chain;
   }, [page.id]);
+
+  // ---- Automatischer Titel (SPEC §4.2): Text zuerst, sonst Handschrift 2 s nach dem letzten Strich ----
+  const autoTitleSoon = useRef<() => void>(() => {});
+  const autoTimer = useRef(0);
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const autoRef = useRef(onAutoTitle);
+  autoRef.current = onAutoTitle;
+  autoTitleSoon.current = () => {
+    window.clearTimeout(autoTimer.current);
+    autoTimer.current = window.setTimeout(() => void computeAutoTitle(), AUTO_TITLE_DELAY);
+  };
+  const computeAutoTitle = async () => {
+    const engine = engineRef.current, pg = pageRef.current;
+    if (!engine || pg.titleSource !== "auto" || !autoRef.current) return;
+    const texts = engine.store.objects().filter((o): o is TextObj => o.kind === "text")
+      .map((o) => ({ bbox: o.bbox, html: o.data.html, latex: o.data.latex }));
+    let t = titleFromTexts(texts);
+    const strokes = engine.store.all();
+    if (!t && strokes.length) {
+      // Handschrift: nur die oberste Zeile(n) – die ersten Striche in Lesereihenfolge reichen für 3 Wörter
+      const first = readingOrder(strokes.filter((x) => x.pen !== "highlighter")).slice(0, 80);
+      try {
+        if (shouldThrottleBackground()) await new Promise((r) => setTimeout(r, 4000));
+        const r = await recognition.recognizeStrokes(first.map((x) => x.points));
+        t = titleFromText(r.text);
+      } catch {
+        return; // keine Erkennung verfügbar → Titel bleibt
+      }
+    }
+    if (!t && (strokes.length || engine.store.objects().length)) return; // Inhalt ohne lesbaren Text: Titel behalten
+    const next = t || UNTITLED;
+    if (pageRef.current.titleSource === "auto" && next !== pageRef.current.title) autoRef.current?.(next);
+  };
+  useEffect(() => { if (autoRev) void computeAutoTitle(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [autoRev]);
 
   const scheduleSave = useCallback(() => {
     const s = saveRef.current;
@@ -434,9 +477,6 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
     };
   }, [flush]);
 
-  const [title, setTitle] = useState(page.title);
-  useEffect(() => setTitle(page.title), [page.id, page.title]);
-  const commitTitle = () => title.trim() !== page.title && onRename(title);
 
   const e = () => engineRef.current;
 
@@ -551,6 +591,7 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
   }, [tool]);
 
   const focusMode = usePrefs((s) => s.focus);
+  const leftHanded = usePrefs((s) => s.leftHanded);
   const inkDebug = usePrefs((s) => s.inkDebug);
   const perfOn = usePrefs((s) => s.perfOverlay) || inkDebug;
   useEffect(() => { engineRef.current?.setInkDebug(inkDebug); }, [inkDebug, loaded]);
@@ -562,47 +603,6 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
 
   return (
     <div className="flex h-full flex-col">
-      <div className={focusMode ? "hidden" : "flex items-end gap-4 border-b px-6 py-2"}>
-        <div className="min-w-0 flex-1">
-          <Input
-            aria-label="Blatttitel"
-            placeholder="Unbenanntes Blatt"
-            value={title}
-            onChange={(ev) => setTitle(ev.target.value)}
-            onBlur={commitTitle}
-            onKeyDown={(ev) => ev.key === "Enter" && (ev.currentTarget as HTMLInputElement).blur()}
-            className="h-11 border-transparent bg-transparent px-0 text-2xl font-semibold shadow-none focus-visible:border-input md:text-2xl dark:bg-transparent"
-          />
-          <p className="text-xs text-muted-foreground">
-            Erstellt {new Date(page.createdAt).toLocaleString("de-DE")} · Geändert {new Date(page.updatedAt).toLocaleString("de-DE")}
-          </p>
-        </div>
-        <p role="status" data-testid="save-status" data-state={save}
-          className={save === "error" ? "pb-1 text-xs text-destructive" : "pb-1 text-xs text-muted-foreground"}>
-          {saveLabel[save]}
-        </p>
-        <div className="flex items-center">
-          <Button variant="ghost" size="icon" aria-label="Seitenversionen" title="Seitenversionen" onClick={() => setVersions(true)}><History /></Button>
-          <Button variant="ghost" size="icon" aria-label="Ink-Wiedergabe" title="Ink-Wiedergabe" aria-pressed={replay}
-            onClick={() => { engineRef.current?.commitSelection(); setReplay((r) => !r); }}>
-            <PlayCircle />
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Blatt-Aktionen" title="Blatt-Aktionen"><MoreVertical /></Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel>Als PDF exportieren</DropdownMenuLabel>
-              <DropdownMenuItem onSelect={() => void doExport("page")}><Download /> Dieses Blatt</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void doExport("section")}><Download /> Ganzes Thema</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void doExport("subject")}><Download /> Ganzes Fach</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => pdfRef.current?.click()}><FileUp /> PDF-Seiten einfügen …</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setTplDialog(true)}><LayoutTemplate /> Als Vorlage speichern …</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
       <div ref={hostRef} data-testid="canvas-host" data-loaded={loaded} data-tool={tool}
         className="relative min-h-0 flex-1 touch-none overflow-hidden select-none"
         onDragOver={(ev) => {
@@ -617,6 +617,37 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
         }}>
         <canvas ref={baseRef} className="absolute inset-0" />
         {perfOn && loaded && <PerfOverlay engine={engineRef.current} />}
+        {/* Blatt-Aktionen: klein oben rechts statt Titelbalken */}
+        <div className={cn("absolute top-2 z-20 flex items-center gap-1 rounded-full border bg-background/85 px-1 shadow-sm backdrop-blur", leftHanded ? "left-2" : "right-2", focusMode && "hidden")}>
+          <span role="status" data-testid="save-status" data-state={save} title={saveLabel[save]}
+            className={cn("px-2 text-xs", save === "error" ? "text-destructive" : "text-muted-foreground")}>
+            {save === "saved" ? "✓" : saveLabel[save]}
+          </span>
+          <Button variant="ghost" size="icon" aria-label="Seitenversionen" title="Seitenversionen" onClick={() => setVersions(true)}><History /></Button>
+          <Button variant="ghost" size="icon" aria-label="Ink-Wiedergabe" title="Ink-Wiedergabe" aria-pressed={replay}
+            onClick={() => { engineRef.current?.commitSelection(); setReplay((r) => !r); }}>
+            <PlayCircle />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Blatt-Aktionen" title="Blatt-Aktionen"><MoreVertical /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel className="truncate">{page.title}</DropdownMenuLabel>
+              <DropdownMenuLabel className="pt-0 text-xs font-normal text-muted-foreground">
+                Erstellt {new Date(page.createdAt).toLocaleString("de-DE")} · Geändert {new Date(page.updatedAt).toLocaleString("de-DE")}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Als PDF exportieren</DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => void doExport("page")}><Download /> Dieses Blatt</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void doExport("section")}><Download /> Ganzes Thema</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void doExport("subject")}><Download /> Ganzes Fach</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => pdfRef.current?.click()}><FileUp /> PDF-Seiten einfügen …</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setTplDialog(true)}><LayoutTemplate /> Als Vorlage speichern …</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
         {loaded && <SpitzHint />}
         <canvas ref={activeRef} data-testid="canvas-input" className="absolute inset-0" style={{ touchAction: "none" }} />
         <ObjectLayer

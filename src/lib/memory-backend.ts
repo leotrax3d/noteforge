@@ -138,7 +138,7 @@ export class MemoryBackend implements Backend {
       throw new Error("Ungültig: Unterblatt muss im selben Thema liegen");
     const now = Date.now();
     const p: Page = {
-      id: uid(), sectionId, parentPageId, title: title.trim(),
+      id: uid(), sectionId, parentPageId, title: title.trim() || "Unbenannt", titleSource: title.trim() ? "manual" : "auto",
       order: MemoryBackend.nextOrder(this.siblings(sectionId, parentPageId)),
       mode: "infinite", orientation: "portrait", background: "grid", bgSpacingMm: 5,
       pageColor: "#ffffff", createdAt: now, updatedAt: now,
@@ -149,7 +149,11 @@ export class MemoryBackend implements Backend {
   async updatePage(id: string, patch: PagePatch) {
     const p = this.page(id);
     Object.assign(p, patch, { updatedAt: Date.now() });
-    if (patch.title !== undefined) p.title = patch.title.trim();
+    if (patch.title !== undefined) {
+      p.title = patch.title.trim();
+      p.titleSource = patch.titleSource ?? "manual";
+    }
+    if (!p.title) Object.assign(p, { title: "Unbenannt", titleSource: "auto" });
     return clone(p);
   }
   async deletePage(id: string) {

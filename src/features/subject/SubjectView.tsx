@@ -28,6 +28,8 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
   const [busy, setBusy] = useState<string | null>(null);
   const [moodleTarget, setMoodleTarget] = useState<string | null>(null);
   const [rev, setRev] = useState(0);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [autoRev, setAutoRev] = useState(0);
   const pdfRef = useRef<HTMLInputElement>(null);
   const pdfTarget = useRef<string | null>(null);
   const subjects = useAsync(() => api.listSubjects(), []);
@@ -63,6 +65,8 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
 
   // Strg+N: neues Blatt im Thema des offenen Blatts
   const newPageRef = useRef<() => void>(() => {});
+  const pageIdRef = useRef(pageId);
+  pageIdRef.current = pageId;
   newPageRef.current = () => {
     const sectionId = page?.sectionId ?? sections[0]?.id;
     if (sectionId) actions.createPage(sectionId, null);
@@ -72,6 +76,11 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "n" && !typing(e.target)) {
         e.preventDefault();
         newPageRef.current();
+      }
+      if (e.key === "F2" && !typing(e.target) && pageIdRef.current) {
+        e.preventDefault();
+        setSidebarOpen(true);
+        setRenamingId(pageIdRef.current);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -106,6 +115,14 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
     },
     importMoodle: (sectionId) => setMoodleTarget(sectionId),
     openTrash: () => setTrash(true),
+    renamePage: (id, title) => {
+      data.setData((d) => d && { ...d, pages: d.pages.map((x) => (x.id === id ? { ...x, title, titleSource: "manual" } : x)) });
+      void mutate(() => api.updatePage(id, { title, titleSource: "manual" }), reload);
+    },
+    restoreAutoTitle: (id) => {
+      // Titel wird beim nächsten Speichern des Blatts aus dem Inhalt gebildet
+      void mutate(() => api.updatePage(id, { titleSource: "auto" }), async () => { reload(); if (id === pageId) setAutoRev((r) => r + 1); });
+    },
   };
 
   /** PDF → neues A4-Blatt mit festen Hintergrundseiten. */
@@ -191,6 +208,8 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
             pages={pages}
             selectedPageId={pageId}
             actions={actions}
+            renamingId={renamingId}
+            onRenaming={setRenamingId}
           />
         </aside>
         <main className="min-w-0 flex-1">
@@ -204,7 +223,12 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
               sections={sections}
               pages={pages}
               subjectName={subject?.name ?? ""}
-              onRename={(title) => void mutate(() => api.updatePage(page.id, { title }), reload)}
+              autoRev={autoRev}
+              onAutoTitle={(title) => {
+                const id = page.id;
+                data.setData((d) => d && { ...d, pages: d.pages.map((x) => (x.id === id && x.titleSource === "auto" ? { ...x, title } : x)) });
+                void mutate(() => api.updatePage(id, { title, titleSource: "auto" }), reload);
+              }}
               onPageChange={(patch: PagePatch) => {
                 data.setData((d) => d && { ...d, pages: d.pages.map((x) => (x.id === page.id ? { ...x, ...patch } : x)) });
                 void mutate(() => api.updatePage(page.id, patch), reload);

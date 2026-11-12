@@ -223,8 +223,11 @@ pub fn reorder_sections(conn: &mut Connection, subject_id: &str, order: &[String
 
 // ---------- Page ----------
 
+/// Titel eines leeren Blatts mit automatischem Titel.
+pub const UNTITLED: &str = "Unbenannt";
+
 const PAGE_COLS: &str = "p.id, p.section_id, p.parent_page_id, p.title, p.sort_order, p.mode,
-    p.orientation, p.background, p.bg_spacing_mm, p.page_color, p.created_at, p.updated_at";
+    p.orientation, p.background, p.bg_spacing_mm, p.page_color, p.created_at, p.updated_at, p.title_source";
 
 fn page_row(r: &Row) -> rusqlite::Result<Page> {
     Ok(Page {
@@ -240,6 +243,7 @@ fn page_row(r: &Row) -> rusqlite::Result<Page> {
         page_color: r.get(9)?,
         created_at: r.get(10)?,
         updated_at: r.get(11)?,
+        title_source: r.get(12)?,
     })
 }
 
@@ -283,14 +287,15 @@ pub fn create_page(
     check_parent(conn, section_id, parent_page_id)?;
     let id = new_id();
     let now = now_ms();
+    let auto = title.trim().is_empty();
     conn.execute(
         "INSERT INTO page (id, section_id, parent_page_id, title, sort_order, mode, orientation,
-           background, bg_spacing_mm, page_color, created_at, updated_at)
+           background, bg_spacing_mm, page_color, created_at, updated_at, title_source)
          VALUES (?1, ?2, ?3, ?4,
            (SELECT COALESCE(MAX(sort_order) + 1, 0) FROM page
              WHERE section_id=?2 AND parent_page_id IS ?3),
-           'infinite', 'portrait', 'grid', 5.0, '#ffffff', ?5, ?5)",
-        params![id, section_id, parent_page_id, title.trim(), now],
+           'infinite', 'portrait', 'grid', 5.0, '#ffffff', ?5, ?5, ?6)",
+        params![id, section_id, parent_page_id, if auto { UNTITLED } else { title.trim() }, now, if auto { "auto" } else { "manual" }],
     )?;
     super::onenote::reindex_page(conn, &id)?;
     get_page(conn, &id)
@@ -300,6 +305,16 @@ pub fn update_page(conn: &Connection, id: &str, p: PagePatch) -> Result<Page> {
     let mut pg = get_page(conn, id)?;
     if let Some(v) = p.title {
         pg.title = v.trim().to_string();
+        // Ein Titel ohne Quellenangabe gilt als vom Nutzer vergeben.
+        pg.title_source = "manual".into();
+    }
+    if let Some(v) = p.title_source {
+        one_of(&v, &["auto", "manual"], "Titelquelle")?;
+        pg.title_source = v;
+    }
+    if pg.title.is_empty() {
+        pg.title = UNTITLED.into();
+        pg.title_source = "auto".into();
     }
     if let Some(v) = p.mode {
         one_of(&v, &["infinite", "a4"], "Modus")?;
@@ -325,10 +340,10 @@ pub fn update_page(conn: &Connection, id: &str, p: PagePatch) -> Result<Page> {
     pg.updated_at = now_ms();
     conn.execute(
         "UPDATE page SET title=?2, mode=?3, orientation=?4, background=?5, bg_spacing_mm=?6,
-           page_color=?7, updated_at=?8 WHERE id=?1",
+           page_color=?7, updated_at=?8, title_source=?9 WHERE id=?1",
         params![
             pg.id, pg.title, pg.mode, pg.orientation, pg.background, pg.bg_spacing_mm,
-            pg.page_color, pg.updated_at
+            pg.page_color, pg.updated_at, pg.title_source
         ],
     )?;
     super::onenote::reindex_page(conn, &pg.id)?;

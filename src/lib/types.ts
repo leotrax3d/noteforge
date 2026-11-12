@@ -35,10 +35,12 @@ export interface Page {
   background: PageBackground;
   bgSpacingMm: number;
   pageColor: string;
+  /** "auto": aus dem Inhalt gebildet, "manual": vom Nutzer vergeben (nie automatisch überschrieben) */
+  titleSource: "auto" | "manual";
   createdAt: number;
   updatedAt: number;
 }
-export type PagePatch = Partial<Pick<Page, "title" | "mode" | "orientation" | "background" | "bgSpacingMm" | "pageColor">>;
+export type PagePatch = Partial<Pick<Page, "title" | "mode" | "orientation" | "background" | "bgSpacingMm" | "pageColor" | "titleSource">>;
 
 export type ElementType = "stroke" | "shape" | "text" | "image" | "pdfPage" | "file" | "table";
 export interface BBox { x: number; y: number; w: number; h: number }

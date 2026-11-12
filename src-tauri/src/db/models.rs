@@ -52,6 +52,8 @@ pub struct Page {
     pub background: String,
     pub bg_spacing_mm: f64,
     pub page_color: String,
+    /// "auto" (aus dem Inhalt) oder "manual"
+    pub title_source: String,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -65,6 +67,7 @@ pub struct PagePatch {
     pub background: Option<String>,
     pub bg_spacing_mm: Option<f64>,
     pub page_color: Option<String>,
+    pub title_source: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -16,7 +16,7 @@ Section      id, subjectId, name, color, order          (= Thema)
 Page         id, sectionId, parentPageId?, title, order,
              mode: "infinite" | "a4", orientation: "portrait" | "landscape",
              background: "grid" | "lines" | "dots" | "blank",
-             bgSpacingMm, pageColor, createdAt, updatedAt
+             bgSpacingMm, pageColor, titleSource: "auto" | "manual", createdAt, updatedAt
 Element      id, pageId, type: stroke | shape | text | image | pdfPage | file | table,
              z, bbox, data (binary/json)
 Tag          id, name, icon, color
@@ -52,6 +52,13 @@ Strokes: Punkte als `Float32Array` (x, y, pressure, tilt, t), Stift-ID, Farbe, B
 - **Medien:** Bilder (Einfügen, Drag & Drop, Screenshot-Ausschnitt), Dateianhänge, PDF-Import als Hintergrundseiten (A4). Im endlosen Modus (Drag & Drop oder Einfügen-Menü) wird jede PDF-Seite ein freies, verschiebbares, skalierbares und beschreibbares Element mit derselben scharfen Rendering-Pipeline.
 - **Undo/Redo:** Befehls-Stack, unbegrenzt pro Sitzung.
 - **Gesten:** 2 Finger Zoom/Pan, 2-Finger-Tipp Undo, 3-Finger-Tipp Redo.
+
+### 4.2 Blatt-Titel
+- Kein Titelbalken auf dem Blatt: der Canvas beginnt direkt oben. Speicherstatus, Versionen, Ink-Wiedergabe und Blatt-Aktionen (Export, Vorlage, Erstellt/Geändert) sitzen in einer kleinen Leiste oben rechts (Linkshänder: links).
+- **Umbenennen** nur in der Seitenleiste: Doppelklick/Doppeltipp auf den Namen → Inline-Eingabe (Enter oder Klick daneben speichert, Esc bricht ab), Kontextmenü „Umbenennen“, Taste **F2** für das offene Blatt.
+- **Automatischer Titel** (`titleSource = "auto"`): neues Blatt heißt „Unbenannt“. Nach jedem Speichern (2 s Verzögerung) werden die ersten 3 Wörter genommen – zuerst aus Textcontainern in Lesereihenfolge (oben links → unten rechts), sonst aus erkannter Handschrift (InkAnalyzer, im Hintergrund). Satzzeichen am Ende entfernt, max. 40 Zeichen. Leeres Blatt → wieder „Unbenannt“. Inhalt ohne lesbaren Text lässt den Titel unverändert.
+- Manuell vergebene Namen (`"manual"`) werden nie automatisch überschrieben; Kontextmenü „Automatischen Titel wiederherstellen“. Automatische Titel erscheinen in der Seitenleiste grau-kursiv.
+- Migration 0009: bestehende Blätter mit Titel → `manual`, leere → `auto` + „Unbenannt“.
 
 ## 5. OneNote-Funktionen
 Unterseiten, Drag & Drop-Sortierung, Tags (To-Do, Wichtig, Frage, Lernen für KA, eigene) mit Tag-Übersicht, Seitenlinks `[[…]]`, Volltextsuche (Text + erkannte Handschrift + OCR), Seitenvorlagen, Seitenversionen, Papierkorb, Ink-Wiedergabe, PDF-Export (Blatt/Thema/Fach), Drucken.

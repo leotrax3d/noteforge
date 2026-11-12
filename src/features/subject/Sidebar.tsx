@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
 import {
   DndContext, DragOverlay, pointerWithin, closestCenter, useDraggable, useDroppable,
@@ -6,7 +6,7 @@ import {
 } from "@dnd-kit/core";
 import {
   ChevronDown, ChevronRight, CornerDownRight, FileText, FilePlus, FolderPlus, GripVertical,
-  FileUp, GraduationCap, IndentDecrease, IndentIncrease, LayoutTemplate, MoreVertical, Palette, Pencil, Trash2,
+  FileUp, GraduationCap, IndentDecrease, IndentIncrease, LayoutTemplate, MoreVertical, Palette, Pencil, Trash2, Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +35,8 @@ export interface SidebarActions {
   importPdf(sectionId: string): void;
   importMoodle(sectionId: string): void;
   openTrash(): void;
+  renamePage(id: string, title: string): void;
+  restoreAutoTitle(id: string): void;
 }
 
 interface Props {
@@ -43,6 +45,9 @@ interface Props {
   pages: Page[];
   selectedPageId: string | null;
   actions: SidebarActions;
+  /** Blatt, dessen Name gerade inline bearbeitet wird (F2, Doppeltipp, Kontextmenü) */
+  renamingId: string | null;
+  onRenaming: (id: string | null) => void;
 }
 
 type DragId = `s:${string}` | `p:${string}`;
@@ -58,7 +63,7 @@ const collision: CollisionDetection = (args) => {
   return hits.length ? hits : closestCenter(args);
 };
 
-export function Sidebar({ subjectColor, sections, pages, selectedPageId, actions }: Props) {
+export function Sidebar({ subjectColor, sections, pages, selectedPageId, actions, renamingId, onRenaming }: Props) {
   const sensors = useDragSensors();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [drag, setDrag] = useState<{ active: string; over: string | null; nest: boolean } | null>(null);
@@ -154,6 +159,8 @@ export function Sidebar({ subjectColor, sections, pages, selectedPageId, actions
               onRename={() => setDialog({ kind: "rename-section", section: sec })}
               onDelete={() => setDialog({ kind: "delete-section", section: sec })}
               onDeletePage={(page) => setDialog({ kind: "delete-page", page })}
+              renamingId={renamingId}
+              onRenaming={onRenaming}
             />
           ))}
           <DragOverlay dropAnimation={null}>
@@ -242,6 +249,8 @@ function SectionBlock(props: {
   onRename: () => void;
   onDelete: () => void;
   onDeletePage: (p: Page) => void;
+  renamingId: string | null;
+  onRenaming: (id: string | null) => void;
 }) {
   const { section: sec, actions } = props;
   const id: DragId = `s:${sec.id}`;
@@ -306,6 +315,8 @@ function SectionBlock(props: {
               pages={props.pages}
               actions={actions}
               onDelete={() => props.onDeletePage(f.page)}
+              renaming={props.renamingId === f.page.id}
+              onRenaming={(on) => props.onRenaming(on ? f.page.id : null)}
             />
           ))}
           {props.items.length === 0 && (
@@ -327,6 +338,8 @@ function PageRow(props: {
   pages: Page[];
   actions: SidebarActions;
   onDelete: () => void;
+  renaming: boolean;
+  onRenaming: (on: boolean) => void;
 }) {
   const { page, depth, hasChildren } = props.item;
   const { actions } = props;
@@ -334,6 +347,8 @@ function PageRow(props: {
   const [menu, setMenu] = useState(false);
   const indent = indentTarget(props.pages, page.id);
   const outdent = outdentTarget(props.pages, page.id);
+  const lastTap = useRef(0);
+  const auto = page.titleSource === "auto";
 
   return (
     <li role="treeitem" aria-selected={props.selected} aria-expanded={hasChildren ? !props.collapsed : undefined}
@@ -347,6 +362,14 @@ function PageRow(props: {
         role="button"
         tabIndex={0}
         onClick={() => actions.selectPage(page.id)}
+        onDoubleClick={() => props.onRenaming(true)}
+        onPointerUp={(e) => {
+          // Doppeltipp (Touch/Stift): zwei Tipps innerhalb von 350 ms
+          if (e.pointerType === "mouse") return;
+          const now = e.timeStamp;
+          if (now - lastTap.current < 350) props.onRenaming(true);
+          lastTap.current = now;
+        }}
         onContextMenu={(e) => { e.preventDefault(); openSoon(setMenu); }}
         onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), actions.selectPage(page.id))}
         style={{ paddingLeft: 12 + depth * INDENT }}
@@ -367,9 +390,16 @@ function PageRow(props: {
             {depth > 0 ? <CornerDownRight className="size-4" /> : <FileText className="size-4" />}
           </span>
         )}
-        <span className={cn("flex-1 truncate", !page.title && "text-muted-foreground italic")}>
-          {page.title || "Unbenanntes Blatt"}
-        </span>
+        {props.renaming ? (
+          <InlineName initial={page.title} onCancel={() => props.onRenaming(false)}
+            onCommit={(t) => { props.onRenaming(false); if (t.trim() && t.trim() !== page.title) actions.renamePage(page.id, t.trim()); }} />
+        ) : (
+          <span data-testid="page-title" data-source={page.titleSource}
+            title={auto ? "Automatischer Titel – Doppeltippen oder F2 zum Umbenennen" : undefined}
+            className={cn("flex-1 truncate", auto && "text-muted-foreground italic")}>
+            {page.title || "Unbenannt"}
+          </span>
+        )}
         <DropdownMenu open={menu} onOpenChange={setMenu}>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" aria-label={`Optionen für ${page.title || "Blatt"}`} title="Optionen (Rechtsklick / lange drücken)"
@@ -379,7 +409,9 @@ function PageRow(props: {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-            <DropdownMenuItem onSelect={() => actions.selectPage(page.id)}><Pencil /> Öffnen</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => actions.selectPage(page.id)}><FileText /> Öffnen</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => window.setTimeout(() => props.onRenaming(true), 0)}><Pencil /> Umbenennen<span className="ml-auto text-xs text-muted-foreground">F2</span></DropdownMenuItem>
+            {!auto && <DropdownMenuItem onSelect={() => actions.restoreAutoTitle(page.id)}><Wand2 /> Automatischen Titel wiederherstellen</DropdownMenuItem>}
             <DropdownMenuItem onSelect={() => actions.createPage(page.sectionId, page.id)}><FilePlus /> Unterblatt hinzufügen</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => actions.createFromTemplate(page.sectionId, page.id)}><LayoutTemplate /> Unterblatt aus Vorlage …</DropdownMenuItem>
             <DropdownMenuItem disabled={!indent} onSelect={() => indent && actions.movePage(page.id, indent)}>
@@ -404,5 +436,30 @@ function DropLine({ depth, edge }: { depth: number; edge: "top" | "bottom" }) {
       className={cn("pointer-events-none absolute right-1 z-10 h-0.5 rounded bg-primary", edge === "top" ? "-top-px" : "-bottom-px")}
       style={{ left: 12 + depth * INDENT + 8 }}
     />
+  );
+}
+
+/** Inline-Eingabe für den Blattnamen: Enter/Klick daneben speichert, Esc bricht ab. */
+function InlineName({ initial, onCommit, onCancel }: { initial: string; onCommit: (t: string) => void; onCancel: () => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const done = useRef(false);
+  useEffect(() => { ref.current?.focus(); ref.current?.select(); }, []);
+  const finish = (ok: boolean) => {
+    if (done.current) return;
+    done.current = true;
+    if (ok) onCommit(ref.current?.value ?? initial);
+    else onCancel();
+  };
+  return (
+    <input ref={ref} defaultValue={initial} aria-label="Blattname" data-testid="page-rename"
+      className="mr-1 h-9 min-w-0 flex-1 rounded border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+      onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") { e.preventDefault(); finish(true); }
+        else if (e.key === "Escape") { e.preventDefault(); finish(false); }
+      }}
+      onBlur={() => finish(true)} />
   );
 }
