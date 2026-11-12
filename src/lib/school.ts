@@ -1,7 +1,7 @@
 // Phase 10: Hausaufgaben-Liste und Notenrechner. Persistenz über Tauri-Commands (Rust: db/school.rs),
 // außerhalb von Tauri ein In-Memory-Ersatz. Die Rechenlogik ist rein und getestet (school.test.ts).
 import { invoke } from "@tauri-apps/api/core";
-import { inTauri } from "./api";
+import { inTauri, notifyLocalChange } from "./api";
 
 export interface Homework {
   id: string;
@@ -36,9 +36,9 @@ export interface SchoolBackend {
 
 const tauri: SchoolBackend = {
   listHomework: (doneSince) => invoke("list_homework", { doneSince }),
-  saveHomework: (homework) => invoke("save_homework", { homework }),
-  setHomeworkDone: (id, done) => invoke("set_homework_done", { id, done }),
-  deleteHomework: (id) => invoke("delete_homework", { id }),
+  saveHomework: (homework) => invoke<Homework>("save_homework", { homework }).finally(notifyLocalChange),
+  setHomeworkDone: (id, done) => invoke<Homework>("set_homework_done", { id, done }).finally(notifyLocalChange),
+  deleteHomework: (id) => invoke<void>("delete_homework", { id }).finally(notifyLocalChange),
   listGrades: () => invoke("list_grades"),
   saveGrade: (grade) => invoke("save_grade", { grade }),
   deleteGrade: (id) => invoke("delete_grade", { id }),

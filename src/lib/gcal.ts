@@ -183,6 +183,8 @@ export function startGcalPolling(): () => void {
   // Beim Zurückkehren ins Fenster nachholen, wenn das Intervall abgelaufen ist
   const onFocus = () => { if (Date.now() - lastRun >= pollInterval(true, powerSaving())) void tick(); else schedule(); };
   const onOnline = () => void tick();
+  const onLocal = () => gcalNudge();
+  window.addEventListener("nf-local-change", onLocal);
   window.addEventListener("focus", onFocus);
   window.addEventListener("blur", schedule);
   window.addEventListener("online", onOnline);
@@ -193,6 +195,7 @@ export function startGcalPolling(): () => void {
     window.removeEventListener("focus", onFocus);
     window.removeEventListener("blur", schedule);
     window.removeEventListener("online", onOnline);
+    window.removeEventListener("nf-local-change", onLocal);
     unsub();
   };
 }

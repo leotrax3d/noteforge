@@ -6,7 +6,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { CalendarEvent, EventKind, Subject } from "@/lib/types";
+import type { CalendarEvent, EventKind, PageRef, Subject } from "@/lib/types";
+import { api } from "@/lib/api";
+import { gcal, type HistoryEntry } from "@/lib/gcal";
 import { useSetup } from "@/store/setup";
 import { DEFAULT_REMINDER, KIND_LABEL, REMINDERS, fromInputs, toDateInput, toTimeInput } from "./dates";
 
@@ -32,6 +34,13 @@ export function EventDialog({ event, subjects, onOpenChange, onSave, onDelete }:
   const [time, setTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [remindTouched, setRemindTouched] = useState(false);
+  const [pages, setPages] = useState<PageRef[]>([]);
+  const [hist, setHist] = useState<HistoryEntry[]>([]);
+  useEffect(() => { if (event) void api.listPageRefs().then(setPages).catch(() => {}); }, [event]);
+  useEffect(() => {
+    setHist([]);
+    if (event?.id) void gcal.history(event.id).then(setHist).catch(() => {});
+  }, [event]);
 
   useEffect(() => {
     if (!event) return;
@@ -91,6 +100,17 @@ export function EventDialog({ event, subjects, onOpenChange, onSave, onDelete }:
             </select>
           </div>
 
+          <div className="grid gap-2">
+            <Label htmlFor="ev-page">Blatt</Label>
+            <select id="ev-page" className={selectCls} value={v.pageId ?? ""}
+              onChange={(e) => set({ pageId: e.target.value || null })}>
+              <option value="">Kein Blatt</option>
+              {pages.filter((p) => !v.subjectId || p.subjectId === v.subjectId).map((p) => (
+                <option key={p.pageId} value={p.pageId}>{v.subjectId ? p.title || "Unbenannt" : `${p.subjectName} · ${p.title || "Unbenannt"}`}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="grid grid-cols-[1fr_auto_auto] gap-2">
             <div className="grid gap-2">
               <Label htmlFor="ev-date">Datum</Label>
@@ -120,6 +140,23 @@ export function EventDialog({ event, subjects, onOpenChange, onSave, onDelete }:
               onChange={(e) => set({ note: e.target.value })}
               className="w-full rounded-md border bg-background px-3 py-2 text-base outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50" />
           </div>
+
+          {hist.length > 0 && (
+            <details className="rounded-md border px-3">
+              <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium">Verlauf ({hist.length})</summary>
+              <ul className="grid gap-1 pb-2">
+                {hist.map((h) => (
+                  <li key={h.id} className="flex items-center gap-2 text-sm">
+                    <span className="min-w-0 flex-1 truncate">
+                      <span className="text-muted-foreground">{new Date(h.at).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })} · {h.reason}: </span>
+                      {h.event.title} · {new Date(h.event.start).toLocaleDateString("de-DE")}
+                    </span>
+                    <Button type="button" variant="ghost" className="h-11" onClick={() => void gcal.restore(h.id).then((e) => { setV(e); setDate(toDateInput(e.start)); onSave(e); onOpenChange(false); })}>Wiederherstellen</Button>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
 
           {err && <p role="alert" className="text-sm text-destructive">{err}</p>}
           <DialogFooter className="gap-2">

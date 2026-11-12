@@ -11,6 +11,8 @@ import { GradesPage } from "@/features/school/GradesPage";
 import { useNav } from "@/store/nav";
 import { toggleFocus, usePrefs } from "@/store/prefs";
 import { listenCloud, syncNowAndApply } from "@/lib/sync";
+import { startGcalPolling } from "@/lib/gcal";
+import { listenDeepLinks } from "@/lib/deep-link";
 import { typing } from "@/lib/shortcuts";
 import { SettingsDialog } from "@/features/settings/SettingsDialog";
 import { useSetup } from "@/store/setup";
@@ -35,6 +37,14 @@ export default function App() {
   useEffect(() => {
     let off: (() => void) | undefined;
     void listenCloud().then((f) => (off = f));
+    return () => off?.();
+  }, []);
+
+  // Google-Kalender im Hintergrund abgleichen; noteforge://-Links öffnen
+  useEffect(() => startGcalPolling(), []);
+  useEffect(() => {
+    let off: (() => void) | undefined;
+    void listenDeepLinks().then((f) => (off = f)).catch(console.error);
     return () => off?.();
   }, []);
 

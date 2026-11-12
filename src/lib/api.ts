@@ -133,9 +133,19 @@ function withPageDefaults(b: Backend): Backend {
     get(t, k, r) {
       if (k === "createPage") return createPage;
       const v = Reflect.get(t, k, r);
-      return typeof v === "function" ? v.bind(t) : v;
+      if (typeof v !== "function") return v;
+      // Termin-Änderungen → Google-Kalender zeitnah nachziehen (lib/gcal.ts)
+      if (k === "saveEvent" || k === "deleteEvent") {
+        return async (...a: unknown[]) => { const res = await v.apply(t, a); notifyLocalChange(); return res; };
+      }
+      return v.bind(t);
     },
   });
+}
+
+/** Lokale Termin-/Hausaufgaben-Änderung melden (Google-Kalender-Abgleich hört zu). */
+export function notifyLocalChange() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("nf-local-change"));
 }
 
 export const api: Backend = withPageDefaults(base);
