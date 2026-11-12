@@ -562,7 +562,7 @@ pub async fn sync_once(db: &Db) -> R<Option<Report>> {
 
 fn status(app: &AppHandle, db: &Db) -> R<SyncStatus> {
     let c = db.conn();
-    let dir = backup::dir(app, &db.conn());
+    let dir = backup::dir(app, &c);
     Ok(SyncStatus {
         config: setting(&c, CONFIG_KEY)?,
         running: RUNNING.load(Ordering::SeqCst),
