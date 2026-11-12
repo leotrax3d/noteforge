@@ -1,5 +1,8 @@
-import { useCallback, useRef, useState } from "react";
-import { ArrowLeft, FileText, PanelLeftClose, PanelLeftOpen, Search, Tags } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowLeft, FileText, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Search, Tags } from "lucide-react";
+import { toggleFocus, usePrefs } from "@/store/prefs";
+import { useCloudRev } from "@/lib/sync";
+import { typing } from "@/lib/shortcuts";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { api } from "@/lib/api";
@@ -41,6 +44,38 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
   const page = pages.find((p) => p.id === pageId) ?? null;
 
   const select = useCallback((id: string | null) => go({ view: "subject", subjectId, pageId: id }), [go, subjectId]);
+  const focusMode = usePrefs((s) => s.focus);
+  const leftHanded = usePrefs((s) => s.leftHanded);
+
+  // Nach einem Sync: Baum neu laden; das offene Blatt nur, wenn es selbst geändert wurde.
+  const cloudRev = useCloudRev((s) => s.rev);
+  const seenRev = useRef(cloudRev);
+  useEffect(() => {
+    if (cloudRev === seenRev.current) return;
+    seenRev.current = cloudRev;
+    const st = useCloudRev.getState();
+    subjects.reload();
+    reload();
+    if (pageId && st.pages.has(pageId)) setRev((r) => r + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloudRev]);
+
+  // Strg+N: neues Blatt in der Themengruppe des offenen Blatts
+  const newPageRef = useRef<() => void>(() => {});
+  newPageRef.current = () => {
+    const sectionId = page?.sectionId ?? sections[0]?.id;
+    if (sectionId) actions.createPage(sectionId, null);
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "n" && !typing(e.target)) {
+        e.preventDefault();
+        newPageRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const actions: SidebarActions = {
     selectPage: (id) => select(id),
@@ -120,25 +155,34 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
   const Icon = subjectIcon(subject?.icon ?? "");
   return (
     <div className="flex h-full flex-col" style={{ ["--subject" as string]: subject?.color ?? "var(--primary)" }}>
-      <header className="flex items-center gap-1 border-b px-2 py-1" style={{ borderBottomColor: "var(--subject)" }}>
+      <header className={cn("flex items-center gap-1 border-b px-2 py-1", focusMode && "hidden")} style={{ borderBottomColor: "var(--subject)" }}>
         <Button variant="ghost" size="icon" aria-label="Zur Startseite" onClick={() => go({ view: "home" })}>
           <ArrowLeft />
         </Button>
         <Button variant="ghost" size="icon" aria-label={sidebarOpen ? "Seitenleiste ausblenden" : "Seitenleiste einblenden"}
           aria-pressed={sidebarOpen} onClick={() => setSidebarOpen((o) => !o)}>
-          {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
+          {leftHanded ? (sidebarOpen ? <PanelRightClose /> : <PanelRightOpen />) : sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
         </Button>
         <span className="ml-1 flex size-8 items-center justify-center rounded-md text-white" style={{ background: "var(--subject)" }}>
           <Icon className="size-5" />
         </span>
         <h1 className="mr-auto ml-2 truncate text-lg font-semibold">{subject?.name}</h1>
+        {page && (
+          <Button variant="ghost" size="icon" aria-label="Fokusmodus" title="Fokusmodus (F11)" onClick={() => toggleFocus(true)}><Maximize2 /></Button>
+        )}
         <Button variant="ghost" size="icon" aria-label="Suche" title="Suche (Strg+K)" onClick={() => go({ view: "search" })}><Search /></Button>
         <Button variant="ghost" size="icon" aria-label="Tag-Übersicht" title="Tags" onClick={() => go({ view: "tags" })}><Tags /></Button>
         <ThemeToggle />
       </header>
       {data.error && <p className="px-4 py-2 text-destructive">{data.error}</p>}
-      <div className="flex min-h-0 flex-1">
-        <aside className={cn("w-72 shrink-0 border-r bg-muted/30", !sidebarOpen && "hidden")}>
+      <div className={cn("relative flex min-h-0 flex-1", leftHanded && "flex-row-reverse")}>
+        {focusMode && (
+          <Button variant="secondary" size="icon" aria-label="Fokusmodus beenden" title="Fokusmodus beenden (Esc)"
+            className={cn("absolute top-3 z-40 size-11 shadow-md", leftHanded ? "left-3" : "right-3")} onClick={() => toggleFocus(false)}>
+            <Minimize2 />
+          </Button>
+        )}
+        <aside data-testid="sidebar" className={cn("w-72 shrink-0 bg-muted/30", leftHanded ? "border-l" : "border-r", (!sidebarOpen || focusMode) && "hidden")}>
           <Sidebar
             subjectColor={subject?.color ?? "#2563eb"}
             sections={sections}

@@ -7,22 +7,52 @@ import { SearchPage } from "@/features/search/SearchPage";
 import { SubjectView } from "@/features/subject/SubjectView";
 import { TagsPage } from "@/features/tags/TagsPage";
 import { useNav } from "@/store/nav";
+import { toggleFocus, usePrefs } from "@/store/prefs";
+import { listenCloud, syncNowAndApply } from "@/lib/sync";
+import { typing } from "@/lib/shortcuts";
+import { SettingsDialog } from "@/features/settings/SettingsDialog";
+import { ShortcutsDialog } from "@/features/settings/ShortcutsDialog";
 
 export default function App() {
   const route = useNav((s) => s.route);
   const go = useNav((s) => s.go);
 
-  // Strg+K / Strg+F: Suche von überall
+  const dialog = usePrefs((s) => s.dialog);
+  const setDialog = usePrefs((s) => s.setDialog);
+
+  // Hintergrund-Syncs des Backends empfangen
+  useEffect(() => {
+    let off: (() => void) | undefined;
+    void listenCloud().then((f) => (off = f));
+    return () => off?.();
+  }, []);
+
+  // Globale Tastenkürzel (Übersicht: lib/shortcuts.ts)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key.toLowerCase() === "k" || e.key.toLowerCase() === "f")) {
-        e.preventDefault();
+      const mod = e.ctrlKey || e.metaKey;
+      const k = e.key.toLowerCase();
+      const p = usePrefs.getState();
+      if (mod && !e.shiftKey && (k === "k" || k === "f")) {
         if (useNav.getState().route.view !== "search") go({ view: "search" });
-      }
+      } else if (mod && !e.shiftKey && k === ",") p.setDialog("settings");
+      else if (e.key === "F1" || (e.key === "?" && !mod && !typing(e.target))) p.setDialog("shortcuts");
+      else if (e.key === "F11" || (mod && e.shiftKey && k === "f")) toggleFocus();
+      else if (mod && e.shiftKey && k === "p") p.setPerfOverlay(!p.perfOverlay);
+      else if (mod && e.shiftKey && k === "s") void syncNowAndApply().catch(console.error);
+      else if (e.altKey && e.key === "Home") go({ view: "home" });
+      else if (e.key === "Escape" && p.focus && !p.dialog && !document.querySelector("[role=dialog]")) toggleFocus(false);
+      else return;
+      e.preventDefault();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [go]);
+
+  // Fokusmodus nur auf einem Blatt
+  useEffect(() => {
+    if (route.view !== "subject" || !route.pageId) toggleFocus(false);
+  }, [route]);
 
   return (
     <ThemeProvider>
@@ -32,6 +62,9 @@ export default function App() {
       {route.view === "tags" && <TagsPage tagId={route.tagId} />}
       {route.view === "calendar" && <CalendarPage key={route.date ?? 0} date={route.date} mode={route.date ? "week" : undefined} />}
       {route.view === "pen-test" && <PenTestPage />}
+      <SettingsDialog open={dialog === "settings"} onOpenChange={(o) => setDialog(o ? "settings" : null)} />
+      <ShortcutsDialog open={dialog === "shortcuts"} onOpenChange={(o) => setDialog(o ? "shortcuts" : null)} />
     </ThemeProvider>
   );
 }
+

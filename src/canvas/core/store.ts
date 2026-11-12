@@ -21,8 +21,18 @@ export interface PendingBatch {
 }
 
 /** Strichdokument eines Blatts mit Undo/Redo-Stack und Speicher-Tracking. */
+/** Kantenlänge einer Zelle des Raster-Index (Welteinheiten). */
+const CELL = 512;
+/** Striche über mehr Zellen landen in einer immer geprüften Liste. */
+const MAX_CELLS = 64;
+
 export class StrokeStore {
   private map = new Map<string, Stroke>();
+  /** Raster-Index über `all()`: Zelle → aufsteigende Indizes in `sorted` */
+  private grid: Map<number, number[]> | null = null;
+  private big: number[] = [];
+  private seen = new Uint32Array(0);
+  private stamp = 0;
   private objMap = new Map<string, CanvasObj>();
   private sorted: Stroke[] | null = [];
   private sortedObj: CanvasObj[] | null = [];
@@ -79,8 +89,63 @@ export class StrokeStore {
         const ha = a.pen === "highlighter" ? 0 : 1, hb = b.pen === "highlighter" ? 0 : 1;
         return ha - hb || a.z - b.z;
       });
+      this.grid = null;
     }
     return this.sorted;
+  }
+
+  private buildGrid(all: Stroke[]) {
+    const g = new Map<number, number[]>();
+    this.big = [];
+    for (let i = 0; i < all.length; i++) {
+      const b = all[i].bbox;
+      const x0 = Math.floor(b.x / CELL), y0 = Math.floor(b.y / CELL);
+      const x1 = Math.floor((b.x + b.w) / CELL), y1 = Math.floor((b.y + b.h) / CELL);
+      if ((x1 - x0 + 1) * (y1 - y0 + 1) > MAX_CELLS) {
+        this.big.push(i);
+        continue;
+      }
+      for (let y = y0; y <= y1; y++)
+        for (let x = x0; x <= x1; x++) {
+          const k = key(x, y);
+          const l = g.get(k);
+          if (l) l.push(i);
+          else g.set(k, [i]);
+        }
+    }
+    this.grid = g;
+    if (this.seen.length < all.length) this.seen = new Uint32Array(all.length * 2);
+  }
+
+  /**
+   * Striche, deren Rahmen das Rechteck schneiden könnte – in derselben Reihenfolge wie `all()`.
+   * Für das Kachel-Rendering: ohne Index wäre jede Kachel O(alle Striche).
+   */
+  inRect(r: { x: number; y: number; w: number; h: number }, out: Stroke[] = []): Stroke[] {
+    const all = this.all();
+    if (!this.grid) this.buildGrid(all);
+    const g = this.grid!;
+    out.length = 0;
+    const idx: number[] = [];
+    if (++this.stamp === 0xffffffff) {
+      this.seen.fill(0);
+      this.stamp = 1;
+    }
+    const st = this.stamp, seen = this.seen;
+    const take = (l: number[]) => {
+      for (const i of l) if (seen[i] !== st) { seen[i] = st; idx.push(i); }
+    };
+    take(this.big);
+    const x0 = Math.floor(r.x / CELL), y0 = Math.floor(r.y / CELL);
+    const x1 = Math.floor((r.x + r.w) / CELL), y1 = Math.floor((r.y + r.h) / CELL);
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const l = g.get(key(x, y));
+        if (l) take(l);
+      }
+    idx.sort((a, b) => a - b);
+    for (const i of idx) out.push(all[i]);
+    return out;
   }
 
   /** Änderung anwenden ohne Verlauf (z. B. live beim Radieren). */
@@ -176,3 +241,6 @@ export class StrokeStore {
     for (const id of p.deletes) if (!this.pending.has(id)) this.pending.set(id, false);
   }
 }
+
+/** Zellschlüssel; |x|,|y| < 2^20 Zellen (≈ 500 Mio. Welteinheiten) reichen für jedes Blatt. */
+const key = (x: number, y: number) => (x + 0x100000) * 0x200000 + (y + 0x100000);

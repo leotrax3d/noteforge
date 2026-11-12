@@ -53,7 +53,7 @@ pub fn purge_older_than(conn: &Connection, cutoff: i64) -> Result<usize> {
     Ok(ids.len())
 }
 
-fn hard_delete(conn: &Connection, id: &str) -> Result<()> {
+pub(crate) fn hard_delete(conn: &Connection, id: &str) -> Result<()> {
     conn.execute(
         "DELETE FROM page_fts WHERE page_id IN (
            WITH RECURSIVE d(id) AS (SELECT ?1 UNION ALL SELECT p.id FROM page p JOIN d ON p.parent_page_id = d.id)

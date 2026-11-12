@@ -2,6 +2,7 @@ mod commands;
 mod integrations;
 mod recognition;
 mod reminders;
+mod sync;
 pub mod db;
 
 use tauri::Manager;
@@ -24,10 +25,12 @@ pub fn run() {
             let db = db::Db::open(&dir.join("noteforge.sqlite"))?;
             app.manage(db);
             reminders::spawn(app.handle().clone());
+            sync::spawn(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             app_version,
+            sync::sync_status, sync::sync_connect, sync::sync_disconnect, sync::sync_now, sync::backup_now,
             recognition::recognition_status, recognition::recognize_strokes,
             recognition::ocr_image, recognition::recognize_page,
             commands::list_subjects, commands::create_subject, commands::update_subject,

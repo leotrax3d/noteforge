@@ -35,6 +35,29 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "Noteforge",
+    "category": "Education",
+    "shortDescription": "Stiftoptimierte Schul-Notizen",
+    "longDescription": "Noteforge – Notizen mit Stift für die Schule: Fächer, Blätter, Kalender, WebUntis/Moodle und Nextcloud-Sync.",
+    "copyright": "© 2026 Noteforge",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "German"
+        ],
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico",
+        "compression": "lzma"
+      },
+      "wix": {
+        "language": "de-DE"
+      }
+    }
   }
 }

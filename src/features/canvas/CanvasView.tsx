@@ -29,6 +29,8 @@ import { ObjectLayer } from "./objects/ObjectLayer";
 import { FormatBar } from "./objects/FormatBar";
 import { captureScreen, encodeImage, fileToImage, type LoadedImage } from "./objects/images";
 import { useTools } from "./tool-store";
+import { usePrefs } from "@/store/prefs";
+import { PerfOverlay } from "./PerfOverlay";
 import { recognition, dataUrlBytes, errText, UNAVAILABLE } from "@/lib/recognition";
 import { inkToLatex } from "@/features/recognition/latex";
 import { LatexDialog, type LatexRequest } from "@/features/recognition/LatexDialog";
@@ -146,6 +148,7 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
   useEffect(() => {
     const engine = new CanvasEngine(hostRef.current!, baseRef.current!, activeRef.current!);
     engineRef.current = engine;
+    if (import.meta.env.DEV) (window as unknown as { __nfEngine?: CanvasEngine }).__nfEngine = engine; // Profiling-Skripte
     engine.setObjectLayer(layerElRef.current);
     engine.events = {
       onHistory: (canUndo, canRedo) => setHistory((h) => (h.canUndo === canUndo && h.canRedo === canRedo ? h : { canUndo, canRedo })),
@@ -385,6 +388,7 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
       else if ((k === "delete" || k === "backspace") && engine.hasSelection) engine.deleteSelection();
       else if (mod && k === "t" && e.shiftKey) useTools.getState().setTool("text");
       else if (k === "escape") engine.commitSelection();
+      else if (!mod && !e.altKey && toolKey(k, e.shiftKey)) { /* Werkzeug gewechselt */ }
       else return;
       e.preventDefault();
     };
@@ -469,6 +473,9 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool]);
 
+  const focusMode = usePrefs((s) => s.focus);
+  const perfOn = usePrefs((s) => s.perfOverlay);
+
   const editingText = editingId && objects.find((o) => o.id === editingId)?.kind === "text";
   const saveLabel: Record<SaveState, string> = {
     saved: "Gespeichert", pending: "Ungespeicherte Änderungen", saving: "Speichert …", error: "Speichern fehlgeschlagen",
@@ -476,7 +483,7 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-end gap-4 border-b px-6 py-2">
+      <div className={focusMode ? "hidden" : "flex items-end gap-4 border-b px-6 py-2"}>
         <div className="min-w-0 flex-1">
           <Input
             aria-label="Blatttitel"
@@ -530,6 +537,7 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
           void insertFiles(files, engineRef.current?.screenToWorld({ x: ev.clientX - r.left, y: ev.clientY - r.top }));
         }}>
         <canvas ref={baseRef} className="absolute inset-0" />
+        {perfOn && loaded && <PerfOverlay engine={engineRef.current} />}
         <canvas ref={activeRef} data-testid="canvas-input" className="absolute inset-0" style={{ touchAction: "none" }} />
         <ObjectLayer
           objects={objects}
@@ -616,4 +624,25 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
         }, "Vorlage konnte nicht gespeichert werden")} />
     </div>
   );
+}
+
+/** Einzeltasten für Werkzeuge (ohne Strg). Liefert true, wenn die Taste belegt ist. */
+function toolKey(k: string, shift: boolean): boolean {
+  const t = useTools.getState();
+  if (shift) return false;
+  switch (k) {
+    case "b": t.setPen(t.pen === "highlighter" ? "fountain" : t.pen); return true;
+    case "m": t.setPen("highlighter"); return true;
+    case "e": t.setTool("eraser"); return true;
+    case "l": t.setTool("lasso"); return true;
+    case "t": t.setTool("text"); return true;
+    case "h": t.setTool("pan"); return true;
+    case "r": t.setShapeMode(!t.shapeMode); return true;
+  }
+  const n = Number(k);
+  if (Number.isInteger(n) && n >= 1 && n <= 9 && t.presets[n - 1]) {
+    t.applyPreset(t.presets[n - 1]);
+    return true;
+  }
+  return false;
 }

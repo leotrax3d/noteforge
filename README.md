@@ -102,3 +102,21 @@ Bilder werden in die Tiles gerendert (Tinte liegt darüber), Text und Tabellen l
 - **Ink → LaTeX:** Lasso → „Als Formel (LaTeX)“. Aus den erkannten Wörtern und ihrer Lage werden Bruchstriche sowie Hoch- und Tiefstellung rekonstruiert, und Symbole werden übersetzt (`src/features/recognition/latex.ts`). Im Dialog lässt sich das Ergebnis mit KaTeX-Vorschau und Bausteinen korrigieren. Wahlweise bleibt die Handschrift erhalten. Im Textwerkzeug öffnet ein Tipp auf eine Formel den Dialog erneut. Der PDF-Export setzt Formeln als einzeiligen Text, z. B. `(a+b)/c`.
 - **Voraussetzung unter Windows:** Einstellungen → Zeit und Sprache → Sprache → Deutsch → Optionen → „Handschrift“ und „Optische Zeichenerkennung“ installieren. Der `InkAnalyzer` verwendet den Handschrift-Erkenner des Systems.
 - **Grenzen:** Im Browser (`pnpm dev`) ist keine Erkennung verfügbar. Dort meldet der LaTeX-Dialog das, und die Formel kann von Hand eingegeben werden. Ein lokales ONNX-Formelmodell (SPEC §6) kann später als weitere Quelle für `inkToLatex` dazukommen.
+
+### Sync & Feinschliff (Phase 8)
+- **Nextcloud-Sync (WebDAV, SPEC §9)** in `src-tauri/src/sync/`: Auf dem Server liegen `struct.json.gz` (Fächer, Themengruppen, Tags, Vorlagen, eigene Termine) und `pages/<id>.json.gz` je Blatt (inklusive Bildern und PDF-Seiten). Die Zugangsdaten sind Server, Benutzer und App-Passwort; das App-Passwort liegt nur im Credential Manager. Der Abgleich läuft manuell, alle 5, 15 oder 60 Minuten oder mit Strg+Umschalt+S.
+- **Zeitsynchronisation:**
+  - Geänderte Blätter werden ohne Uhrzeit erkannt: lokal über einen Fingerabdruck je Blatt, auf dem Server über ETags. Uploads sind mit `If-Match`/`If-None-Match` geschützt.
+  - Die Zeit zählt nur, wenn beide Seiten dasselbe Blatt geändert haben. Dann gewinnt die neuere Version, die ältere bleibt als Seitenversion „Sync-Konflikt …“ erhalten.
+  - Für diesen Vergleich rechnet Noteforge alle Bearbeitungszeiten in **Serverzeit** um. Die Abweichung der Geräte-Uhr wird bei jedem Sync aus dem `Date`-Header gemessen; es gilt die Probe mit der kürzesten Laufzeit.
+  - Zeiten, die in der Zukunft liegen, werden auf „jetzt“ gekürzt. Das betrifft Uhren, die beim Bearbeiten vorgingen und inzwischen korrigiert sind.
+  - Ab 2 Minuten Abweichung erscheint ein Hinweis in den Einstellungen.
+- Die Struktur wird per Drei-Wege-Abgleich gegen den letzten gemeinsamen Stand zusammengeführt. Endgültig gelöschte Blätter werden in beide Richtungen übertragen, der Papierkorb wird mitsynchronisiert. Moodle-Termine und Erinnerungsstatus bleiben gerätelokal.
+- **Backup:** Einmal täglich wird mit `VACUUM INTO` nach `%APPDATA%\de.noteforge.app\backups` gesichert. Die letzten 14 Backups bleiben erhalten. In den Einstellungen gibt es zusätzlich „Jetzt sichern“.
+- **Einstellungen** (Strg+,): Nextcloud, Backup, Linkshänder-Modus (Seitenleiste rechts, senkrechte Werkzeugleiste gespiegelt) und Leistungsanzeige.
+- **Fokusmodus** (F11 oder Strg+Umschalt+F, beenden mit Esc): Es bleiben nur Blatt und Werkzeugleiste sichtbar, in der App im Vollbild.
+- **Tastenkürzel** (F1 zeigt die Übersicht): B/M/E/L/T/H/R für die Werkzeuge, 1–9 für die Stift-Favoriten, Strg+N für ein neues Blatt. Alle Kürzel stehen in `src/lib/shortcuts.ts`.
+- **Performance-Profiling** (Strg+Umschalt+P): Die Anzeige auf dem Blatt zeigt FPS, Frame- und Kachelzeit, Stift-Latenz und Ruckler. Messwerte aus dem Test mit 20 000 Strichen in Headless-Chromium:
+  - Der Raster-Index (`StrokeStore.inRect`) halbiert etwa die Suche nach den Strichen pro Kachel (0,19 statt 0,34 ms).
+  - Kacheln werden mit einem Zeitbudget statt einer festen Anzahl gerendert (8 ms pro Frame, nach einem Zoom 32 ms). Dadurch sank der längste Frame beim Zoomen von rund 55–75 ms auf rund 38 ms.
+- **Installer:** Die CI baut MSI (WiX, de-DE) und NSIS (deutsch, Installation pro Benutzer, WebView2 per Bootstrapper) und lädt beide als Artefakt `noteforge-installer` hoch.

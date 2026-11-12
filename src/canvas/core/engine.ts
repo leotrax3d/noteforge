@@ -18,6 +18,12 @@ import { PSTRIDE, computeBBox, intersects, makeStroke, uid, type PenKind, type S
 import { PENS, buildPath, drawStroke, strokePath, toFreehand } from "./pens";
 import { StrokeStore, type Change } from "./store";
 import { TileCache } from "./tiles";
+import { PerfMeter, type PerfSample } from "./perf";
+
+/** Höchstens so lange pro Frame neue Kacheln rendern (ms). */
+const TILE_BUDGET_MS = 8;
+/** Nach Zoom (alle Kacheln neu): großzügiger, damit normale Blätter in einem Frame fertig sind. */
+const FULL_BUDGET_MS = 32;
 import { hitObj, objCorners, transformObj, type CanvasObj, type ImageObj } from "./objects";
 import { recognize, densify, SHAPE_LABELS } from "../tools/shapes";
 import {
@@ -245,6 +251,7 @@ export class CanvasEngine {
   }
 
   destroy() {
+    this.perf = null;
     cancelAnimationFrame(this.raf);
     clearTimeout(this.rescaleTimer);
     this.ro.disconnect();
@@ -882,6 +889,7 @@ export class CanvasEngine {
   }
 
   private onMove = (e: PointerEvent) => {
+    this.perf?.input(e.timeStamp);
     if (e.pointerType === "touch" && this.touches.has(e.pointerId)) {
       this.touches.set(e.pointerId, this.local(e));
       if (this.mode === "gesture") return this.updateGesture();
@@ -1353,15 +1361,34 @@ export class CanvasEngine {
     if (!this.raf) this.raf = requestAnimationFrame(this.frame);
   }
 
-  private frame = () => {
+  private perf: PerfMeter | null = null;
+  private tileBuf: Stroke[] = [];
+
+  /** Leistungsmessung ein/aus. `cb` läuft alle 500 ms – nur DOM schreiben, kein React-State. */
+  setProfiling(cb: ((s: PerfSample) => void) | null) {
+    this.perf = cb ? new PerfMeter(cb, () => ({ strokes: this.store.size, objects: this.store.objects().length })) : null;
+    // Beim Profiling läuft die Schleife durchgehend (siehe frame), damit FPS sichtbar sind.
+    this.request();
+  }
+
+  private frame = (now: number) => {
     this.raf = 0;
+    const perf = this.perf;
+    const t0 = perf ? performance.now() : 0;
+    let tb = 0;
     if (this.baseDirty) {
       this.baseDirty = false;
       this.renderBase();
+      if (perf) tb = performance.now() - t0;
     }
+    const drewInput = this.activeDirty && this.mode === "draw";
     if (this.activeDirty) {
       this.activeDirty = false;
       this.renderActive();
+    }
+    if (perf) {
+      perf.frame(now, performance.now() - t0, tb, drewInput);
+      if (!this.raf) this.raf = requestAnimationFrame(this.frame);
     }
   };
 
@@ -1373,6 +1400,7 @@ export class CanvasEngine {
     }
     const unlimited = this.tiles.size === 0;
     let budget = unlimited ? Infinity : 6;
+    const t0 = performance.now();
     const ctx = this.baseCtx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const ws = this.tiles.worldSize;
@@ -1385,7 +1413,9 @@ export class CanvasEngine {
     for (let ty = y0; ty <= y1; ty++)
       for (let tx = x0; tx <= x1; tx++) {
         let c = this.tiles.peek(tx, ty);
-        if (!c && budget > 0) {
+        // Zeitbudget statt fester Anzahl: bei vollen Blättern lieber über mehrere Frames
+        // nachzeichnen, als einen Frame lang zu blockieren (Stift-Latenz!).
+        if (!c && budget > 0 && (budget === 6 || performance.now() - t0 < (unlimited ? FULL_BUDGET_MS : TILE_BUDGET_MS))) {
           budget--;
           c = this.renderTile(tx, ty);
         }
@@ -1411,9 +1441,10 @@ export class CanvasEngine {
     drawBackground(ctx, r, this.tiles.scale, this.setup, this.pal, this.pageCount);
     for (const o of this.store.objects())
       if (o.kind === "image" && !this.hidden.has(o.id) && intersects(o.bbox, r)) drawImageObj(ctx, o, this.image(o.data.src));
-    for (const s of this.store.all()) {
+    for (const s of this.store.inRect(r, this.tileBuf)) {
       if (!this.hidden.has(s.id) && intersects(s.bbox, r)) drawStroke(ctx, s, this.pal.dark);
     }
+    this.perf?.tile();
     return this.tiles.peek(tx, ty);
   }
 

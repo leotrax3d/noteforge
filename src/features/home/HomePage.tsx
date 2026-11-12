@@ -5,7 +5,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CalendarDays, KeyRound, MoreVertical, PenLine, Pencil, Plus, Search, Tags, Trash2 } from "lucide-react";
+import { CalendarDays, KeyRound, MoreVertical, PenLine, Pencil, Plus, RefreshCw, Search, Settings, Tags, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -17,6 +17,8 @@ import { arrayMove } from "@/lib/tree";
 import { subjectIcon } from "@/lib/catalog";
 import type { Subject } from "@/lib/types";
 import { mutate, useAsync } from "@/lib/use-async";
+import { useCloudRev } from "@/lib/sync";
+import { usePrefs } from "@/store/prefs";
 import { useNav } from "@/store/nav";
 import { SubjectDialog } from "./SubjectDialog";
 import { UpcomingExams } from "./UpcomingExams";
@@ -36,7 +38,11 @@ export function useDragSensors() {
 
 export function HomePage() {
   const go = useNav((s) => s.go);
-  const { data: subjects, setData, error, reload } = useAsync(() => api.listSubjects(), []);
+  const cloudRev = useCloudRev((s) => s.rev);
+  const cloudRunning = useCloudRev((s) => s.running);
+  const cloudError = useCloudRev((s) => s.error);
+  const setDialog = usePrefs((s) => s.setDialog);
+  const { data: subjects, setData, error, reload } = useAsync(() => api.listSubjects(), [cloudRev]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Subject | null>(null);
   const [deleting, setDeleting] = useState<Subject | null>(null);
@@ -63,6 +69,11 @@ export function HomePage() {
         <Button variant="ghost" onClick={() => setAccounts(true)}><KeyRound /> Konten</Button>
         <Button variant="ghost" onClick={() => go({ view: "pen-test" })}>
           <PenLine /> Stift-Test
+        </Button>
+        <Button variant="ghost" size="icon" aria-label="Einstellungen" title={cloudError ? `Sync: ${cloudError}` : "Einstellungen (Strg+,)"}
+          className="relative" onClick={() => setDialog("settings")}>
+          {cloudRunning ? <RefreshCw className="animate-spin" /> : <Settings />}
+          {cloudError && <span className="absolute top-2 right-2 size-2 rounded-full bg-destructive" />}
         </Button>
         <ThemeToggle />
       </header>

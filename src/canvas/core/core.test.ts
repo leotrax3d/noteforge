@@ -127,3 +127,30 @@ describe("Umriss-Cache", () => {
     for (const p of eraseFromStroke(s, 50, 0, 5)!) expect(p.path).toBeUndefined();
   });
 });
+
+describe("StrokeStore.inRect (Raster-Index)", () => {
+  const at = (id: string, z: number, x: number, y: number, x2 = x + 5, y2 = y + 5) =>
+    makeStroke({ id, z, pen: "fountain", color: "#000", width: 2, opacity: 1, pressure: false, points: new Float32Array([x, y, 0.5, 0, 0, x2, y2, 0.5, 0, 8]) });
+
+  it("liefert genau die passenden Striche in Zeichenreihenfolge", () => {
+    const s = new StrokeStore();
+    const strokes: Stroke[] = [];
+    for (let i = 0; i < 2000; i++) strokes.push(at(`s${i}`, i, (i % 50) * 97, Math.floor(i / 50) * 131));
+    strokes.push(at("lang", 5000, -10_000, 10, 60_000, 12)); // über viele Zellen
+    s.load(strokes);
+    const r = { x: 600, y: 500, w: 512, h: 512 };
+    const want = s.all().filter((k) => k.bbox.x <= r.x + r.w && k.bbox.x + k.bbox.w >= r.x && k.bbox.y <= r.y + r.h && k.bbox.y + k.bbox.h >= r.y);
+    const got = s.inRect(r).filter((k) => want.includes(k));
+    expect(got.map((k) => k.id)).toEqual(want.map((k) => k.id));
+    expect(s.inRect(r).length).toBeLessThan(200);
+    expect(s.inRect({ x: 100, y: 0, w: 10, h: 30 }).some((k) => k.id === "lang")).toBe(true);
+  });
+
+  it("wird nach Änderungen neu aufgebaut", () => {
+    const s = new StrokeStore();
+    s.load([at("a", 0, 0, 0)]);
+    expect(s.inRect({ x: 5000, y: 5000, w: 10, h: 10 })).toHaveLength(0);
+    s.commit({ add: [at("b", 1, 5002, 5002)], remove: [] });
+    expect(s.inRect({ x: 5000, y: 5000, w: 10, h: 10 }).map((k) => k.id)).toEqual(["b"]);
+  });
+});
