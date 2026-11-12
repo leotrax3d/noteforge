@@ -124,6 +124,20 @@ function pencilPattern(ctx: CanvasRenderingContext2D, color: string): CanvasPatt
   return pat ?? color;
 }
 
+const mixCache = new Map<string, string>();
+/** Farbe mit Deckkraft `a` über Weiß (255) bzw. Schwarz (0) als deckende Farbe. */
+export function mixToward(color: string, bg: number, a: number) {
+  const k = `${color}|${bg}|${a}`;
+  let r = mixCache.get(k);
+  if (r) return r;
+  const m = /^#?([0-9a-f]{6})/i.exec(color);
+  const n = m ? parseInt(m[1], 16) : 0xfde047;
+  const ch = [n >> 16, (n >> 8) & 255, n & 255].map((c) => Math.round(bg + (c - bg) * a));
+  r = `rgb(${ch[0]},${ch[1]},${ch[2]})`;
+  mixCache.set(k, r);
+  return r;
+}
+
 export function displayColor(color: string, dark: boolean) {
   return dark ? invertLightness(color) : color;
 }
@@ -131,8 +145,18 @@ export function displayColor(color: string, dark: boolean) {
 /** Zeichnet einen Strich im aktuellen Welt-Transform. */
 export function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, dark: boolean, path = strokePath(s)) {
   const color = displayColor(s.color, dark);
+  if (s.pen === "highlighter") {
+    // Textmarker: deckend in der „aufgehellten“ Farbe, Mischung „darken“/„lighten“ –
+    // mehrfaches Übermalen derselben Stelle wird so nicht dunkler, Schrift darunter bleibt sichtbar.
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = dark ? "lighten" : "darken";
+    ctx.fillStyle = mixToward(color, dark ? 0 : 255, s.opacity);
+    ctx.fill(path, "nonzero");
+    ctx.globalCompositeOperation = "source-over";
+    return;
+  }
   ctx.globalAlpha = s.opacity;
-  ctx.globalCompositeOperation = s.pen === "highlighter" && !dark ? "multiply" : "source-over";
+  ctx.globalCompositeOperation = "source-over";
   ctx.fillStyle = s.pen === "pencil" ? pencilPattern(ctx, color) : color;
   ctx.fill(path, "nonzero"); // Selbstüberschneidungen bleiben gefüllt
   ctx.globalAlpha = 1;
