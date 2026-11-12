@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Check, Minus, Plus } from "lucide-react";
+import { Check, GripHorizontal, MoveHorizontal, Minus, Plus } from "lucide-react";
 import type { CanvasEngine } from "@/canvas/core/engine";
 import { makeObj, type CanvasObj, type TableObj, type TextObj } from "@/canvas/core/objects";
 import type { BBox, ElementTag } from "@/lib/types";
@@ -150,7 +150,7 @@ function Frame({ obj, engine, interactive, editingId, hoverId, onEditing, childr
       className={cn(
         "absolute rounded-sm",
         live ? "pointer-events-auto" : "pointer-events-none",
-        active && "outline outline-1 outline-foreground/25",
+        active && "rounded-b-md ring-1 ring-border shadow-sm",
       )}
       style={{ left: obj.x, top: obj.y, width: obj.w, transform: obj.angle ? `rotate(${obj.angle}rad)` : undefined }}
       onPointerEnter={() => hovered && setHeld(true)}
@@ -175,15 +175,15 @@ function Frame({ obj, engine, interactive, editingId, hoverId, onEditing, childr
       {children}
       {active && (
         // Kopfleiste wie in OneNote: Mitte = verschieben, rechts = Breite ändern
-        <div className="absolute inset-x-[-1px] -top-3.5 flex h-3.5 items-center rounded-t-sm bg-foreground/10 text-foreground/50" data-format-bar>
+        <div className="absolute inset-x-[-1px] -top-4 flex h-4 items-center rounded-t-md border border-b-0 bg-muted text-muted-foreground" data-format-bar>
           <button type="button" aria-label={`${label} verschieben`} title="Verschieben" tabIndex={-1}
             onPointerDown={(e) => { e.stopPropagation(); startMove(e.currentTarget, e.pointerId, e.clientX, e.clientY); }}
             className="mx-auto flex h-full w-16 cursor-move touch-none items-center justify-center gap-0.5 after:absolute after:-inset-y-3 after:inset-x-0 relative">
-            {[0, 1, 2, 3].map((i) => <span key={i} className="size-[3px] rounded-full bg-current" />)}
+            <GripHorizontal className="size-3.5" />
           </button>
           <button type="button" aria-label={`Breite von ${label} ändern`} title="Breite ändern" tabIndex={-1} onPointerDown={(e) => drag(e, "width")}
             className="relative flex h-full w-6 cursor-ew-resize touch-none items-center justify-center after:absolute after:-inset-3">
-            <svg width="12" height="8" viewBox="0 0 12 8" fill="currentColor" aria-hidden><path d="M0 4 4 0v8zM12 4 8 0v8z" /></svg>
+            <MoveHorizontal className="size-3" />
           </button>
         </div>
       )}
