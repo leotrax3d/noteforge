@@ -100,7 +100,7 @@ describe("StrokeStore", () => {
     const moved = { ...b, color: "#ff0000" };
     st.commit({ add: [moved], remove: [b] });
     expect(st.get("b")!.color).toBe("#ff0000");
-    expect(st.takePending()).toEqual({ upserts: [moved], deletes: [] });
+    expect(st.takePending()).toEqual({ upserts: [moved], objects: [], deletes: [] });
     st.undo();
     expect(st.get("b")!.color).toBe("#1e3a8a");
     st.undo();

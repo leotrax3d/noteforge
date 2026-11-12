@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { PenKind } from "@/canvas/core/model";
 import { PENS } from "@/canvas/core/pens";
 import type { EraserMode, Tool, ToolState } from "@/canvas/core/engine";
+import type { GuideKind } from "@/canvas/tools/guides";
 
 export interface Preset {
   id: string;
@@ -39,6 +40,8 @@ interface ToolsStore extends ToolState {
   setWidth: (w: number) => void;
   setEraser: (m: Partial<{ eraserMode: EraserMode; eraserSize: number }>) => void;
   setFingerDraws: (v: boolean) => void;
+  setShapeMode: (v: boolean) => void;
+  toggleGuide: (k: GuideKind) => void;
   applyPreset: (p: Preset) => void;
   addPreset: () => void;
   removePreset: (id: string) => void;
@@ -49,7 +52,7 @@ interface ToolsStore extends ToolState {
 const KEY = "noteforge-tools";
 const MAX_PRESETS = 8;
 
-type Persisted = Pick<ToolsStore, "tool" | "pen" | "color" | "width" | "eraserMode" | "eraserSize" | "fingerDraws" | "perPen" | "presets" | "customColors" | "dock">;
+type Persisted = Pick<ToolsStore, "tool" | "pen" | "color" | "width" | "eraserMode" | "eraserSize" | "fingerDraws" | "shapeMode" | "perPen" | "presets" | "customColors" | "dock">;
 
 function load(): Partial<Persisted> {
   try {
@@ -71,6 +74,8 @@ export const useTools = create<ToolsStore>((set, get) => ({
   eraserMode: "stroke",
   eraserSize: 14,
   fingerDraws: true,
+  shapeMode: false,
+  guides: { ruler: false, setsquare: false, compass: false },
   perPen: perPenDefault,
   presets: DEFAULT_PRESETS,
   customColors: [],
@@ -86,6 +91,8 @@ export const useTools = create<ToolsStore>((set, get) => ({
   setWidth: (width) => set((s) => ({ width, perPen: { ...s.perPen, [s.pen]: { ...s.perPen[s.pen], width } } })),
   setEraser: (m) => set({ tool: "eraser", ...m }),
   setFingerDraws: (fingerDraws) => set({ fingerDraws }),
+  setShapeMode: (shapeMode) => set({ shapeMode }),
+  toggleGuide: (k) => set((s) => ({ guides: { ...s.guides, [k]: !s.guides[k] } })),
   applyPreset: (p) =>
     set((s) => ({ tool: "pen", pen: p.pen, color: p.color, width: p.width, perPen: { ...s.perPen, [p.pen]: { color: p.color, width: p.width } } })),
   addPreset: () =>
@@ -100,9 +107,9 @@ export const useTools = create<ToolsStore>((set, get) => ({
 export const MAX_PRESET_COUNT = MAX_PRESETS;
 
 useTools.subscribe((s) => {
-  const { tool, pen, color, width, eraserMode, eraserSize, fingerDraws, perPen, presets, customColors, dock } = s;
+  const { tool, pen, color, width, eraserMode, eraserSize, fingerDraws, shapeMode, perPen, presets, customColors, dock } = s;
   try {
-    localStorage.setItem(KEY, JSON.stringify({ tool, pen, color, width, eraserMode, eraserSize, fingerDraws, perPen, presets, customColors, dock }));
+    localStorage.setItem(KEY, JSON.stringify({ tool, pen, color, width, eraserMode, eraserSize, fingerDraws, shapeMode, perPen, presets, customColors, dock }));
   } catch {
     /* ignorieren */
   }

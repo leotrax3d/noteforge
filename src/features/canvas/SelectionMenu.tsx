@@ -20,7 +20,7 @@ export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDo
   return (
     <div role="toolbar" aria-label="Auswahl" className="absolute z-30 flex -translate-x-1/2 items-center gap-1 rounded-xl border bg-card p-1 shadow-lg"
       style={{ top: Math.max(8, top), left }}>
-      <span className="px-2 text-sm text-muted-foreground tabular-nums">{sel.count} Striche</span>
+      <span className="px-2 text-sm text-muted-foreground tabular-nums">{sel.count} {sel.count === 1 ? "Element" : "Elemente"}</span>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button variant="ghost" size="icon" aria-label="Farbe ändern" title="Farbe ändern"><Palette /></Button>

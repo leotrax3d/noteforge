@@ -18,9 +18,17 @@ import { PSTRIDE, intersects, makeStroke, uid, type PenKind, type Stroke } from 
 import { PENS, buildPath, drawStroke, strokePath, toFreehand } from "./pens";
 import { StrokeStore, type Change } from "./store";
 import { TileCache } from "./tiles";
+import { hitObj, objCorners, transformObj, type CanvasObj, type ImageObj } from "./objects";
+import { recognize, densify, SHAPE_LABELS } from "../tools/shapes";
+import {
+  drawGuide, formatNumber, hitGuide, makeGuide, nearestEdge, rotateHandle, snapRotation, snapToCircle, snapToEdge,
+  type EdgeSnap, type Guide, type GuideKind,
+} from "../tools/guides";
+import { MM } from "./layout";
 import type { BBox } from "@/lib/types";
 
-export type Tool = "pen" | "eraser" | "lasso" | "pan";
+export type Tool = "pen" | "eraser" | "lasso" | "pan" | "text";
+export const GUIDE_KINDS: GuideKind[] = ["ruler", "setsquare", "compass"];
 export type EraserMode = "stroke" | "partial";
 
 export interface ToolState {
@@ -33,6 +41,10 @@ export interface ToolState {
   eraserSize: number;
   /** Ein Finger zeichnet (sonst: verschiebt). */
   fingerDraws: boolean;
+  /** Dauerhafter Formmodus: jeder Strich wird, wenn möglich, zur Form. */
+  shapeMode: boolean;
+  /** Eingeblendete Zeichenhilfen. */
+  guides: Record<GuideKind, boolean>;
 }
 
 export interface SelectionInfo {
@@ -48,9 +60,33 @@ export interface EngineEvents {
   /** Wird direkt aus dem Hot Path aufgerufen – nur DOM schreiben, kein React-State. */
   onCamera?: (scale: number) => void;
   onSelection?: (s: SelectionInfo | null) => void;
+  /** Text-/Tabellenobjekte haben sich geändert (für die DOM-Ebene). */
+  onObjects?: (objs: CanvasObj[]) => void;
+  /** Textwerkzeug: Tipp auf freie Stelle (Weltkoordinaten). */
+  onTextAt?: (w: Vec) => void;
+  /** Radialmenü öffnen (Bildschirmkoordinaten relativ zum Host). */
+  onRadial?: (p: Vec) => void;
+  /** Freihand → Form erkannt. */
+  onShape?: (label: string) => void;
 }
 
-type Mode = "idle" | "draw" | "erase" | "lasso" | "transform" | "pan" | "gesture";
+type Mode = "idle" | "draw" | "erase" | "lasso" | "transform" | "pan" | "gesture" | "guide" | "tap";
+
+interface GuideDrag {
+  g: Guide;
+  kind: "move" | "rotate" | "radius" | "two";
+  start: Vec;
+  gx: number;
+  gy: number;
+  angle: number;
+  a0: number;
+  /** Zwei-Finger: Finger-IDs und Startmitte. */
+  ids?: [number, number];
+  mid?: Vec;
+}
+
+const HOLD_MS = 500;
+const HOLD_SLOP = 5;
 type Handle = "move" | "scale" | "rotate";
 
 const HANDLE_R = 22; // Trefferradius ≥ 44 px Durchmesser
@@ -84,6 +120,7 @@ class Points {
 
 interface Selection {
   strokes: Stroke[];
+  objs: ImageObj[];
   bbox: BBox;
   center: Vec;
   tx: number;
@@ -111,8 +148,28 @@ export class CanvasEngine {
 
   private tool: ToolState = {
     tool: "pen", pen: "fountain", color: "#1e3a8a", width: 2.5,
-    eraserMode: "stroke", eraserSize: 14, fingerDraws: true,
+    eraserMode: "stroke", eraserSize: 14, fingerDraws: true, shapeMode: false,
+    guides: { ruler: false, setsquare: false, compass: false },
   };
+
+  // Zeichenhilfen
+  private guides = new Map<GuideKind, Guide>();
+  private gd: GuideDrag | null = null;
+  private snap: { g: Guide; edge?: EdgeSnap; r?: number } | null = null;
+
+  // Halten (Form / Radialmenü)
+  private holdTimer = 0;
+  private holdT = 0;
+  private holdPos: Vec = { x: 0, y: 0 };
+  private downPos: Vec = { x: 0, y: 0 };
+  private maxFromDown = 0;
+  private shaped = false;
+  private barrel = false;
+  private downT = 0;
+
+  // Objekte
+  private objLayer: HTMLElement | null = null;
+  private images = new Map<string, HTMLImageElement>();
 
   // Eingabe
   private palm = new PalmRejection();
@@ -173,7 +230,7 @@ export class CanvasEngine {
     a.addEventListener("pointercancel", this.onCancel);
     a.addEventListener("pointerleave", this.onLeave);
     a.addEventListener("wheel", this.onWheel, { passive: false });
-    a.addEventListener("contextmenu", prevent);
+    a.addEventListener("contextmenu", this.onContext);
     a.addEventListener("touchstart", prevent, { passive: false });
     this.store.onApply = this.onApply;
     this.store.onHistory = () => this.events.onHistory?.(this.store.canUndo, this.store.canRedo);
@@ -193,17 +250,70 @@ export class CanvasEngine {
     a.removeEventListener("pointercancel", this.onCancel);
     a.removeEventListener("pointerleave", this.onLeave);
     a.removeEventListener("wheel", this.onWheel);
-    a.removeEventListener("contextmenu", prevent);
+    a.removeEventListener("contextmenu", this.onContext);
+    clearTimeout(this.holdTimer);
     a.removeEventListener("touchstart", prevent);
   }
 
   // ================= Öffentliche API =================
 
-  load(strokes: Stroke[]) {
-    this.store.load(strokes);
+  load(strokes: Stroke[], objects: CanvasObj[] = []) {
+    this.store.load(strokes, objects);
     this.recomputeBottom();
     this.tiles.clear();
     this.invalidate(true);
+    this.events.onObjects?.(this.store.objects());
+  }
+
+  /** DOM-Ebene für Text/Tabellen; die Engine setzt nur ihren Kamera-Transform. */
+  setObjectLayer(el: HTMLElement | null) {
+    this.objLayer = el;
+    this.applyLayerTransform();
+  }
+
+  /** Weltkoordinaten der Ansichtsmitte. */
+  viewCenter(): Vec {
+    return this.toWorld(this.W / 2, this.H / 2);
+  }
+
+  /** Bildschirm (relativ zum Host) → Welt. */
+  screenToWorld(p: Vec): Vec {
+    return this.toWorld(p.x, p.y);
+  }
+
+  worldToScreen(p: Vec): Vec {
+    return this.toScreen(p.x, p.y);
+  }
+
+  get viewWidth() {
+    return this.W / this.cam.s;
+  }
+
+  addObject(o: CanvasObj) {
+    this.commitSelection();
+    this.store.commit({ add: [], remove: [], addObj: [o] });
+    if (o.kind === "image") this.select([], [o]);
+  }
+
+  /** Live-Änderung ohne Verlauf (z. B. beim Tippen). */
+  updateObjectLive(o: CanvasObj) {
+    const old = this.store.getObj(o.id);
+    this.store.applyRaw({ add: [], remove: [], removeObj: old ? [old] : [], addObj: [o] });
+  }
+
+  /** Abgeschlossene Bearbeitung in den Verlauf legen. */
+  recordObjectEdit(before: CanvasObj, after: CanvasObj) {
+    if (JSON.stringify(before) === JSON.stringify(after)) return;
+    this.store.record({ add: [], remove: [], removeObj: [before], addObj: [after] });
+  }
+
+  removeObject(id: string) {
+    const o = this.store.getObj(id);
+    if (o) this.store.commit({ add: [], remove: [], removeObj: [o] });
+  }
+
+  nextZ() {
+    return this.store.nextZ();
   }
 
   setPage(setup: PageSetup) {
@@ -225,7 +335,15 @@ export class CanvasEngine {
 
   setTool(t: ToolState) {
     if (t.tool !== "lasso" && this.sel && t.tool !== this.tool.tool) this.commitSelection();
-    this.tool = { ...t };
+    for (const k of GUIDE_KINDS) {
+      const on = !!t.guides?.[k];
+      if (on && !this.guides.has(k)) {
+        const c = this.viewCenter();
+        const off = k === "setsquare" ? { x: 0, y: -40 } : k === "compass" ? { x: 0, y: 60 } : { x: 0, y: 0 };
+        this.guides.set(k, makeGuide(k, { x: c.x + off.x / this.cam.s, y: c.y + off.y / this.cam.s }));
+      } else if (!on) this.guides.delete(k);
+    }
+    this.tool = { ...t, guides: { ...t.guides } };
     this.updateBlend();
     this.invalidate(false);
   }
@@ -274,8 +392,9 @@ export class CanvasEngine {
     if (!sel) return;
     const m = this.selMatrix();
     const next = sel.strokes.map((s) => ({ ...transformStroke(s, m), color }));
-    this.store.commit({ remove: sel.strokes, add: next });
-    this.select(next);
+    const objs = sel.objs.map((o) => transformObj(o, m));
+    this.store.commit({ remove: sel.strokes, add: next, removeObj: sel.objs, addObj: objs });
+    this.select(next, objs);
   }
 
   duplicateSelection() {
@@ -283,12 +402,14 @@ export class CanvasEngine {
     if (!sel) return;
     const m = this.selMatrix();
     const baked = sel.strokes.map((s) => transformStroke(s, m));
-    if (!isIdentity(m)) this.store.commit({ remove: sel.strokes, add: baked });
+    const bakedO = sel.objs.map((o) => transformObj(o, m));
+    if (!isIdentity(m)) this.store.commit({ remove: sel.strokes, add: baked, removeObj: sel.objs, addObj: bakedO });
     this.unhide();
     const off: Mat = [1, 0, 0, 1, 24 / this.cam.s, 24 / this.cam.s];
     const copies = baked.map((s) => ({ ...transformStroke(s, off, false), z: this.store.nextZ() }));
-    this.store.commit({ remove: [], add: copies });
-    this.select(copies);
+    const copiesO = bakedO.map((o) => ({ ...transformObj(o, off, uid()), z: this.store.nextZ() }));
+    this.store.commit({ remove: [], add: copies, addObj: copiesO });
+    this.select(copies, copiesO);
   }
 
   deleteSelection() {
@@ -296,7 +417,7 @@ export class CanvasEngine {
     if (!sel) return;
     this.sel = null;
     this.unhide();
-    this.store.commit({ remove: sel.strokes, add: [] });
+    this.store.commit({ remove: sel.strokes, add: [], removeObj: sel.objs });
     this.emitSelection();
   }
 
@@ -308,8 +429,9 @@ export class CanvasEngine {
     this.sel = null;
     if (!isIdentity(m)) {
       const next = sel.strokes.map((s) => transformStroke(s, m));
+      const objs = sel.objs.map((o) => transformObj(o, m));
       this.unhide();
-      this.store.commit({ remove: sel.strokes, add: next });
+      this.store.commit({ remove: sel.strokes, add: next, removeObj: sel.objs, addObj: objs });
     } else {
       this.unhide();
       this.tiles.invalidate(sel.bbox);
@@ -351,10 +473,19 @@ export class CanvasEngine {
     }
     this.tiles.clear(this.cam.s * this.dpr);
     this.events.onCamera?.(this.cam.s);
+    this.applyLayerTransform();
+  }
+
+  private applyLayerTransform() {
+    const el = this.objLayer;
+    if (!el) return;
+    const { x, y, s } = this.cam;
+    el.style.transform = `matrix(${s},0,0,${s},${-x * s},${-y * s})`;
   }
 
   private cameraChanged(rescaleSoon: boolean) {
     this.events.onCamera?.(this.cam.s);
+    this.applyLayerTransform();
     const target = this.cam.s * this.dpr;
     const ratio = target / this.tiles.scale;
     if (ratio > 2 || ratio < 0.5) this.rescaleNow = true; // zu weit weg → sofort neu
@@ -385,15 +516,21 @@ export class CanvasEngine {
   // ================= Store-Rückmeldungen =================
 
   private onApply = (c: Change) => {
+    const objChanged = !!(c.addObj?.length || c.removeObj?.length);
+    if (objChanged) {
+      for (const o of [...(c.removeObj ?? []), ...(c.addObj ?? [])]) if (o.kind === "image") this.tiles.invalidate(o.bbox);
+      if ([...(c.removeObj ?? []), ...(c.addObj ?? [])].some((o) => o.kind !== "image")) this.events.onObjects?.(this.store.objects());
+      for (const o of c.addObj ?? []) this.contentBottom = Math.max(this.contentBottom, o.bbox.y + o.bbox.h);
+    }
     // Reines Hinzufügen ohne Textmarker → direkt auf vorhandene Tiles zeichnen.
-    const additive = c.remove.length === 0 && c.add.every((s) => s.pen !== "highlighter" && !this.hidden.has(s.id));
+    const additive = !c.removeObj?.length && c.remove.length === 0 && c.add.every((s) => s.pen !== "highlighter" && !this.hidden.has(s.id));
     if (additive) {
       for (const s of c.add) this.paintOnTiles(s);
     } else {
       for (const s of c.remove) this.tiles.invalidate(s.bbox);
       for (const s of c.add) this.tiles.invalidate(s.bbox);
     }
-    if (c.remove.length) this.recomputeBottom();
+    if (c.remove.length || c.removeObj?.length) this.recomputeBottom();
     else for (const s of c.add) this.contentBottom = Math.max(this.contentBottom, s.bbox.y + s.bbox.h);
     const pc = this.calcPageCount();
     if (pc !== this.pageCount) {
@@ -417,6 +554,7 @@ export class CanvasEngine {
   private recomputeBottom() {
     let b = 0;
     for (const s of this.store.all()) b = Math.max(b, s.bbox.y + s.bbox.h);
+    for (const o of this.store.objects()) b = Math.max(b, o.bbox.y + o.bbox.h);
     this.contentBottom = b;
   }
 
@@ -438,6 +576,7 @@ export class CanvasEngine {
     const decision = this.palm.onDown(e.pointerType, e.pointerId, now);
 
     if (e.pointerType === "touch" && this.touches.size >= 2) {
+      if (this.mode === "guide" && this.activeType === "touch") return this.beginGuideTwo();
       if (this.mode !== "idle" && this.mode !== "gesture" && this.activeType !== "touch") return; // Stift/Maus aktiv → Handballen
       if (this.mode !== "gesture") this.startGesture(now);
       else this.g.fingers = Math.max(this.g.fingers, this.touches.size);
@@ -459,7 +598,23 @@ export class CanvasEngine {
     const penBarrel = e.pointerType === "pen" && !penEraser && (e.button === 2 || (e.buttons & 2) !== 0);
     let tool: Tool = penEraser ? "eraser" : penBarrel ? "lasso" : this.tool.tool;
     if (e.pointerType === "mouse" && e.button === 1) tool = "pan";
-    if (e.pointerType === "touch" && !this.tool.fingerDraws && tool !== "pan") tool = "pan";
+    const fingerPans = e.pointerType === "touch" && !this.tool.fingerDraws && tool !== "pan";
+    if (fingerPans) tool = "pan";
+    this.barrel = penBarrel;
+    this.downT = now;
+    this.downPos = q;
+    this.holdPos = q;
+    this.holdT = now;
+    this.maxFromDown = 0;
+    this.snap = null;
+
+    // Zeichenhilfen: Kante anlegen, verschieben, drehen
+    if (tool !== "pan" || fingerPans) {
+      const w = this.toWorld(q.x, q.y);
+      const r = this.guideAt(w, tool === "pen" && !fingerPans);
+      if (r === "snap") return this.beginStroke(e, q);
+      if (r) return this.beginGuideDrag(r.g, r.kind, w);
+    }
 
     // Auswahl-Griffe haben Vorrang
     if (this.sel && tool !== "pan") {
@@ -478,14 +633,197 @@ export class CanvasEngine {
       case "pan":
         this.mode = "pan";
         this.panLast = q;
+        if (e.pointerType === "touch") this.armHold();
+        return;
+      case "text":
+        this.mode = "tap";
         return;
     }
   };
+
+  private onContext = (e: MouseEvent) => {
+    e.preventDefault();
+    if (this.mode !== "idle") return;
+    this.rect = this.active.getBoundingClientRect();
+    this.events.onRadial?.({ x: e.clientX - this.rect.left, y: e.clientY - this.rect.top });
+  };
+
+  /** Bewegung für Halten-Erkennung verfolgen (ohne Timer pro Event). */
+  private trackHold(q: Vec) {
+    const d = Math.hypot(q.x - this.downPos.x, q.y - this.downPos.y);
+    if (d > this.maxFromDown) this.maxFromDown = d;
+    if (Math.hypot(q.x - this.holdPos.x, q.y - this.holdPos.y) > HOLD_SLOP) {
+      this.holdPos = q;
+      this.holdT = performance.now();
+    }
+  }
+
+  private armHold() {
+    clearTimeout(this.holdTimer);
+    this.holdTimer = window.setTimeout(this.onHoldTick, HOLD_MS);
+  }
+
+  private onHoldTick = () => {
+    this.holdTimer = 0;
+    if (this.mode !== "draw" && this.mode !== "pan") return;
+    const idle = performance.now() - this.holdT;
+    if (idle < HOLD_MS - 8) {
+      this.holdTimer = window.setTimeout(this.onHoldTick, HOLD_MS - idle);
+      return;
+    }
+    this.onHold();
+  };
+
+  private onHold() {
+    const still = this.maxFromDown < HOLD_SLOP * 2;
+    if (still && (this.mode === "pan" || (this.mode === "draw" && !this.snap))) {
+      // Long-Press → Radialmenü
+      this.pts.n = 0;
+      this.pred.n = 0;
+      const at = this.downPos;
+      this.endPointer();
+      this.events.onRadial?.(at);
+      return;
+    }
+    if (this.mode === "draw" && !this.shaped && !this.snap) {
+      if (this.applyShape()) {
+        this.activeDirty = true;
+        this.request();
+      } else this.armHold(); // weiter beobachten
+    }
+  }
+
+  /** Aktuellen Strich durch erkannte Form ersetzen. */
+  private applyShape(): boolean {
+    const pts: Vec[] = [];
+    const d = this.pts.data;
+    for (let i = 0; i < this.pts.n; i++) pts.push({ x: d[i * PSTRIDE], y: d[i * PSTRIDE + 1] });
+    const shape = recognize(pts);
+    if (!shape) return false;
+    const dense = densify(shape.points, Math.max(1.5, 3 / this.cam.s));
+    this.pts.n = 0;
+    this.pred.n = 0;
+    dense.forEach((v, i) => this.pts.push(v.x, v.y, 0.5, 0, i * 4));
+    this.shaped = true;
+    this.livePressure = true;
+    this.events.onShape?.(SHAPE_LABELS[shape.kind]);
+    return true;
+  }
+
+  // ---- Zeichenhilfen ----
+
+  /** Trifft w eine Zeichenhilfe? "snap" = Stift an Kante/Zirkel anlegen. */
+  private guideAt(w: Vec, drawing: boolean): "snap" | { g: Guide; kind: GuideDrag["kind"] } | null {
+    if (!this.guides.size) return null;
+    const tol = 22 / this.cam.s;
+    const compass = this.guides.get("compass");
+    if (compass) {
+      if (Math.hypot(w.x - compass.x, w.y - compass.y) <= tol) return { g: compass, kind: "move" };
+      const tip = rotateHandle(compass);
+      if (Math.hypot(w.x - tip.x, w.y - tip.y) <= tol) return { g: compass, kind: "radius" };
+    }
+    for (const k of ["setsquare", "ruler"] as const) {
+      const g = this.guides.get(k);
+      if (!g) continue;
+      if (drawing) {
+        const edge = nearestEdge(g, w, 18 / this.cam.s);
+        if (edge) {
+          this.snap = { g, edge };
+          return "snap";
+        }
+      }
+      const rh = rotateHandle(g);
+      if (Math.hypot(w.x - rh.x, w.y - rh.y) <= tol) return { g, kind: "rotate" };
+      if (hitGuide(g, w)) return { g, kind: "move" };
+    }
+    if (compass && drawing) {
+      const r = Math.max(2 * MM, Math.hypot(w.x - compass.x, w.y - compass.y));
+      compass.r = r;
+      this.snap = { g: compass, r };
+      return "snap";
+    }
+    return null;
+  }
+
+  private beginGuideDrag(g: Guide, kind: GuideDrag["kind"], w: Vec) {
+    this.mode = "guide";
+    this.gd = { g, kind, start: w, gx: g.x, gy: g.y, angle: g.angle, a0: Math.atan2(w.y - g.y, w.x - g.x) };
+    this.invalidate(false);
+  }
+
+  private beginGuideTwo() {
+    const gd = this.gd;
+    if (!gd) return;
+    const it = this.touches.entries();
+    const a = it.next().value!, b = it.next().value!;
+    gd.kind = "two";
+    gd.ids = [a[0], b[0]];
+    gd.mid = this.toWorld((a[1].x + b[1].x) / 2, (a[1].y + b[1].y) / 2);
+    gd.a0 = Math.atan2(b[1].y - a[1].y, b[1].x - a[1].x);
+    gd.gx = gd.g.x;
+    gd.gy = gd.g.y;
+    gd.angle = gd.g.angle;
+  }
+
+  private updateGuide(q: Vec) {
+    const gd = this.gd;
+    if (!gd) return;
+    const g = gd.g;
+    const w = this.toWorld(q.x, q.y);
+    if (gd.kind === "move") {
+      g.x = gd.gx + w.x - gd.start.x;
+      g.y = gd.gy + w.y - gd.start.y;
+    } else if (gd.kind === "rotate") {
+      g.angle = snapRotation(gd.angle + Math.atan2(w.y - g.y, w.x - g.x) - gd.a0);
+    } else if (gd.kind === "radius") {
+      g.r = Math.max(2 * MM, Math.hypot(w.x - g.x, w.y - g.y));
+      g.angle = Math.atan2(w.y - g.y, w.x - g.x);
+    }
+    this.invalidate(false);
+  }
+
+  private updateGuideTwo() {
+    const gd = this.gd;
+    if (!gd?.ids || !gd.mid) return;
+    const a = this.touches.get(gd.ids[0]), b = this.touches.get(gd.ids[1]);
+    if (!a || !b) return;
+    const mid = this.toWorld((a.x + b.x) / 2, (a.y + b.y) / 2);
+    const g = gd.g;
+    const angle = snapRotation(gd.angle + Math.atan2(b.y - a.y, b.x - a.x) - gd.a0);
+    const d = angle - gd.angle, c = Math.cos(d), s = Math.sin(d);
+    const rx = gd.gx - gd.mid.x, ry = gd.gy - gd.mid.y;
+    g.x = mid.x + rx * c - ry * s;
+    g.y = mid.y + rx * s + ry * c;
+    g.angle = angle;
+    this.invalidate(false);
+  }
+
+  /** Zirkel/Lineal-Info während des Zeichnens. */
+  private snapLabel(): string | undefined {
+    if (!this.snap || this.mode !== "draw" || this.pts.n < 2) return undefined;
+    const d = this.pts.data, i = (this.pts.n - 1) * PSTRIDE;
+    if (this.snap.r) {
+      const g = this.snap.g;
+      const a0 = Math.atan2(d[1] - g.y, d[0] - g.x);
+      let sweep = 0, prev = a0;
+      for (let k = 1; k < this.pts.n; k++) {
+        const a = Math.atan2(d[k * PSTRIDE + 1] - g.y, d[k * PSTRIDE] - g.x);
+        let da = a - prev;
+        if (da > Math.PI) da -= 2 * Math.PI;
+        if (da < -Math.PI) da += 2 * Math.PI;
+        sweep += da;
+        prev = a;
+      }
+      return `${Math.min(360, Math.round(Math.abs(sweep) * 180 / Math.PI))}°`;
+    }
+    return `${formatNumber(Math.hypot(d[i] - d[0], d[i + 1] - d[1]) / MM / 10)} cm`;
+  }
 
   private onMove = (e: PointerEvent) => {
     if (e.pointerType === "touch" && this.touches.has(e.pointerId)) {
       this.touches.set(e.pointerId, this.local(e));
       if (this.mode === "gesture") return this.updateGesture();
+      if (this.mode === "guide" && this.gd?.kind === "two") return this.updateGuideTwo();
     }
     if (e.pointerType === "pen") this.palm.notePen(performance.now());
     if (e.pointerId !== this.activeId) {
@@ -502,6 +840,8 @@ export class CanvasEngine {
     }
     switch (this.mode) {
       case "draw": {
+        this.trackHold(this.local(e));
+        if (this.shaped) return;
         const list = e.getCoalescedEvents?.();
         if (list && list.length) for (let i = 0; i < list.length; i++) this.addPoint(list[i]);
         else this.addPoint(e);
@@ -519,6 +859,7 @@ export class CanvasEngine {
         return;
       }
       case "lasso": {
+        this.trackHold(this.local(e));
         const w = this.toWorld(...xy(this.local(e)));
         this.lasso.push(w.x, w.y);
         this.invalidate(false);
@@ -526,8 +867,14 @@ export class CanvasEngine {
       }
       case "transform":
         return this.updateTransform(this.local(e));
+      case "guide":
+        return this.updateGuide(this.local(e));
+      case "tap":
+        this.trackHold(this.local(e));
+        return;
       case "pan": {
         const q = this.local(e);
+        this.trackHold(q);
         this.cam.x -= (q.x - this.panLast.x) / this.cam.s;
         this.cam.y -= (q.y - this.panLast.y) / this.cam.s;
         this.panLast = q;
@@ -546,12 +893,28 @@ export class CanvasEngine {
         else this.g.ids = ""; // neu ausrichten
         return;
       }
+      if (this.mode === "guide" && this.gd?.kind === "two") {
+        // Zurück zu Ein-Finger-Verschieben mit dem verbleibenden Finger
+        const rest = [...this.touches.entries()].find(([id]) => id === this.activeId) ?? [...this.touches.entries()][0];
+        if (rest) {
+          this.activeId = rest[0];
+          const w = this.toWorld(rest[1].x, rest[1].y);
+          this.gd = { ...this.gd, kind: "move", start: w, gx: this.gd.g.x, gy: this.gd.g.y, ids: undefined };
+          return;
+        }
+      }
     }
     if (e.pointerId !== this.activeId) return;
     switch (this.mode) {
       case "draw":
-        this.addPoint(e);
+        if (!this.shaped) this.addPoint(e);
         this.commitStroke();
+        break;
+      case "guide":
+        this.gd = null;
+        break;
+      case "tap":
+        if (this.maxFromDown < TAP_SLOP) this.events.onTextAt?.(this.toWorld(this.downPos.x, this.downPos.y));
         break;
       case "erase":
         this.endErase();
@@ -609,6 +972,11 @@ export class CanvasEngine {
   };
 
   private endPointer() {
+    clearTimeout(this.holdTimer);
+    this.holdTimer = 0;
+    this.gd = null;
+    this.snap = null;
+    this.shaped = false;
     if (this.activeId !== -1 && this.active.hasPointerCapture(this.activeId)) this.active.releasePointerCapture(this.activeId);
     this.activeId = -1;
     this.activeType = "";
@@ -622,6 +990,7 @@ export class CanvasEngine {
     // Laufende Ein-Finger-Aktion verwerfen
     if (this.mode === "draw") this.pts.n = 0;
     if (this.mode === "lasso") this.lasso = [];
+    if (this.mode === "guide") this.gd = null;
     if (this.mode === "erase") this.endErase();
     if (this.activeId !== -1) this.endPointer();
     this.mode = "gesture";
@@ -677,14 +1046,24 @@ export class CanvasEngine {
     this.t0 = e.timeStamp;
     this.pts.n = 0;
     this.pred.n = 0;
+    this.shaped = false;
     this.addPoint(e);
+    if (e.pointerType !== "mouse") this.armHold();
+    else if (!this.snap) this.armHold(); // Maus: nur Formerkennung (Long-Press nicht nötig, Rechtsklick)
     this.activeDirty = true;
     this.request();
   }
 
   private addPoint(e: PointerEvent, buf = this.pts) {
     const q = this.local(e);
-    const x = q.x / this.cam.s + this.cam.x, y = q.y / this.cam.s + this.cam.y;
+    let x = q.x / this.cam.s + this.cam.x, y = q.y / this.cam.s + this.cam.y;
+    const sn = this.snap;
+    if (sn) {
+      const v = sn.edge ? snapToEdge(sn.g, sn.edge, { x, y }) : snapToCircle(sn.g, sn.r!, { x, y });
+      x = v.x;
+      y = v.y;
+      if (sn.r && buf === this.pts) sn.g.angle = Math.atan2(y - sn.g.y, x - sn.g.x);
+    }
     const p = e.pointerType === "pen" ? (e.pressure > 0 ? e.pressure : 0.3) : 0.5;
     const tilt = Math.max(Math.abs(e.tiltX || 0), Math.abs(e.tiltY || 0));
     if (buf === this.pts && buf.n > 0) {
@@ -698,6 +1077,7 @@ export class CanvasEngine {
   }
 
   private commitStroke() {
+    if (this.tool.shapeMode && !this.shaped && !this.snap && this.pts.n > 2) this.applyShape();
     if (this.pts.n > 0) {
       const s = makeStroke({
         id: uid(),
@@ -772,15 +1152,32 @@ export class CanvasEngine {
   private endLasso() {
     const poly = this.lasso;
     this.lasso = [];
+    if (this.maxFromDown < TAP_SLOP) {
+      // Stifttaste kurz gedrückt → Radialmenü; sonst Tipp wählt Bild
+      if (this.barrel && performance.now() - this.downT < 450) {
+        this.events.onRadial?.(this.downPos);
+        return;
+      }
+      const w = this.toWorld(this.downPos.x, this.downPos.y);
+      const imgs = this.store.objects().filter((o): o is ImageObj => o.kind === "image" && hitObj(o, w.x, w.y));
+      if (imgs.length) this.select([], [imgs[imgs.length - 1]]);
+      return;
+    }
     const picked = this.store.all().filter((s) => strokeInLasso(s, poly));
-    if (picked.length) this.select(picked);
+    const objs = this.store.objects().filter((o): o is ImageObj => {
+      if (o.kind !== "image") return false;
+      const c = objCorners(o);
+      return c.filter((p) => pointInPolygon(p.x, p.y, poly)).length >= 3 || pointInPolygon(o.x + o.w / 2, o.y + o.h / 2, poly);
+    });
+    if (picked.length || objs.length) this.select(picked, objs);
   }
 
-  private select(strokes: Stroke[]) {
+  private select(strokes: Stroke[], objs: ImageObj[] = []) {
     this.unhide();
-    const bbox = unionBBox(strokes);
-    this.sel = { strokes, bbox, center: { x: bbox.x + bbox.w / 2, y: bbox.y + bbox.h / 2 }, tx: 0, ty: 0, theta: 0, s: 1 };
+    const bbox = unionAll(strokes, objs);
+    this.sel = { strokes, objs, bbox, center: { x: bbox.x + bbox.w / 2, y: bbox.y + bbox.h / 2 }, tx: 0, ty: 0, theta: 0, s: 1 };
     for (const s of strokes) this.hidden.add(s.id);
+    for (const o of objs) this.hidden.add(o.id);
     this.tiles.invalidate(bbox);
     this.invalidate(true);
     this.emitSelection();
@@ -789,7 +1186,7 @@ export class CanvasEngine {
   private unhide() {
     if (!this.hidden.size) return;
     for (const id of this.hidden) {
-      const s = this.store.get(id);
+      const s = this.store.get(id) ?? this.store.getObj(id);
       if (s) this.tiles.invalidate(s.bbox);
     }
     this.hidden.clear();
@@ -871,7 +1268,7 @@ export class CanvasEngine {
     const x = Math.min(...xs), y = Math.min(...ys);
     const colors = new Set(this.sel.strokes.map((s) => s.color));
     cb({
-      count: this.sel.strokes.length,
+      count: this.sel.strokes.length + this.sel.objs.length,
       rect: { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y },
       color: colors.size === 1 ? [...colors][0] : null,
     });
@@ -945,10 +1342,28 @@ export class CanvasEngine {
     if (!ctx) return undefined;
     const r = this.tiles.tileRect(tx, ty);
     drawBackground(ctx, r, this.tiles.scale, this.setup, this.pal, this.pageCount);
+    for (const o of this.store.objects())
+      if (o.kind === "image" && !this.hidden.has(o.id) && intersects(o.bbox, r)) drawImageObj(ctx, o, this.image(o.data.src));
     for (const s of this.store.all()) {
       if (!this.hidden.has(s.id) && intersects(s.bbox, r)) drawStroke(ctx, s, this.pal.dark);
     }
     return this.tiles.peek(tx, ty);
+  }
+
+  /** Dekodiertes Bild (gecacht); nach dem Laden werden betroffene Tiles neu gezeichnet. */
+  private image(src: string): HTMLImageElement {
+    let img = this.images.get(src);
+    if (!img) {
+      img = new Image();
+      img.decoding = "async";
+      img.onload = () => {
+        for (const o of this.store.objects()) if (o.kind === "image" && o.data.src === src) this.tiles.invalidate(o.bbox);
+        this.invalidate(true);
+      };
+      img.src = src;
+      this.images.set(src, img);
+    }
+    return img;
   }
 
   private worldTransform(ctx: CanvasRenderingContext2D) {
@@ -977,6 +1392,7 @@ export class CanvasEngine {
       const m = this.selMatrix();
       ctx.save();
       ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
+      for (const o of this.sel.objs) drawImageObj(ctx, o, this.image(o.data.src));
       for (const s of this.sel.strokes) drawStroke(ctx, s, dark, strokePath(s));
       ctx.restore();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1024,6 +1440,18 @@ export class CanvasEngine {
       ctx.setLineDash([]);
     }
 
+    if (this.guides.size) {
+      this.worldTransform(ctx);
+      const k = this.cam.s * dpr;
+      const label = this.snapLabel();
+      for (const k2 of GUIDE_KINDS) {
+        const g = this.guides.get(k2);
+        if (!g) continue;
+        const own = this.snap?.g === g;
+        drawGuide(ctx, g, { k, dark, edge: own ? this.snap?.edge?.edge : undefined, label: own ? label : undefined });
+      }
+    }
+
     const showEraser = this.mode === "erase" || (this.mode === "idle" && this.hover && (this.tool.tool === "eraser" || this.hoverEraser));
     if (showEraser && this.hover) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1039,6 +1467,31 @@ export class CanvasEngine {
 }
 
 const xy = (v: Vec): [number, number] => [v.x, v.y];
+
+function unionAll(strokes: Stroke[], objs: CanvasObj[]): BBox {
+  const parts: BBox[] = [];
+  if (strokes.length) parts.push(unionBBox(strokes));
+  for (const o of objs) parts.push(o.bbox);
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const b of parts) {
+    x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y);
+    x1 = Math.max(x1, b.x + b.w); y1 = Math.max(y1, b.y + b.h);
+  }
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+/** Bild (gedreht) in Weltkoordinaten zeichnen. */
+function drawImageObj(ctx: CanvasRenderingContext2D, o: ImageObj, img: HTMLImageElement | undefined) {
+  ctx.save();
+  ctx.translate(o.x + o.w / 2, o.y + o.h / 2);
+  if (o.angle) ctx.rotate(o.angle);
+  if (img && img.complete && img.naturalWidth) ctx.drawImage(img, -o.w / 2, -o.h / 2, o.w, o.h);
+  else {
+    ctx.fillStyle = "rgba(127,127,127,0.15)";
+    ctx.fillRect(-o.w / 2, -o.h / 2, o.w, o.h);
+  }
+  ctx.restore();
+}
 
 function prevent(e: Event) {
   e.preventDefault();

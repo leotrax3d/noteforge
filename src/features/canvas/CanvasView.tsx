@@ -3,11 +3,18 @@ import { Input } from "@/components/ui/input";
 import { useTheme } from "@/components/theme/theme-provider";
 import { CanvasEngine, type SelectionInfo } from "@/canvas/core/engine";
 import { elementToStroke, strokeToElement } from "@/canvas/core/codec";
-import type { Stroke } from "@/canvas/core/model";
+import { uid, type Stroke } from "@/canvas/core/model";
+import { elementToObj, makeObj, objToElement, type CanvasObj, type ImageObj, type TableObj, type TextObj } from "@/canvas/core/objects";
+import type { Vec } from "@/canvas/core/geometry";
 import { api } from "@/lib/api";
 import type { Page, PagePatch } from "@/lib/types";
-import { Toolbar } from "./Toolbar";
+import { Toolbar, type InsertKind } from "./Toolbar";
 import { SelectionMenu } from "./SelectionMenu";
+import { RadialMenu } from "./RadialMenu";
+import { ScreenshotCrop } from "./ScreenshotCrop";
+import { ObjectLayer } from "./objects/ObjectLayer";
+import { FormatBar } from "./objects/FormatBar";
+import { captureScreen, encodeImage, fileToImage, type LoadedImage } from "./objects/images";
 import { useTools } from "./tool-store";
 
 type SaveState = "saved" | "pending" | "saving" | "error";
@@ -29,7 +36,21 @@ export function CanvasView({ page, onRename, onPageChange }: {
   const [sel, setSel] = useState<SelectionInfo | null>(null);
   const [save, setSave] = useState<SaveState>("saved");
   const [loaded, setLoaded] = useState(false);
+  const [objects, setObjects] = useState<CanvasObj[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [radial, setRadial] = useState<Vec | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [shot, setShot] = useState<HTMLCanvasElement | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const layerElRef = useRef<HTMLDivElement | null>(null);
+  const tool = useTools((s) => s.tool);
   const { resolved } = useTheme();
+
+  const flash = useCallback((msg: string) => {
+    setToast(msg);
+    window.clearTimeout((flash as unknown as { t?: number }).t);
+    (flash as unknown as { t?: number }).t = window.setTimeout(() => setToast(null), 1600);
+  }, []);
 
   // ---- Autospeichern (entprellt, serialisiert) ----
   const saveRef = useRef({ timer: 0, first: 0, chain: Promise.resolve() as Promise<void> });
@@ -43,7 +64,11 @@ export function CanvasView({ page, onRename, onPageChange }: {
     const batch = engine.store.takePending();
     setSave("saving");
     s.chain = s.chain
-      .then(() => api.saveElements(page.id, batch.upserts.map((x) => strokeToElement(x, page.id)), batch.deletes))
+      .then(() => api.saveElements(
+        page.id,
+        [...batch.upserts.map((x) => strokeToElement(x, page.id)), ...batch.objects.map((o) => objToElement(o, page.id))],
+        batch.deletes,
+      ))
       .then(() => setSave(engine.store.hasPending ? "pending" : "saved"))
       .catch((err) => {
         console.error("Speichern fehlgeschlagen", err);
@@ -67,6 +92,7 @@ export function CanvasView({ page, onRename, onPageChange }: {
   useEffect(() => {
     const engine = new CanvasEngine(hostRef.current!, baseRef.current!, activeRef.current!);
     engineRef.current = engine;
+    engine.setObjectLayer(layerElRef.current);
     engine.events = {
       onHistory: (canUndo, canRedo) => setHistory((h) => (h.canUndo === canUndo && h.canRedo === canRedo ? h : { canUndo, canRedo })),
       onDirty: scheduleSave,
@@ -74,6 +100,14 @@ export function CanvasView({ page, onRename, onPageChange }: {
         if (zoomRef.current) zoomRef.current.textContent = `${Math.round(s * 100)} %`;
       },
       onSelection: setSel,
+      onObjects: (o) => setObjects([...o]),
+      onRadial: setRadial,
+      onShape: (label) => flash(`Form erkannt: ${label}`),
+      onTextAt: (w) => {
+        const o = makeObj<TextObj>({ id: uid(), kind: "text", z: engine.nextZ(), x: w.x, y: w.y - 16, w: 320, h: 44, angle: 0, data: { html: "" } });
+        engine.addObject(o);
+        setEditingId(o.id);
+      },
     };
     const t = useTools.getState();
     engine.setTool(t);
@@ -82,7 +116,10 @@ export function CanvasView({ page, onRename, onPageChange }: {
     api.listElements(page.id).then(
       (els) => {
         if (!alive) return;
-        engine.load(els.map(elementToStroke).filter((s): s is Stroke => !!s));
+        engine.load(
+          els.map(elementToStroke).filter((s): s is Stroke => !!s),
+          els.map(elementToObj).filter((o): o is CanvasObj => !!o),
+        );
         setLoaded(true);
       },
       (err) => {
@@ -129,6 +166,7 @@ export function CanvasView({ page, onRename, onPageChange }: {
       else if (mod && k === "0") engine.resetView();
       else if (mod && k === "s") void flush();
       else if ((k === "delete" || k === "backspace") && engine.hasSelection) engine.deleteSelection();
+      else if (mod && k === "t" && e.shiftKey) useTools.getState().setTool("text");
       else if (k === "escape") engine.commitSelection();
       else return;
       e.preventDefault();
@@ -142,6 +180,78 @@ export function CanvasView({ page, onRename, onPageChange }: {
   const commitTitle = () => title.trim() !== page.title && onRename(title);
 
   const e = () => engineRef.current;
+
+  // ---- Einfügen: Bilder, Screenshot, Tabelle, Text ----
+  const insertImage = useCallback((img: LoadedImage, at?: Vec) => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const maxW = engine.viewWidth * 0.6;
+    const k = Math.min(1, maxW / img.w);
+    const w = img.w * k, h = img.h * k;
+    const c = at ?? engine.viewCenter();
+    engine.addObject(makeObj<ImageObj>({ id: uid(), kind: "image", z: engine.nextZ(), x: c.x - w / 2, y: c.y - h / 2, w, h, angle: 0, data: { src: img.src } }));
+    useTools.getState().setTool("lasso"); // Bild ist ausgewählt → direkt verschieben/skalieren
+  }, []);
+
+  const insertFiles = useCallback(async (files: Iterable<File>, at?: Vec) => {
+    for (const f of files) {
+      if (!f.type.startsWith("image/")) continue;
+      try {
+        insertImage(await fileToImage(f), at);
+      } catch (err) {
+        console.error(err);
+        flash("Bild konnte nicht eingefügt werden");
+      }
+    }
+  }, [insertImage, flash]);
+
+  const onInsert = async (kind: InsertKind) => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    if (kind === "image") fileRef.current?.click();
+    else if (kind === "screenshot") {
+      try {
+        setShot(await captureScreen());
+      } catch (err) {
+        console.warn(err);
+        flash("Bildschirmaufnahme abgebrochen oder nicht verfügbar");
+      }
+    } else if (kind === "table") {
+      const c = engine.viewCenter();
+      const cells = Array.from({ length: 3 }, () => Array<string>(3).fill(""));
+      engine.addObject(makeObj<TableObj>({ id: uid(), kind: "table", z: engine.nextZ(), x: c.x - 180, y: c.y - 66, w: 360, h: 132, angle: 0, data: { cells } }));
+      useTools.getState().setTool("text");
+    } else {
+      const c = engine.viewCenter();
+      const o = makeObj<TextObj>({ id: uid(), kind: "text", z: engine.nextZ(), x: c.x - 160, y: c.y - 22, w: 320, h: 44, angle: 0, data: { html: "" } });
+      engine.addObject(o);
+      useTools.getState().setTool("text");
+      setEditingId(o.id);
+    }
+  };
+
+  // Strg+V mit Bild
+  useEffect(() => {
+    const onPaste = (ev: ClipboardEvent) => {
+      const files = [...(ev.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+      if (!files.length) return;
+      ev.preventDefault();
+      void insertFiles(files);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [insertFiles]);
+
+  // Textwerkzeug verlassen → Bearbeitung beenden
+  useEffect(() => {
+    if (tool !== "text" && editingId) {
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      setEditingId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool]);
+
+  const editingText = editingId && objects.find((o) => o.id === editingId)?.kind === "text";
   const saveLabel: Record<SaveState, string> = {
     saved: "Gespeichert", pending: "Ungespeicherte Änderungen", saving: "Speichert …", error: "Speichern fehlgeschlagen",
   };
@@ -168,9 +278,34 @@ export function CanvasView({ page, onRename, onPageChange }: {
           {saveLabel[save]}
         </p>
       </div>
-      <div ref={hostRef} data-testid="canvas-host" data-loaded={loaded} className="relative min-h-0 flex-1 touch-none overflow-hidden select-none">
+      <div ref={hostRef} data-testid="canvas-host" data-loaded={loaded} data-tool={tool}
+        className="relative min-h-0 flex-1 touch-none overflow-hidden select-none"
+        onDragOver={(ev) => {
+          if ([...ev.dataTransfer.items].some((i) => i.type.startsWith("image/"))) ev.preventDefault();
+        }}
+        onDrop={(ev) => {
+          const files = [...ev.dataTransfer.files];
+          if (!files.length) return;
+          ev.preventDefault();
+          const r = hostRef.current!.getBoundingClientRect();
+          void insertFiles(files, engineRef.current?.screenToWorld({ x: ev.clientX - r.left, y: ev.clientY - r.top }));
+        }}>
         <canvas ref={baseRef} className="absolute inset-0" />
         <canvas ref={activeRef} data-testid="canvas-input" className="absolute inset-0" style={{ touchAction: "none" }} />
+        <ObjectLayer
+          objects={objects}
+          engine={engineRef.current}
+          interactive={tool === "text"}
+          editingId={editingId}
+          onEditing={setEditingId}
+          layerRef={(el) => {
+            layerElRef.current = el;
+            engineRef.current?.setObjectLayer(el);
+          }}
+          dark={resolved === "dark"}
+        />
+        <input ref={fileRef} type="file" accept="image/*" multiple hidden aria-hidden
+          onChange={(ev) => { void insertFiles([...(ev.target.files ?? [])]); ev.target.value = ""; }} />
         <Toolbar
           canUndo={history.canUndo}
           canRedo={history.canRedo}
@@ -180,7 +315,23 @@ export function CanvasView({ page, onRename, onPageChange }: {
           onZoom={(f) => (f === "reset" ? e()?.resetView() : e()?.zoomBy(f))}
           page={page}
           onPageChange={onPageChange}
+          onInsert={(k) => void onInsert(k)}
         />
+        {editingText && <FormatBar onDone={() => { (document.activeElement as HTMLElement | null)?.blur?.(); setEditingId(null); }} />}
+        {radial && (
+          <RadialMenu at={radial} hostW={hostRef.current?.clientWidth ?? 800} hostH={hostRef.current?.clientHeight ?? 600}
+            onClose={() => setRadial(null)} onUndo={() => e()?.undo()} onRedo={() => e()?.redo()} />
+        )}
+        {toast && (
+          <div role="status" data-testid="canvas-toast"
+            className="pointer-events-none absolute bottom-20 left-1/2 z-30 -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm text-background shadow-lg">
+            {toast}
+          </div>
+        )}
+        {shot && (
+          <ScreenshotCrop shot={shot} onCancel={() => setShot(null)}
+            onDone={async (c) => { setShot(null); insertImage(await encodeImage(c, false)); }} />
+        )}
         {sel && (
           <SelectionMenu
             sel={sel}

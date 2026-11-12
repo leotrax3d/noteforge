@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode, type RefObject } from "react";
 import {
-  Eraser, GripVertical, Hand, Highlighter, Lasso, Pen, PenTool, Pencil, Plus, Redo2, Settings2, Trash2, Undo2,
+  Crop, DraftingCompass, Eraser, GripVertical, Hand, Highlighter, ImagePlus, Lasso, Pen, PenTool, Pencil, Plus, Redo2, Ruler,
+  Settings2, Shapes, Table, Trash2, TriangleRight, Type, Undo2,
 } from "lucide-react";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,10 @@ export interface ToolbarProps {
   onZoom: (factor: number | "reset") => void;
   page: Page;
   onPageChange: (patch: PagePatch) => void;
+  onInsert: (kind: InsertKind) => void;
 }
+
+export type InsertKind = "image" | "screenshot" | "table" | "text";
 
 function ToolButton({ label, active, onClick, children, className }: {
   label: string; active?: boolean; onClick: () => void; children: ReactNode; className?: string;
@@ -42,6 +46,16 @@ function ToolButton({ label, active, onClick, children, className }: {
       className={cn("relative shrink-0", active && "ring-2 ring-[var(--subject,var(--ring))]", className)}
     >
       {children}
+    </Button>
+  );
+}
+
+function Toggle({ label, icon, on, onClick }: { label: string; icon: ReactNode; on: boolean; onClick: () => void }) {
+  return (
+    <Button variant={on ? "secondary" : "ghost"} role="switch" aria-checked={on} aria-label={label}
+      className={cn("h-11 w-full justify-start", on && "ring-2 ring-ring")} onClick={onClick}>
+      {icon} <span className="flex-1 text-left">{label}</span>
+      <span className={cn("text-xs", on ? "text-primary" : "text-muted-foreground")}>{on ? "An" : "Aus"}</span>
     </Button>
   );
 }
@@ -99,7 +113,7 @@ export function ColorGrid({ value, onPick, highlight }: { value: string | null; 
 
 export function Toolbar(p: ToolbarProps) {
   const t = useTools();
-  const [open, setOpen] = useState<null | "pen" | "eraser" | "page">(null);
+  const [open, setOpen] = useState<null | "pen" | "eraser" | "page" | "guides" | "insert">(null);
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const vertical = t.dock === "left" || t.dock === "right";
@@ -220,6 +234,52 @@ export function Toolbar(p: ToolbarProps) {
 
       <ToolButton label="Lasso" active={t.tool === "lasso"} onClick={() => t.setTool("lasso")}><Lasso /></ToolButton>
       <ToolButton label="Verschieben" active={t.tool === "pan"} onClick={() => t.setTool("pan")}><Hand /></ToolButton>
+      <ToolButton label="Text" active={t.tool === "text"} onClick={() => t.setTool("text")}><Type /></ToolButton>
+
+      <Popover open={open === "guides"} onOpenChange={(o) => setOpen(o ? "guides" : null)}>
+        <PopoverAnchor asChild>
+          <div>
+            <ToolButton label="Hilfsmittel" active={open === "guides" || t.shapeMode || Object.values(t.guides).some(Boolean)}
+              onClick={() => setOpen(open === "guides" ? null : "guides")}>
+              <Ruler />
+            </ToolButton>
+          </div>
+        </PopoverAnchor>
+        <PopoverContent side={side} className="w-72 space-y-1">
+          <p className="pb-1 text-sm font-medium">Hilfsmittel</p>
+          <Toggle label="Lineal" icon={<Ruler />} on={t.guides.ruler} onClick={() => t.toggleGuide("ruler")} />
+          <Toggle label="Geodreieck" icon={<TriangleRight />} on={t.guides.setsquare} onClick={() => t.toggleGuide("setsquare")} />
+          <Toggle label="Zirkel" icon={<DraftingCompass />} on={t.guides.compass} onClick={() => t.toggleGuide("compass")} />
+          <Toggle label="Formmodus (immer Formen)" icon={<Shapes />} on={t.shapeMode} onClick={() => t.setShapeMode(!t.shapeMode)} />
+          <p className="pt-1 text-xs text-muted-foreground">
+            Zwei Finger drehen und verschieben Lineal und Geodreieck. Stift am Strichende kurz halten → Form.
+          </p>
+        </PopoverContent>
+      </Popover>
+
+      <Popover open={open === "insert"} onOpenChange={(o) => setOpen(o ? "insert" : null)}>
+        <PopoverAnchor asChild>
+          <div>
+            <ToolButton label="Einfügen" active={open === "insert"} onClick={() => setOpen(open === "insert" ? null : "insert")}>
+              <ImagePlus />
+            </ToolButton>
+          </div>
+        </PopoverAnchor>
+        <PopoverContent side={side} className="w-64 space-y-1">
+          <p className="pb-1 text-sm font-medium">Einfügen</p>
+          {([
+            ["image", "Bild …", <ImagePlus key="i" />],
+            ["screenshot", "Screenshot-Ausschnitt", <Crop key="c" />],
+            ["table", "Tabelle", <Table key="t" />],
+            ["text", "Textfeld", <Type key="x" />],
+          ] as [InsertKind, string, ReactNode][]).map(([k, label, icon]) => (
+            <Button key={k} variant="ghost" className="h-11 w-full justify-start" onClick={() => { setOpen(null); p.onInsert(k); }}>
+              {icon} {label}
+            </Button>
+          ))}
+          <p className="pt-1 text-xs text-muted-foreground">Bilder auch per Strg+V oder Drag &amp; Drop.</p>
+        </PopoverContent>
+      </Popover>
 
       <Sep vertical={vertical} />
       <div role="group" aria-label="Stift-Presets" className={cn("flex gap-0.5", vertical ? "flex-col" : "flex-row")}>

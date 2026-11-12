@@ -1,18 +1,31 @@
 import type { Stroke } from "./model";
+import type { CanvasObj } from "./objects";
 
 /** Änderung als umkehrbarer Befehl: erst `remove`, dann `add` (gleiche ID = ersetzen). */
 export interface Change {
   add: Stroke[];
   remove: Stroke[];
+  /** Objekte (Text, Bild, Tabelle) analog. */
+  addObj?: CanvasObj[];
+  removeObj?: CanvasObj[];
 }
 
-export const invert = (c: Change): Change => ({ add: c.remove, remove: c.add });
-export const isEmpty = (c: Change) => c.add.length === 0 && c.remove.length === 0;
+export const invert = (c: Change): Change => ({ add: c.remove, remove: c.add, addObj: c.removeObj, removeObj: c.addObj });
+export const isEmpty = (c: Change) =>
+  c.add.length === 0 && c.remove.length === 0 && !c.addObj?.length && !c.removeObj?.length;
+
+export interface PendingBatch {
+  upserts: Stroke[];
+  objects: CanvasObj[];
+  deletes: string[];
+}
 
 /** Strichdokument eines Blatts mit Undo/Redo-Stack und Speicher-Tracking. */
 export class StrokeStore {
   private map = new Map<string, Stroke>();
+  private objMap = new Map<string, CanvasObj>();
   private sorted: Stroke[] | null = [];
+  private sortedObj: CanvasObj[] | null = [];
   private undoStack: Change[] = [];
   private redoStack: Change[] = [];
   /** id → true = speichern, false = löschen */
@@ -22,13 +35,29 @@ export class StrokeStore {
   /** Nach jeder Änderung an Undo/Redo-Stack. */
   onHistory?: () => void;
 
-  load(strokes: Stroke[]) {
+  load(strokes: Stroke[], objects: CanvasObj[] = []) {
     this.map.clear();
+    this.objMap.clear();
     for (const s of strokes) {
       this.map.set(s.id, s);
       this.zNext = Math.max(this.zNext, s.z + 1);
     }
+    for (const o of objects) {
+      this.objMap.set(o.id, o);
+      this.zNext = Math.max(this.zNext, o.z + 1);
+    }
     this.sorted = null;
+    this.sortedObj = null;
+  }
+
+  getObj(id: string) {
+    return this.objMap.get(id);
+  }
+
+  /** Objekte nach z sortiert. */
+  objects(): CanvasObj[] {
+    if (!this.sortedObj) this.sortedObj = [...this.objMap.values()].sort((a, b) => a.z - b.z);
+    return this.sortedObj;
   }
 
   nextZ() {
@@ -64,6 +93,18 @@ export class StrokeStore {
       this.map.set(s.id, s);
       this.pending.set(s.id, true);
       if (s.z >= this.zNext) this.zNext = s.z + 1;
+    }
+    if (c.removeObj || c.addObj) {
+      for (const o of c.removeObj ?? []) {
+        this.objMap.delete(o.id);
+        this.pending.set(o.id, false);
+      }
+      for (const o of c.addObj ?? []) {
+        this.objMap.set(o.id, o);
+        this.pending.set(o.id, true);
+        if (o.z >= this.zNext) this.zNext = o.z + 1;
+      }
+      this.sortedObj = null;
     }
     this.sorted = null;
     this.onApply?.(c);
@@ -113,21 +154,25 @@ export class StrokeStore {
   }
 
   /** Ausstehende Änderungen für das Autospeichern abholen. */
-  takePending(): { upserts: Stroke[]; deletes: string[] } {
+  takePending(): PendingBatch {
     const upserts: Stroke[] = [];
+    const objects: CanvasObj[] = [];
     const deletes: string[] = [];
     for (const [id, save] of this.pending) {
       const s = this.map.get(id);
+      const o = s ? undefined : this.objMap.get(id);
       if (save && s) upserts.push(s);
-      else if (!s) deletes.push(id);
+      else if (save && o) objects.push(o);
+      else if (!s && !o) deletes.push(id);
     }
     this.pending.clear();
-    return { upserts, deletes };
+    return { upserts, objects, deletes };
   }
 
   /** Nach fehlgeschlagenem Speichern wieder vormerken. */
-  restorePending(p: { upserts: Stroke[]; deletes: string[] }) {
+  restorePending(p: PendingBatch) {
     for (const s of p.upserts) if (!this.pending.has(s.id)) this.pending.set(s.id, true);
+    for (const o of p.objects) if (!this.pending.has(o.id)) this.pending.set(o.id, true);
     for (const id of p.deletes) if (!this.pending.has(id)) this.pending.set(id, false);
   }
 }
