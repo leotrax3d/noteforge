@@ -13,6 +13,8 @@ import { toggleFocus, usePrefs } from "@/store/prefs";
 import { listenCloud, syncNowAndApply } from "@/lib/sync";
 import { typing } from "@/lib/shortcuts";
 import { SettingsDialog } from "@/features/settings/SettingsDialog";
+import { useSetup } from "@/store/setup";
+const Onboarding = lazy(() => import("@/features/onboarding/Onboarding").then((m) => ({ default: m.Onboarding })));
 import { ShortcutsDialog } from "@/features/settings/ShortcutsDialog";
 import { useCalc } from "@/features/calc/calc-store";
 
@@ -22,6 +24,7 @@ const CalcPanel = lazy(() => import("@/features/calc/CalcPanel").then((m) => ({ 
 export default function App() {
   const route = useNav((s) => s.route);
   const go = useNav((s) => s.go);
+  const setupDone = useSetup((s) => s.done);
 
   const dialog = usePrefs((s) => s.dialog);
   const calcOpen = useCalc((s) => s.open);
@@ -79,6 +82,7 @@ export default function App() {
       <SettingsDialog open={dialog === "settings"} onOpenChange={(o) => setDialog(o ? "settings" : null)} />
       {calcOpen && <Suspense fallback={null}><CalcPanel /></Suspense>}
       <ShortcutsDialog open={dialog === "shortcuts"} onOpenChange={(o) => setDialog(o ? "shortcuts" : null)} />
+      {!setupDone && <Suspense fallback={null}><Onboarding onDone={() => go({ view: "home" })} /></Suspense>}
     </ThemeProvider>
   );
 }

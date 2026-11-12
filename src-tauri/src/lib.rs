@@ -1,5 +1,6 @@
 mod commands;
 mod integrations;
+mod onboarding;
 mod recognition;
 mod reminders;
 mod sync;
@@ -20,9 +21,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
-            let dir = app.path().app_data_dir()?;
+            // Speicherort aus dem Assistenten (Standard: App-Datenordner)
+            let dir = onboarding::data_dir(app.handle())?;
             std::fs::create_dir_all(&dir)?;
-            let db = db::Db::open(&dir.join("noteforge.sqlite"))?;
+            let db = db::Db::open(&dir.join(onboarding::DB_FILE))?;
             app.manage(db);
             reminders::spawn(app.handle().clone());
             sync::spawn(app.handle().clone());
@@ -39,6 +41,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_version,
+            onboarding::data_location, onboarding::check_data_dir, onboarding::set_data_dir, onboarding::restart_app,
+            onboarding::app_settings, onboarding::set_app_setting, onboarding::untis_search_schools,
             sync::sync_status, sync::sync_connect, sync::sync_disconnect, sync::sync_now, sync::backup_now,
             recognition::recognition_status, recognition::recognize_strokes,
             recognition::ocr_image, recognition::recognize_page,

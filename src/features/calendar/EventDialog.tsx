@@ -7,6 +7,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { CalendarEvent, EventKind, Subject } from "@/lib/types";
+import { useSetup } from "@/store/setup";
 import { DEFAULT_REMINDER, KIND_LABEL, REMINDERS, fromInputs, toDateInput, toTimeInput } from "./dates";
 
 const selectCls =
@@ -14,7 +15,7 @@ const selectCls =
 const KINDS: EventKind[] = ["exam", "test", "deadline", "other"];
 
 export function newEvent(start: number, type: EventKind = "exam", subjectId: string | null = null): CalendarEvent {
-  return { id: "", subjectId, type, title: "", start, end: null, note: "", source: "manual", remindBefore: DEFAULT_REMINDER[type] };
+  return { id: "", subjectId, type, title: "", start, end: null, note: "", source: "manual", remindBefore: defaultReminder(type) };
 }
 
 interface Props {
@@ -69,7 +70,7 @@ export function EventDialog({ event, subjects, onOpenChange, onSave, onDelete }:
             {KINDS.map((k) => (
               <Button key={k} type="button" role="radio" aria-checked={v.type === k}
                 variant={v.type === k ? "default" : "outline"}
-                onClick={() => set({ type: k, remindBefore: remindTouched ? v.remindBefore : DEFAULT_REMINDER[k] })}>
+                onClick={() => set({ type: k, remindBefore: remindTouched ? v.remindBefore : defaultReminder(k) })}>
                 {KIND_LABEL[k]}
               </Button>
             ))}
@@ -136,4 +137,9 @@ export function EventDialog({ event, subjects, onOpenChange, onSave, onDelete }:
       </DialogContent>
     </Dialog>
   );
+}
+
+/** Standard-Erinnerung; sonstige Termine nach Assistent/Einstellungen. */
+function defaultReminder(k: EventKind): number | null {
+  return k === "other" ? useSetup.getState().reminderLead : DEFAULT_REMINDER[k];
 }

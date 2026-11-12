@@ -382,6 +382,19 @@ export class CanvasEngine {
     return this.store.nextZ();
   }
 
+  // ---- Eingabe-Einstellungen aus dem Assistenten ----
+  private input = { gamma: 1, pmax: 1, barrel: "lasso" as "lasso" | "eraser" | "radial" };
+
+  /** Druckkurve (kalibriert) und Belegung der Stifttaste. */
+  setInput(o: Partial<{ gamma: number; pmax: number; barrel: "lasso" | "eraser" | "radial" }>) {
+    Object.assign(this.input, o);
+  }
+
+  private curve(p: number) {
+    const v = Math.min(1, p / Math.max(0.05, this.input.pmax));
+    return this.input.gamma === 1 ? v : Math.pow(v, this.input.gamma);
+  }
+
   pageSetup(): PageSetup {
     return this.setup;
   }
@@ -742,11 +755,18 @@ export class CanvasEngine {
     // Stift-Radierende (Taste 5) / Seitentaste → Lasso
     const penEraser = e.pointerType === "pen" && (e.button === 5 || (e.buttons & 32) !== 0);
     const penBarrel = e.pointerType === "pen" && !penEraser && (e.button === 2 || (e.buttons & 2) !== 0);
-    let tool: Tool = penEraser ? "eraser" : penBarrel ? "lasso" : this.tool.tool;
+    const barrelTool: Tool = this.input.barrel === "eraser" ? "eraser" : "lasso";
+    let tool: Tool = penEraser ? "eraser" : penBarrel ? barrelTool : this.tool.tool;
     if (e.pointerType === "mouse" && e.button === 1) tool = "pan";
     const fingerPans = e.pointerType === "touch" && !this.tool.fingerDraws && tool !== "pan";
     if (fingerPans) tool = "pan";
     this.barrel = penBarrel;
+    if (penBarrel && this.input.barrel === "radial") {
+      // Stifttaste → Radialmenü sofort
+      this.activeId = -1;
+      this.events.onRadial?.(q);
+      return;
+    }
     this.downT = now;
     this.downPos = q;
     this.holdPos = q;
@@ -1277,7 +1297,7 @@ export class CanvasEngine {
       y = v.y;
       if (sn.r && buf === this.pts) sn.g.angle = Math.atan2(y - sn.g.y, x - sn.g.x);
     }
-    const raw = e.pointerType === "pen" ? (e.pressure > 0 ? e.pressure : this.lastP) : 0.5;
+    const raw = e.pointerType === "pen" ? (e.pressure > 0 ? this.curve(e.pressure) : this.lastP) : 0.5;
     this.lastP = raw;
     const tilt = Math.max(Math.abs(e.tiltX || 0), Math.abs(e.tiltY || 0));
     if (buf === this.pts) {

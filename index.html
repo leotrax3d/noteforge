@@ -17,7 +17,7 @@
         r.style.background = dark ? "#0a0a0a" : "#ffffff";
         try {
           var a = localStorage.getItem("noteforge-accent");
-          if (a) r.style.setProperty("--accent-user", a);
+          if (a) { r.style.setProperty("--accent-user", a); r.classList.add("nf-accent"); }
         } catch (e) {}
       })();
     </script>

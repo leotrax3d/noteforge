@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Cloud, DatabaseBackup, Keyboard, Link2, RefreshCw, Unplug } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Cloud, DatabaseBackup, Keyboard, Wand2, Link2, RefreshCw, Unplug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { clockText, cloud, fmtBytes, syncNowAndApply, type CloudStatus } from "@/lib/sync";
 import { usePrefs } from "@/store/prefs";
 import { useTools } from "@/features/canvas/tool-store";
+import { useSetup } from "@/store/setup";
 
 const INTERVALS = [
   { v: 0, label: "Nur manuell" }, { v: 5, label: "Alle 5 Minuten" }, { v: 15, label: "Alle 15 Minuten" },
@@ -179,7 +180,12 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
             hint="Seitenleiste rechts, senkrechte Werkzeugleiste gespiegelt – Bedienelemente auf der Seite der freien Hand." />
           <Switch id="perf" label="Leistungsanzeige" checked={prefs.perfOverlay} onChange={prefs.setPerfOverlay}
             hint="FPS, Frame-Zeit und Stift-Latenz auf dem Blatt (Strg+Umschalt+P)." />
-          <Button variant="outline" className="justify-self-start" onClick={() => prefs.setDialog("shortcuts")}><Keyboard /> Tastenkürzel anzeigen</Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => prefs.setDialog("shortcuts")}><Keyboard /> Tastenkürzel anzeigen</Button>
+            <Button variant="outline" data-testid="restart-onboarding" onClick={() => { prefs.setDialog(null); useSetup.getState().set({ done: false, step: 0 }); }}>
+              <Wand2 /> Einrichtungsassistent starten
+            </Button>
+          </div>
         </section>
 
         {msg && <p role={msg.ok ? "status" : "alert"} className={msg.ok ? "text-sm text-emerald-700 dark:text-emerald-400" : "text-sm text-destructive"}>{msg.text}</p>}

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Noteforge">
+  <title>Noteforge</title>
+  <!-- Grund: Indigo, in Hell und Dunkel gut lesbar -->
+  <rect width="64" height="64" rx="14" fill="#4338ca"/>
+  <!-- Notizblatt mit Eselsohr -->
+  <path d="M15 11h21l11 11v29a4 4 0 0 1-4 4H15a4 4 0 0 1-4-4V15a4 4 0 0 1 4-4z" fill="#ffffff"/>
+  <path d="M36 11v8a3 3 0 0 0 3 3h8z" fill="#c7d2fe"/>
+  <!-- Linien -->
+  <path d="M17 31h14M17 38h10" stroke="#a5b4fc" stroke-width="3" stroke-linecap="round"/>
+  <!-- Federspitze (Füller) -->
+  <path d="M53 29 40 50l-7 3 1-7 15-19.5z" fill="#1e1b4b"/>
+  <path d="M34.5 50.5 43 39" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round"/>
+  <circle cx="44" cy="37.5" r="1.8" fill="#ffffff"/>
+  <!-- Funke („forge“) -->
+  <path d="M52 4l2 5.5 5.5 2-5.5 2-2 5.5-2-5.5-5.5-2 5.5-2z" fill="#fbbf24"/>
+</svg>

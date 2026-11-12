@@ -6,6 +6,7 @@ import type {
   Tag, TaggedItem, TemplateMeta, TrashItem, VersionMeta, CalendarEvent,
 } from "./types";
 import { MemoryBackend } from "./memory-backend";
+import { pageDefaults } from "@/store/setup";
 
 export interface Backend {
   listSubjects(): Promise<Subject[]>;
@@ -117,7 +118,27 @@ const tauri: Backend = {
 
 export const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-export const api: Backend = inTauri ? tauri : new MemoryBackend();
+const base: Backend = inTauri ? tauri : new MemoryBackend();
+
+/** Neue Blätter mit dem im Assistenten gewählten Standard (endlos/A4, Hintergrund, Abstand). */
+function withPageDefaults(b: Backend): Backend {
+  const createPage = async (sectionId: string, parentPageId: string | null, title: string) => {
+    const p = await b.createPage(sectionId, parentPageId, title);
+    const d = pageDefaults();
+    if (p.mode === d.mode && p.background === d.background && p.bgSpacingMm === d.spacingMm) return p;
+    return b.updatePage(p.id, { mode: d.mode, background: d.background, bgSpacingMm: d.spacingMm });
+  };
+  // Proxy statt Kopie: Klassen-Backends (Speicher) behalten ihr `this`
+  return new Proxy(b, {
+    get(t, k, r) {
+      if (k === "createPage") return createPage;
+      const v = Reflect.get(t, k, r);
+      return typeof v === "function" ? v.bind(t) : v;
+    },
+  });
+}
+
+export const api: Backend = withPageDefaults(base);
 
 /**
  * Speichert eine exportierte Datei: in Tauri über den Speichern-Dialog + Rust-Command

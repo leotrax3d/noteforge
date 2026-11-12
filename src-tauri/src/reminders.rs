@@ -58,8 +58,11 @@ pub fn spawn(app: AppHandle) {
             let msgs: Vec<(String, String)> = {
                 let db = app.state::<Db>();
                 let conn = db.conn();
+                // Erinnerungen im Assistenten/Einstellungen abschaltbar („app.reminders“ = "0")
+                let enabled = crate::onboarding::app_setting(&conn, "app.reminders").as_deref() != Some("0");
                 match repo::take_due_reminders(&conn, now, GRACE_MS) {
-                    Ok(due) => due.iter().map(|e| (e.title.clone(), body(&conn, e, now))).collect(),
+                    Ok(due) if enabled => due.iter().map(|e| (e.title.clone(), body(&conn, e, now))).collect(),
+                    Ok(_) => Vec::new(),
                     Err(err) => {
                         eprintln!("Erinnerungen: {err}");
                         Vec::new()

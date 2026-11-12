@@ -30,6 +30,7 @@ import { FormatBar } from "./objects/FormatBar";
 import { captureScreen, encodeImage, fileToImage, type LoadedImage } from "./objects/images";
 import { useTools } from "./tool-store";
 import { usePrefs } from "@/store/prefs";
+import { useSetup } from "@/store/setup";
 import { PerfOverlay } from "./PerfOverlay";
 import { measureMetrics, placeText, type FontMetrics } from "@/canvas/core/text-snap";
 
@@ -185,6 +186,9 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
     };
     const t = useTools.getState();
     engine.setTool(t);
+    const applyInput = (x: ReturnType<typeof useSetup.getState>) => engine.setInput({ gamma: x.pressureGamma, pmax: x.pressureMax, barrel: x.barrel });
+    applyInput(useSetup.getState());
+    const unsubInput = useSetup.subscribe(applyInput);
     const unsub = useTools.subscribe((s) => engine.setTool(s));
     let alive = true;
     api.listElements(page.id).then(
@@ -211,6 +215,7 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
       alive = false;
       window.removeEventListener("beforeunload", onUnload);
       unsub();
+      unsubInput();
       engine.commitSelection();
       const id = page.id;
       void flush().then(() => api.autoVersion(id, VERSION_INTERVAL)).catch(console.error);

@@ -109,3 +109,6 @@
 .nf-free[data-reason="cancelled"] {
   background: repeating-linear-gradient(135deg, color-mix(in oklch, var(--free) 30%, transparent) 0 4px, transparent 4px 8px);
 }
+
+/* Akzentfarbe aus dem Assistenten/Einstellungen */
+.nf-accent { --primary: var(--accent-user); --primary-foreground: #fff; --ring: var(--accent-user); }
