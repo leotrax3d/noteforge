@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
+import { StartupNotices } from "@/features/update/StartupNotices";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { CalendarPage } from "@/features/calendar/CalendarPage";
 import { HomePage } from "@/features/home/HomePage";
@@ -84,6 +85,7 @@ export default function App() {
       <SettingsDialog open={dialog === "settings"} onOpenChange={(o) => setDialog(o ? "settings" : null)} />
       {calcOpen && <Suspense fallback={null}><CalcPanel /></Suspense>}
       <ShortcutsDialog open={dialog === "shortcuts"} onOpenChange={(o) => setDialog(o ? "shortcuts" : null)} />
+      <StartupNotices />
       <CommandPalette open={dialog === "palette"} onOpenChange={(o) => setDialog(o ? "palette" : null)} />
       {!setupDone && <Suspense fallback={null}><Onboarding onDone={() => go({ view: "home" })} /></Suspense>}
     </ThemeProvider>

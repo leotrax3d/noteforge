@@ -5,13 +5,15 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { clockText, cloud, fmtBytes, syncNowAndApply, type CloudStatus } from "@/lib/sync";
+import { clockText, cloud, syncNowAndApply, type CloudStatus } from "@/lib/sync";
 import { usePrefs } from "@/store/prefs";
 import { useTools } from "@/features/canvas/tool-store";
 import { useSetup, type BarrelAction } from "@/store/setup";
 import { useTheme } from "@/components/theme/theme-provider";
 import { setupApi } from "@/lib/setup-api";
 import { ACCENTS } from "@/features/onboarding/accents";
+import { BackupSection } from "@/features/backup/BackupSection";
+import { powerSaving, usePower, type PowerSetting } from "@/lib/power";
 
 const INTERVALS = [
   { v: 0, label: "Nur manuell" }, { v: 5, label: "Alle 5 Minuten" }, { v: 15, label: "Alle 15 Minuten" },
@@ -41,16 +43,36 @@ function Switch({ id, checked, onChange, label, hint }: { id: string; checked: b
 type CatId = "look" | "pen" | "notify" | "sync" | "backup";
 const CATS: { id: CatId; label: string; icon: React.ReactNode; words: string }[] = [
   { id: "look", label: "Darstellung", icon: <Palette />, words: "design hell dunkel system akzent farbe theme logo" },
-  { id: "pen", label: "Stift & Bedienung", icon: <PenLine />, words: "stift druck kalibrierung stifttaste linkshänder rechtshänder leistung fps tastenkürzel assistent einrichtung" },
+  { id: "pen", label: "Stift & Bedienung", icon: <PenLine />, words: "stift druck kalibrierung stifttaste linkshänder rechtshänder leistung akku energie sparmodus fps tastenkürzel assistent einrichtung" },
   { id: "notify", label: "Erinnerungen", icon: <Bell />, words: "erinnerungen benachrichtigung spitz hinweise tipps vorlaufzeit" },
   { id: "sync", label: "Sync", icon: <Cloud />, words: "nextcloud sync abgleich app-passwort server ordner" },
-  { id: "backup", label: "Sicherung", icon: <DatabaseBackup />, words: "backup sicherung speicherort datenordner" },
+  { id: "backup", label: "Sicherung", icon: <DatabaseBackup />, words: "backup sicherung sicherungen wiederherstellen aufbewahrung speicherort datenordner" },
 ];
 const fold = (x: string) => x.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 function matches(id: CatId, q: string) {
   const c = CATS.find((x) => x.id === id)!;
   const hay = fold(`${c.label} ${c.words}`);
   return fold(q).split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
+}
+
+function PowerSection() {
+  const p = usePower();
+  const opts: { v: PowerSetting; label: string }[] = [{ v: "auto", label: "Automatisch" }, { v: "on", label: "Immer an" }, { v: "off", label: "Aus" }];
+  return (
+    <section className="grid gap-2 rounded-lg border p-3" aria-labelledby="pw-h">
+      <h3 id="pw-h" className="font-medium">Leistungsmodus im Akkubetrieb</h3>
+      <div role="radiogroup" aria-label="Leistungsmodus" className="flex flex-wrap gap-1">
+        {opts.map((o) => (
+          <Button key={o.v} role="radio" aria-checked={p.setting === o.v} variant={p.setting === o.v ? "secondary" : "outline"}
+            className={cn("h-11", p.setting === o.v && "ring-2 ring-ring")} onClick={() => p.setSetting(o.v)}>{o.label}</Button>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Reduziert Animationen und Übergänge und drosselt die Hintergrund-Erkennung (Handschrift/OCR). Der Stift bleibt immer in voller Qualität.
+        {" "}Status: {p.onBattery == null ? "kein Akku erkannt" : p.onBattery ? "Akkubetrieb" : "Netzbetrieb"} · Sparmodus {powerSaving(p) ? "aktiv" : "aus"}.
+      </p>
+    </section>
+  );
 }
 
 function AppearanceSection() {
@@ -261,21 +283,9 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
           </div>
         </form>}
 
-        {show("backup") && <section className="grid gap-3 rounded-lg border p-3" aria-labelledby="bk-h">
-          <div className="flex items-center gap-2">
-            <DatabaseBackup className="size-5 text-muted-foreground" />
-            <h3 id="bk-h" className="mr-auto font-medium">Backup</h3>
-            <Button variant="outline" disabled={!!busy} onClick={() => void run("backup", async () => { await cloud.backupNow(); return "Backup erstellt."; })}>Jetzt sichern</Button>
-          </div>
-          <p className="text-xs text-muted-foreground">Täglich automatisch, die letzten 14 bleiben erhalten. Ordner: <span className="font-mono break-all">{st?.backupDir}</span></p>
-          {st?.backups.length ? (
-            <ul className="grid gap-1 text-sm" aria-label="Backups">
-              {st.backups.slice(0, 5).map((b) => (
-                <li key={b.name} className="flex justify-between gap-2"><span className="truncate font-mono text-xs">{b.name}</span><span className="text-muted-foreground">{fmtBytes(b.size)}</span></li>
-              ))}
-            </ul>
-          ) : <p className="text-sm text-muted-foreground">Noch kein Backup.</p>}
-        </section>}
+        {show("backup") && <BackupSection />}
+
+        {show("pen") && <PowerSection />}
 
         {show("pen") && <section className="grid gap-3 rounded-lg border p-3" aria-labelledby="ui-h">
           <h3 id="ui-h" className="font-medium">Bedienung</h3>

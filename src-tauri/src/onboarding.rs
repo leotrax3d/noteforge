@@ -48,7 +48,7 @@ pub fn data_location(app: AppHandle) -> Result<DataLocation> {
 #[derive(Serialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct DirCheck {
-    writable: bool,
+    pub writable: bool,
     /// Name des Cloud-Dienstes, wenn der Ordner in einem synchronisierten Ordner liegt
     cloud: Option<String>,
     has_data: bool,

@@ -218,8 +218,20 @@ export class StrokeStore {
     return this.pending.size > 0;
   }
 
+  /** Ausstehende Änderungen ansehen, ohne sie abzuholen (Write-Ahead-Journal). */
+  peekPending(): PendingBatch {
+    const b = this.collectPending();
+    return b;
+  }
+
   /** Ausstehende Änderungen für das Autospeichern abholen. */
   takePending(): PendingBatch {
+    const b = this.collectPending();
+    this.pending.clear();
+    return b;
+  }
+
+  private collectPending(): PendingBatch {
     const upserts: Stroke[] = [];
     const objects: CanvasObj[] = [];
     const deletes: string[] = [];
@@ -230,7 +242,6 @@ export class StrokeStore {
       else if (save && o) objects.push(o);
       else if (!s && !o) deletes.push(id);
     }
-    this.pending.clear();
     return { upserts, objects, deletes };
   }
 

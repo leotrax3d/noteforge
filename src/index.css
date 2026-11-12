@@ -112,3 +112,11 @@
 
 /* Akzentfarbe aus dem Assistenten/Einstellungen */
 .nf-accent { --primary: var(--accent-user); --primary-foreground: #fff; --ring: var(--accent-user); }
+
+/* Leistungsmodus im Akkubetrieb: Animationen/Übergänge aus (Stift-Rendering läuft im Canvas unverändert) */
+[data-power-saver] *, [data-power-saver] *::before, [data-power-saver] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}

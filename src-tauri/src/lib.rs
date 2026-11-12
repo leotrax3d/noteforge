@@ -1,5 +1,6 @@
 mod commands;
 mod integrations;
+mod journal;
 mod onboarding;
 mod shapes;
 mod recognition;
@@ -15,18 +16,37 @@ fn app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
+/// Ist der Updater in diesem Build konfiguriert?
+#[tauri::command]
+fn updater_enabled(app: tauri::AppHandle) -> bool {
+    app.config().plugins.0.contains_key("updater")
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
+            // Auto-Update nur in Release-Builds mit Updater-Konfiguration (öffentlicher Schlüssel, siehe docs/RELEASE.md)
+            if app.config().plugins.0.contains_key("updater") {
+                app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+            }
             // Speicherort aus dem Assistenten (Standard: App-Datenordner)
             let dir = onboarding::data_dir(app.handle())?;
             std::fs::create_dir_all(&dir)?;
             let db = db::Db::open(&dir.join(onboarding::DB_FILE))?;
+            // Absturzschutz: nicht bestätigte Journal-Einträge übernehmen
+            let journal = journal::Journal::new(&dir);
+            match journal.recover(&db) {
+                Ok(n) if n > 0 => eprintln!("{n} Änderungen aus dem Journal wiederhergestellt"),
+                Err(e) => eprintln!("Journal-Wiederherstellung fehlgeschlagen: {e}"),
+                _ => {}
+            }
             app.manage(db);
+            app.manage(journal);
             reminders::spawn(app.handle().clone());
             sync::spawn(app.handle().clone());
             // Das Fenster startet unsichtbar und zeigt sich nach dem ersten fertigen Frame (Frontend).
@@ -41,11 +61,14 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            app_version,
+            app_version, updater_enabled,
+            journal::journal_write, journal::journal_commit, journal::journal_recovered,
             onboarding::data_location, onboarding::check_data_dir, onboarding::set_data_dir, onboarding::restart_app,
             onboarding::app_settings, onboarding::set_app_setting, onboarding::untis_search_schools,
             shapes::list_shape_templates, shapes::save_shape_template, shapes::delete_shape_template,
             sync::sync_status, sync::sync_connect, sync::sync_disconnect, sync::sync_now, sync::backup_now,
+            sync::backup::backup_state, sync::backup::set_backup_config, sync::backup::backup_create,
+            sync::backup::backup_preview, sync::backup::backup_page_elements, sync::backup::backup_restore,
             recognition::recognition_status, recognition::recognize_strokes,
             recognition::ocr_image, recognition::recognize_page,
             commands::list_subjects, commands::create_subject, commands::update_subject,

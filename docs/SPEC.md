@@ -98,7 +98,26 @@ Vollbild-Assistent mit Fortschrittsanzeige, Zurück/Weiter, fortsetzbar (Schritt
 - Zugangsdaten im Windows Credential Manager.
 
 ## 9. Sync
-Datenordner (SQLite + Blobs) mit Nextcloud über WebDAV; Konflikte pro Blatt (neuere Version gewinnt, ältere als PageVersion erhalten). Automatisches lokales Backup täglich.
+Datenordner (SQLite + Blobs) mit Nextcloud über WebDAV; Konflikte pro Blatt (neuere Version gewinnt, ältere als PageVersion erhalten). Automatische Sicherungen siehe §10.1.
 
-## 10. Phasen
+## 10. Technik & Sicherheit
+### 10.1 Automatische Sicherungen
+- Täglich (Hintergrund-Thread, beim ersten Lauf des Tages) per `VACUUM INTO` als `noteforge-JJJJ-MM-TT.sqlite`; „Jetzt sichern“ legt zusätzlich eine mit Uhrzeit an.
+- Ordner wählbar (Standard `<Datenordner>/backups`), Aufbewahrung einstellbar: Standard 7 tägliche, 4 wöchentliche, 6 monatliche (je Tag/ISO-Woche/Monat die neueste); Einstellung `app.backup`.
+- Einstellungen → Sicherung: Liste, „Wiederherstellen …“ mit Vorschau. Die Vorschau zeigt den Baum Fach → Thema → Blatt mit Elementanzahl und Vergleich mit heute (unverändert, heute anders, fehlt heute) sowie ein Vorschaubild des Blatts.
+- Wiederherstellen: **komplett** (alle Tabellen außer `setting`/`sync_*`) oder **ausgewählte Fächer/Blätter** (Upsert inkl. Elemente, Tags, Assets; fehlende Fächer/Themen werden angelegt). Ältere Sicherungen werden vorher auf das aktuelle Schema migriert. Vor jeder Wiederherstellung wird der aktuelle Stand als `noteforge-vor-wiederherstellung-…` gesichert, diese Kopie wird nie automatisch gelöscht.
+### 10.2 Absturzschutz
+- SQLite im WAL-Modus (`synchronous=NORMAL`).
+- Write-Ahead-Journal `journal.ndjson` im Datenordner. Das Frontend schreibt nach jedem Strich (gebündelt 250 ms, spätestens alle 2,5 s) den ausstehenden Stand mit Sitzung und laufender Nummer, Rust schreibt per `fsync`. Nach erfolgreichem Speichern in SQLite folgt ein Commit-Eintrag; ist alles bestätigt, wird das Journal geleert. Verspätet eintreffende, schon bestätigte Stände werden verworfen.
+- Beim Start werden unbestätigte Einträge übernommen. Eine halb geschriebene letzte Zeile wird ignoriert, gelöschte Blätter übersprungen. Danach erscheint der Hinweis „X Änderungen wiederhergestellt“. Getestet durch hartes Beenden eines Kindprozesses (SIGKILL/TerminateProcess) während des Schreibens.
+### 10.3 Auto-Update
+- Tauri-Updater mit signierten Paketen aus GitHub-Releases (`latest.json`). Schlüssel-Setup und Release-Ablauf stehen in `docs/RELEASE.md`. Der Updater ist nur in Release-Builds mit Konfiguration aktiv.
+- Etwa 10 s nach dem Start (im Akkubetrieb 60 s) prüft die App im Hintergrund und zeigt dann den dezenten Knopf „Update verfügbar“. Dahinter liegt ein Dialog mit Changelog (Release-Text) und den Optionen „Jetzt installieren und neu starten“ oder „Beim Beenden installieren“.
+- Der Workflow `release.yml` baut die Releases (NSIS/MSI), signiert sie und lädt sie hoch.
+### 10.4 Leistungsmodus im Akkubetrieb
+- Netz- bzw. Akkustatus kommt über die Battery Status API (WebView2). Einstellung: automatisch (im Akkubetrieb), immer an oder aus.
+- Im Sparmodus sind CSS-Animationen und Übergänge (Spitz, Dialoge, Menüs) aus. Die Hintergrund-Erkennung (Handschrift/OCR für Suche und Auto-Titel) wartet viermal so lange, die Update-Prüfung später.
+- Das Stift-Rendering (Canvas, rAF, Eingabefilter) ist nie betroffen.
+
+## 11. Phasen
 0 Gerüst + Stift-Latenztest · 1 Struktur/DB/Startseite · 2 Canvas-Kern · 3 Werkzeuge · 4 OneNote-Funktionen · 5 Kalender · 6 WebUntis + Moodle · 7 Erkennung (Handschrift, LaTeX, OCR) · 8 Sync, Export, Feinschliff

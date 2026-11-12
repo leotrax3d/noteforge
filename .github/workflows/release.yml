@@ -24,15 +24,34 @@ jobs:
         with:
           workspaces: src-tauri
       - run: pnpm install --frozen-lockfile
+      # Auto-Update (docs/RELEASE.md): mit Repo-Variable TAURI_UPDATER_PUBKEY und Secret TAURI_SIGNING_PRIVATE_KEY
+      # wird der Updater eingebaut, die Installer signiert und latest.json hochgeladen.
+      - name: Updater-Konfiguration
+        shell: bash
+        env:
+          PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+          HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: |
+          if [ -n "$PUBKEY" ] && [ "$HAS_KEY" = "true" ]; then
+            node -e 'require("fs").writeFileSync("src-tauri/tauri.updater.json", JSON.stringify({bundle:{createUpdaterArtifacts:true},plugins:{updater:{pubkey:process.env.PUBKEY,endpoints:["https://github.com/${{ github.repository }}/releases/latest/download/latest.json"],windows:{installMode:"passive"}}}}))'
+            echo "TAURI_ARGS=--config src-tauri/tauri.updater.json" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Kein Updater-Schlüssel – Release ohne Auto-Update (siehe docs/RELEASE.md)"
+          fi
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          args: ${{ env.TAURI_ARGS }}
+          includeUpdaterJson: true
           tagName: v__VERSION__  # Tag legt die Action an (Version aus tauri.conf.json)
           releaseName: "Noteforge v__VERSION__"
+          # Wird im Update-Dialog als Changelog angezeigt
           releaseBody: |
             Windows-Installer zum Ausprobieren (noch nicht signiert – SmartScreen: „Weitere Informationen“ → „Trotzdem ausführen“).
             - `Noteforge_*_x64-setup.exe` (NSIS, Installation pro Benutzer, empfohlen)
             - `Noteforge_*_x64_de-DE.msi` (MSI)
           releaseDraft: false
-          prerelease: true
+          prerelease: false  # „latest“ muss auf das neueste Release zeigen (Update-Endpunkt)

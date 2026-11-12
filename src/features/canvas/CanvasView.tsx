@@ -45,6 +45,7 @@ const textMetrics = () => (metricsCache ??= measureMetrics(getComputedStyle(docu
 import { readingOrder, titleFromText, titleFromTexts, UNTITLED } from "@/lib/auto-title";
 import { backgroundDelayFactor, shouldThrottleBackground } from "@/lib/power";
 import { cn } from "@/lib/utils";
+import { journal } from "@/lib/journal";
 import { recognition, dataUrlBytes, errText, UNAVAILABLE } from "@/lib/recognition";
 import { inkToLatex } from "@/features/recognition/latex";
 import { LatexDialog, type LatexRequest } from "@/features/recognition/LatexDialog";
@@ -136,6 +137,11 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
     const engine = engineRef.current;
     if (!engine || !engine.store.hasPending) return s.chain;
     const batch = engine.store.takePending();
+    // Journal: alles bis hierher Geschriebene ist nach erfolgreichem Speichern erledigt
+    window.clearTimeout(jRef.current.timer);
+    jRef.current.timer = 0;
+    jRef.current.first = 0;
+    const jSeq = journal.current();
     setSave("saving");
     s.chain = s.chain
       .then(() => api.saveElements(
@@ -144,6 +150,7 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
         batch.deletes,
       ))
       .then(() => {
+        void journal.commit(page.id, jSeq).catch(console.error);
         setSave(engine.store.hasPending ? "pending" : "saved");
         // Erkennung für die Suche (Handschrift + OCR) im Hintergrund, erst nach einer Ruhepause
         clearTimeout(recTimer.current);
@@ -198,7 +205,26 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
   };
   useEffect(() => { if (autoRev) void computeAutoTitle(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [autoRev]);
 
+  // ---- Write-Ahead-Journal: gebündelt nach jedem Strich (250 ms), spätestens alle 2,5 s ----
+  const jRef = useRef({ timer: 0, first: 0, seq: 0 });
+  const journalSoon = useCallback(() => {
+    const j = jRef.current, now = Date.now();
+    if (!j.first) j.first = now;
+    window.clearTimeout(j.timer);
+    j.timer = window.setTimeout(() => {
+      j.timer = 0;
+      j.first = 0;
+      const engine = engineRef.current;
+      if (!engine?.store.hasPending) return;
+      const b = engine.store.peekPending();
+      void journal.write(page.id, [...b.upserts.map((x) => strokeToElement(x, page.id)), ...b.objects.map((o) => objToElement(o, page.id))], b.deletes)
+        .then((n) => { j.seq = n; })
+        .catch(console.error);
+    }, Math.max(0, Math.min(250, j.first + 2500 - now)));
+  }, [page.id]);
+
   const scheduleSave = useCallback(() => {
+    journalSoon();
     const s = saveRef.current;
     const now = Date.now();
     if (!s.first) s.first = now;
@@ -206,7 +232,7 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
     clearTimeout(s.timer);
     const wait = Math.max(0, Math.min(SAVE_DELAY, s.first + SAVE_MAX_WAIT - now));
     s.timer = window.setTimeout(() => void flush(), wait);
-  }, [flush]);
+  }, [flush, journalSoon]);
 
   // ---- Engine-Lebenszyklus ----
   useEffect(() => {

@@ -562,7 +562,7 @@ pub async fn sync_once(db: &Db) -> R<Option<Report>> {
 
 fn status(app: &AppHandle, db: &Db) -> R<SyncStatus> {
     let c = db.conn();
-    let dir = backup::dir(app);
+    let dir = backup::dir(app, &db.conn());
     Ok(SyncStatus {
         config: setting(&c, CONFIG_KEY)?,
         running: RUNNING.load(Ordering::SeqCst),
@@ -635,7 +635,7 @@ pub async fn sync_now(app: AppHandle, db: S<'_>) -> R<Option<Report>> {
 
 #[tauri::command]
 pub fn backup_now(app: AppHandle, db: S<'_>) -> R<SyncStatus> {
-    let dir = backup::dir(&app).ok_or_else(|| SyncErr::Config("Kein Datenordner".into()))?;
+    let dir = backup::dir(&app, &db.conn()).ok_or_else(|| SyncErr::Config("Kein Datenordner".into()))?;
     backup::create(&db, &dir, true)?;
     status(&app, &db)
 }
@@ -649,7 +649,8 @@ pub fn spawn(app: AppHandle) {
             let mut last_sync = 0i64;
             loop {
                 let db = app.state::<Db>();
-                if let Some(dir) = backup::dir(&app)
+                let bdir = backup::dir(&app, &db.conn());
+                if let Some(dir) = bdir
                     && let Err(e) = backup::create(&db, &dir, false) {
                         eprintln!("Backup fehlgeschlagen: {e}");
                     }
