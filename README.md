@@ -27,7 +27,12 @@ Tauri 2 · Rust · React · TypeScript · Tailwind · shadcn/ui · SQLite
 
 ```bash
 pnpm install
-pnpm tauri dev      # App starten (Stift-Latenztest)
+pnpm tauri dev      # App starten
+pnpm dev            # nur Frontend im Browser (In-Memory-Backend statt SQLite)
 pnpm test           # Frontend-Tests (Vitest)
+cd src-tauri && cargo test   # Rust-Tests (DB/Migrationen)
 pnpm tauri build    # Windows-Installer (NSIS + MSI)
 ```
+
+Die Datenbank liegt unter `%APPDATA%\de.noteforge.app\noteforge.sqlite` (Tauri `app_data_dir`).
+Migrationen: `src-tauri/migrations/NNNN_*.sql`, versioniert über `PRAGMA user_version`.
