@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   Calculator, Check, LineChart, Palette, RotateCcw, SlidersHorizontal, X, ZoomIn,
   Crop, DraftingCompass, Eraser, GripVertical, Hand, Highlighter, ImagePlus, Lasso, Pen, PenTool, Pencil, Plus, Redo2, Ruler,
@@ -6,6 +6,7 @@ import {
   Angle, MoveRight, PaintBucket, ScanSearch, Sparkles, Wand,
 } from "lucide-react";
 import { MoleculeIcon } from "@/features/chem/MoleculeIcon";
+import { HsvPicker } from "@/components/common/HsvPicker";
 import { HEADS, HEAD_LABELS, type Head } from "@/canvas/vector/vec";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
@@ -97,6 +98,8 @@ export function ColorGrid({ value, onPick, highlight }: { value: string | null; 
   const custom = useTools((s) => s.customColors);
   const addCustom = useTools((s) => s.addCustomColor);
   const colors = highlight ? HIGHLIGHTS : PALETTE;
+  const [mix, setMix] = useState(false);
+  const [draft, setDraft] = useState("#3366ff");
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-6 gap-0.5">
@@ -107,11 +110,14 @@ export function ColorGrid({ value, onPick, highlight }: { value: string | null; 
           {custom.map((c) => <Swatch key={c} color={c} label={`Eigene Farbe ${c}`} active={value === c} onClick={() => onPick(c)} />)}
         </div>
       )}
-      <label className="flex h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm hover:bg-accent">
-        <input type="color" className="size-7 cursor-pointer border-0 bg-transparent p-0" value={value ?? "#000000"}
-          onChange={(e) => onPick(e.target.value)} onBlur={(e) => addCustom(e.target.value)} aria-label="Eigene Farbe wählen" />
-        Eigene Farbe …
-      </label>
+      {mix ? (
+        <div className="space-y-2">
+          <HsvPicker value={draft} onChange={(c) => { setDraft(c); onPick(c); }} />
+          <Button variant="outline" className="h-11 w-full" onClick={() => { addCustom(draft); setMix(false); }}>Farbe merken</Button>
+        </div>
+      ) : (
+        <Button variant="outline" className="h-11 w-full" onClick={() => { setDraft(value ?? "#3366ff"); setMix(true); }}>Eigene Farbe …</Button>
+      )}
     </div>
   );
 }
@@ -135,6 +141,25 @@ const ITEM_ICON: Record<ToolItem, ReactNode> = {
   shapes: <Shapes />, heads: <MoveRight />, fill: <PaintBucket />, angle: <Angle />, zoomwrite: <ScanSearch />,
   laser: <Wand />, vanish: <Sparkles />,
 };
+
+/** Werkzeuggruppen: zugeklappt nur ein Symbol, aufgeklappt die einzelnen Werkzeuge. */
+const GROUP_OF: Record<ToolItem, string> = {
+  fountain: "schreiben", ballpoint: "schreiben", pencil: "schreiben", highlighter: "schreiben", presets: "schreiben",
+  eraser: "bearbeiten", lasso: "bearbeiten", pan: "bearbeiten", text: "bearbeiten",
+  guides: "formen", shapes: "formen", heads: "formen", fill: "formen", angle: "formen",
+  insert: "einfuegen", image: "einfuegen", calc: "einfuegen", plot: "einfuegen",
+  laser: "zeigen", vanish: "zeigen", zoomwrite: "zeigen",
+  undo: "verlauf", redo: "verlauf", zoom: "ansicht", page: "ansicht",
+};
+const GROUP_LABEL: Record<string, string> = {
+  schreiben: "Stifte", bearbeiten: "Radieren & Auswählen", formen: "Formen & Messen", einfuegen: "Einfügen",
+  zeigen: "Präsentieren", verlauf: "Verlauf", ansicht: "Ansicht",
+};
+function groupsOf(items: ToolItem[]): [string, ToolItem[]][] {
+  const m = new Map<string, ToolItem[]>();
+  for (const i of items) { const g = GROUP_OF[i]; m.set(g, [...(m.get(g) ?? []), i]); }
+  return [...m];
+}
 
 /** Kleine Vorschau einer Pfeilspitze (für Auswahl-Chips). */
 export function HeadIcon({ head, flip }: { head: Head; flip?: boolean }) {
@@ -176,6 +201,13 @@ const SIZE_PX: Record<BarSize, number> = { s: 44, m: 48, l: 56 };
 
 export function Toolbar(p: ToolbarProps) {
   const t = useTools();
+  const isActive = (i: ToolItem) =>
+    ["fountain", "ballpoint", "pencil", "highlighter"].includes(i) ? t.tool === "pen" && t.pen === i
+      : i === "zoomwrite" ? t.zoomWrite : (t.tool as string) === i;
+  const curItem: ToolItem = t.tool === "pen" ? t.pen : (t.tool as ToolItem);
+  const [expanded, setExpanded] = useState<string>(GROUP_OF[curItem] ?? "schreiben");
+  // Situation: beim Werkzeugwechsel (Taste, Stiftende, Radialmenü) die passende Gruppe aufklappen
+  useEffect(() => { const g = GROUP_OF[curItem]; if (g) setExpanded(g); }, [curItem]);
   const [open, setOpen] = useState<null | "pen" | "eraser" | "page" | "guides" | "insert" | "bar" | "preset" | "heads" | "fill" | "vanish">(null);
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
   const [editing, setEditing] = useState(false);
@@ -362,7 +394,23 @@ export function Toolbar(p: ToolbarProps) {
         <GripVertical className={cn("size-5", !vertical && "rotate-90")} />
       </button>
 
-      {t.items.map((item, i) => (
+      {!editing && groupsOf(t.items).map(([g, items]) => {
+        const activeItem = items.find(isActive);
+        const show = g === "verlauf" || g === "ansicht" || expanded === g;
+        if (show) return (
+          <div key={g} role="group" aria-label={GROUP_LABEL[g]} data-group={g} className={cn("flex shrink-0 items-center gap-0.5", vertical ? "flex-col" : "flex-row",
+            g !== "verlauf" && g !== "ansicht" && "rounded-xl bg-accent/40")}>
+            {items.map((item) => <div key={item} data-item={item} className={cn("relative flex shrink-0", vertical ? "flex-col" : "flex-row")}>{render(item)}</div>)}
+          </div>
+        );
+        return (
+          <ToolButton key={g} label={GROUP_LABEL[g]} active={!!activeItem} onClick={() => setExpanded(g)}>
+            {ITEM_ICON[activeItem ?? items[0]]}
+          </ToolButton>
+        );
+      })}
+
+      {editing && t.items.map((item, i) => (
         <div key={item} data-bar-index={i} data-item={item}
           className={cn("relative flex shrink-0", vertical ? "flex-col" : "flex-row",
             editing && "rounded-xl border border-dashed border-primary/60 touch-none",
