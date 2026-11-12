@@ -1,11 +1,11 @@
 import { useEffect } from "react";
-import { Eraser, Lasso, Redo2, Type, Undo2, X } from "lucide-react";
+import { Eraser, Lasso, Redo2, Sparkles, Type, Undo2, Wand, X } from "lucide-react";
 import type { PenKind } from "@/canvas/core/model";
 import { PENS } from "@/canvas/core/pens";
 import { PEN_ICONS } from "./Toolbar";
 import { useTools } from "./tool-store";
 
-const R = 84;
+const R = 96;
 const BTN = 52;
 
 /** Radialmenü (Stifttaste, Long-Press oder Rechtsklick). */
@@ -27,6 +27,8 @@ export function RadialMenu({ at, hostW, hostH, onClose, onUndo, onRedo }: {
     ...pens,
     { key: "eraser", label: "Radierer", Icon: Eraser, active: t.tool === "eraser", color: undefined, run: () => t.setTool("eraser") },
     { key: "lasso", label: "Lasso", Icon: Lasso, active: t.tool === "lasso", color: undefined, run: () => t.setTool("lasso") },
+    { key: "laser", label: "Laserpointer", Icon: Wand, active: t.tool === "laser", color: undefined, run: () => t.setTool("laser") },
+    { key: "vanish", label: "Verschwindende Tinte", Icon: Sparkles, active: t.tool === "vanish", color: undefined, run: () => t.setTool("vanish") },
     { key: "text", label: "Text", Icon: Type, active: t.tool === "text", color: undefined, run: () => t.setTool("text") },
     { key: "undo", label: "Rückgängig", Icon: Undo2, active: false, color: undefined, run: onUndo },
     { key: "redo", label: "Wiederholen", Icon: Redo2, active: false, color: undefined, run: onRedo },

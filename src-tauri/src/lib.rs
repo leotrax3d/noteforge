@@ -1,6 +1,7 @@
 mod commands;
 mod integrations;
 mod onboarding;
+mod shapes;
 mod recognition;
 mod reminders;
 mod sync;
@@ -43,6 +44,7 @@ pub fn run() {
             app_version,
             onboarding::data_location, onboarding::check_data_dir, onboarding::set_data_dir, onboarding::restart_app,
             onboarding::app_settings, onboarding::set_app_setting, onboarding::untis_search_schools,
+            shapes::list_shape_templates, shapes::save_shape_template, shapes::delete_shape_template,
             sync::sync_status, sync::sync_connect, sync::sync_disconnect, sync::sync_now, sync::backup_now,
             recognition::recognition_status, recognition::recognize_strokes,
             recognition::ocr_image, recognition::recognize_page,

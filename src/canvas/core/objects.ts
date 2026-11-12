@@ -2,6 +2,7 @@ import type { BBox, CanvasElement } from "@/lib/types";
 import { apply, type Mat } from "./geometry";
 import type { PlotSpec } from "@/features/calc/plot";
 import type { PdfRef } from "./pdf-raster";
+import type { VecSpec } from "../vector/vec";
 
 /** Nicht-Strich-Elemente (SPEC §3): Textcontainer, Bilder, Tabellen. */
 export type ObjKind = "text" | "image" | "table";
@@ -25,6 +26,8 @@ export interface ImageData {
   plot?: PlotSpec;
   /** PDF-Seite mit Original: wird zoomabhängig scharf gerendert, `src` dient als Vorschau. */
   pdf?: PdfRef;
+  /** Vektor-Element (Formen-Bibliothek, Linie mit Pfeilspitzen, Füllung, Winkel): `src` ist das gerenderte SVG/PNG. */
+  vec?: VecSpec;
 }
 export interface TableData { cells: string[][] }
 

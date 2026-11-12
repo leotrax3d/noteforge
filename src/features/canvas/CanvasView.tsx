@@ -31,6 +31,12 @@ import { useTools } from "./tool-store";
 import { usePrefs } from "@/store/prefs";
 import { useSetup } from "@/store/setup";
 import { PerfOverlay } from "./PerfOverlay";
+import { ZoomWriter } from "./ZoomWriter";
+import { ShapeLibrary } from "@/features/shapes/ShapeLibrary";
+import { decodeTemplate, encodeTemplate, shapesApi } from "@/features/shapes/shapes-api";
+import { vecObj } from "@/canvas/vector/vec-obj";
+import { fmtDeg, type VecSpec } from "@/canvas/vector/vec";
+import { MM } from "@/canvas/core/layout";
 import { SpitzHint } from "./SpitzHint";
 import { measureMetrics, placeText, type FontMetrics } from "@/canvas/core/text-snap";
 
@@ -100,6 +106,10 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
   const [replay, setReplay] = useState(false);
   const [versions, setVersions] = useState(false);
   const [tplDialog, setTplDialog] = useState(false);
+  const [shapes, setShapes] = useState<{ edit: VecSpec | null } | null>(null);
+  const [shapeTplName, setShapeTplName] = useState(false);
+  const [angle, setAngle] = useState<{ deg: number; at: Vec } | null>(null);
+  const zoomWrite = useTools((s) => s.zoomWrite);
   const [busy, setBusy] = useState<string | null>(null);
   const [latexReq, setLatexReq] = useState<(LatexRequest & { target?: TextObj }) | null>(null);
   const [ocrView, setOcrView] = useState<OcrView | null>(null);
@@ -217,6 +227,8 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
       onObjects: (o) => setObjects([...o]),
       onRadial: setRadial,
       onShape: (label) => flash(`Form erkannt: ${label}`),
+      onToast: (msg) => flash(msg),
+      onAngle: setAngle,
       onHoverObj: (id) => setHoverId(id),
       onTextAt: (w, free) => {
         const pl = placeText(engine.pageSetup(), w, free, textMetrics());
@@ -539,9 +551,34 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
     return () => { if (useCalc.getState().host === host) useCalc.getState().setHost(null); };
   }, [flash]);
 
+  const gridStep = () => (page.background === "blank" ? 5 : page.bgSpacingMm) * MM;
+
+  /** Vorlage aus der Formen-Bibliothek einfügen: oben links am Karo der Ansichtsmitte eingerastet. */
+  const insertVec = (spec: VecSpec) => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const c = engine.viewCenter(), g = gridStep();
+    const probe = vecObj(spec, { x: 0, y: 0 }, 0);
+    const at = { x: Math.round((c.x - probe.w / 2) / g) * g, y: Math.round((c.y - probe.h / 2) / g) * g };
+    if (spec.t === "coord") {
+      // Achsenursprung auf eine Karolinie legen (Rand 28 px im Element)
+      at.x = Math.round((at.x + 28) / g) * g - 28;
+      at.y = Math.round((at.y + 28) / g) * g - 28;
+    }
+    engine.addObject(vecObj(spec, at, engine.nextZ()));
+    useTools.getState().setTool("lasso");
+  };
+
+  useEffect(() => {
+    const open = () => setShapes({ edit: null });
+    window.addEventListener("nf-shapes", open);
+    return () => window.removeEventListener("nf-shapes", open);
+  }, []);
+
   const onInsert = async (kind: InsertKind) => {
     const engine = engineRef.current;
     if (!engine) return;
+    if (kind === "shapes") return setShapes({ edit: null });
     if (kind === "plot") {
       engine.commitSelection();
       useCalc.getState().openPlot(null, false);
@@ -711,9 +748,22 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
             onInkToLatex={() => void inkToFormula()}
             onOcr={() => void ocrSelection()}
             onEditPlot={plotSel ? () => useCalc.getState().openPlot(plotSel, true) : undefined}
+            onHeads={(h) => e()?.setSelectionHeads(h)}
+            onEditVec={() => setShapes({ edit: sel.vec })}
+            onSaveTemplate={() => setShapeTplName(true)}
             activeTags={new Set((tagMap.get(sel.ids[0]) ?? []).map((t) => t.tagId))}
             onTag={(tagId, on) => void toggleTag(sel.ids[0], tagId, on)}
           />
+        )}
+        {zoomWrite && loaded && engineRef.current && <ZoomWriter engine={engineRef.current} dark={resolved === "dark"} hostRef={hostRef} />}
+        {angle && tool === "angle" && (
+          <div role="dialog" aria-label="Winkel" data-testid="angle-result"
+            className="absolute z-30 flex -translate-x-1/2 items-center gap-1 rounded-xl border bg-card p-1 pl-3 shadow-lg"
+            style={{ left: angle.at.x, top: Math.max(8, angle.at.y + 28) }}>
+            <span className="mr-1 text-lg font-semibold tabular-nums">{fmtDeg(angle.deg)}</span>
+            <Button variant="secondary" className="h-11" onClick={() => e()?.insertAngleLabel()}>Als Beschriftung einfügen</Button>
+            <Button variant="ghost" className="h-11" onClick={() => e()?.resetAngle()}>Neu messen</Button>
+          </div>
         )}
         {replay && engineRef.current && <InkReplay engine={engineRef.current} onClose={() => setReplay(false)} />}
         {busy && (
@@ -728,6 +778,28 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
       <VersionsDialog open={versions} onOpenChange={setVersions} pageId={page.id}
         beforeAction={async () => { engineRef.current?.commitSelection(); await flush(); }}
         onRestored={() => onPageReplaced?.()} />
+      <ShapeLibrary open={!!shapes} onOpenChange={(o) => !o && setShapes(null)} grid={gridStep()} color={useTools.getState().color}
+        edit={shapes?.edit ?? null} onInsert={insertVec} onUpdate={(spec) => e()?.updateSelectedVec(spec)}
+        onInsertTemplate={(t) => {
+          const engine = engineRef.current;
+          if (!engine) return;
+          try {
+            const d = decodeTemplate(t.data), c = engine.viewCenter();
+            engine.insertElements(d.strokes, d.objs, { x: c.x - d.w / 2, y: c.y - d.h / 2 });
+            useTools.getState().setTool("lasso");
+          } catch (err) {
+            console.error(err);
+            flash("Vorlage konnte nicht eingefügt werden");
+          }
+        }} />
+      <NameDialog open={shapeTplName} onOpenChange={setShapeTplName} title="Als Vorlage speichern" label="Name der Form"
+        initial="" submitLabel="Speichern"
+        onSubmit={(name) => void runBusy(async () => {
+          const el = engineRef.current?.selectionElements();
+          if (!el) return;
+          await shapesApi.save(name, encodeTemplate(el.strokes, el.objs, el.bbox));
+          flash(`Form „${name}“ gespeichert – Formen-Bibliothek → Eigene`);
+        }, "Form konnte nicht gespeichert werden")} />
       <NameDialog open={tplDialog} onOpenChange={setTplDialog} title="Als Vorlage speichern" label="Name der Vorlage"
         initial={page.title} submitLabel="Speichern"
         onSubmit={(name) => void runBusy(async () => {
@@ -751,6 +823,12 @@ function toolKey(k: string, shift: boolean): boolean {
     case "t": t.setTool("text"); return true;
     case "h": t.setTool("pan"); return true;
     case "r": t.setShapeMode(!t.shapeMode); return true;
+    case "f": t.setTool("fill"); return true;
+    case "w": t.setTool("angle"); return true;
+    case "p": t.setTool("laser"); return true;
+    case "v": t.setTool("vanish"); return true;
+    case "z": t.setZoom({ zoomWrite: !t.zoomWrite }); return true;
+    case "s": window.dispatchEvent(new CustomEvent("nf-shapes")); return true;
   }
   const n = Number(k);
   if (Number.isInteger(n) && n >= 1 && n <= 9 && t.presets[n - 1]) {

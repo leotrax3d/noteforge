@@ -35,8 +35,12 @@ import type { BBox } from "@/lib/types";
 import { PdfRaster } from "./pdf-raster";
 import { getAsset } from "@/lib/api";
 import { PressureSmoother, clampPressureEdges, minDistWorld } from "./ink-filter";
+import { makeObj } from "./objects";
+import { angleDeg, fmtDeg, type AngleSpec, type FillSpec, type Head, type LineSpec, type VecSpec } from "../vector/vec";
+import { snapToTerminal, updateVecObj, vecLinePts, vecObj } from "../vector/vec-obj";
+import { findRegion, paintRegion, type DrawWalls } from "../vector/fill";
 
-export type Tool = "pen" | "eraser" | "lasso" | "pan" | "text";
+export type Tool = "pen" | "eraser" | "lasso" | "pan" | "text" | "fill" | "angle" | "laser" | "vanish";
 export const GUIDE_KINDS: GuideKind[] = ["ruler", "setsquare", "compass"];
 export type EraserMode = "stroke" | "partial";
 
@@ -56,6 +60,14 @@ export interface ToolState {
   guides: Record<GuideKind, boolean>;
   /** Deckkraft aus Stift-Preset (null/fehlt = Standard des Stifts). */
   opacity?: number | null;
+  /** Pfeilspitzen für Linien (Lineal, Freihand → Form) */
+  head0?: Head;
+  head1?: Head;
+  /** Füllwerkzeug: Deckkraft 0..1 und Schraffur (Winkel in Grad, Abstand in Welt) */
+  fillOpacity?: number;
+  fillHatch?: { angle: number; gap: number } | null;
+  /** Verschwindende Tinte: Sichtbarkeit in ms */
+  vanishMs?: number;
 }
 
 export interface SelectionInfo {
@@ -68,6 +80,10 @@ export interface SelectionInfo {
   /** Anzahl ausgewählter Striche bzw. Bilder (für Erkennung: Handschrift/Formel bzw. OCR). */
   strokes: number;
   images: number;
+  /** Pfeilspitzen änderbar (Vektorlinien oder gerade Striche ausgewählt) */
+  heads: { head0: Head; head1: Head } | null;
+  /** Genau ein bearbeitbares Vektor-Element (Koordinatensystem, Zahlenstrahl …) */
+  vec: VecSpec | null;
 }
 
 export interface EngineEvents {
@@ -86,6 +102,10 @@ export interface EngineEvents {
   onHoverObj?: (id: string | null) => void;
   /** Freihand → Form erkannt. */
   onShape?: (label: string) => void;
+  /** Kurzer Hinweis (z. B. Füllen nicht möglich). */
+  onToast?: (msg: string) => void;
+  /** Winkelmessung fertig (Bildschirmposition des Scheitels) bzw. zurückgesetzt (null). */
+  onAngle?: (a: { deg: number; at: Vec } | null) => void;
 }
 
 type Mode = "idle" | "draw" | "erase" | "lasso" | "transform" | "pan" | "gesture" | "guide" | "tap";
@@ -215,6 +235,17 @@ export class CanvasEngine {
   private rawSeen = false;
   private inkDebug = false;
   private dbg: { pts: Float32Array; n: number; pen: PenKind; width: number; pressure: boolean } | null = null;
+
+  // Neue Werkzeuge (Füllen, Winkel, Laser, verschwindende Tinte, Pfeilspitzen)
+  private tapTool: Tool | null = null;
+  private ephemeral: "laser" | "vanish" | null = null;
+  private fading: { t: number; s: Stroke }[] = [];
+  private laserTail: { t: number; pts: Float32Array } | null = null;
+  private shapeVec: { a: Vec; b: Vec; head0: Head; head1: Head } | null = null;
+  private anglePts: Vec[] = [];
+  private angleLines: { a: Vec; b: Vec; tap: Vec }[] = [];
+  private angleHover: Vec | null = null;
+  private angleDone: { a: Vec; b: Vec; c: Vec } | null = null;
 
   // Radierer
   private erased = { add: new Map<string, Stroke>(), remove: new Map<string, Stroke>() };
@@ -429,6 +460,7 @@ export class CanvasEngine {
         this.guides.set(k, makeGuide(k, { x: c.x + off.x / this.cam.s, y: c.y + off.y / this.cam.s }));
       } else if (!on) this.guides.delete(k);
     }
+    if (t.tool !== "angle" && (this.anglePts.length || this.angleLines.length || this.angleDone)) this.resetAngle();
     this.tool = { ...t, guides: { ...t.guides } };
     this.updateBlend();
     this.invalidate(false);
@@ -522,7 +554,10 @@ export class CanvasEngine {
     if (!sel) return;
     const m = this.selMatrix();
     const next = sel.strokes.map((s) => ({ ...transformStroke(s, m), color }));
-    const objs = sel.objs.map((o) => transformObj(o, m));
+    const objs = sel.objs.map((o) => {
+      const t = transformObj(o, m);
+      return t.data.vec && t.data.vec.t !== "fill" ? updateVecObj(t, { ...t.data.vec, color } as VecSpec) : t;
+    });
     this.store.commit({ remove: sel.strokes, add: next, removeObj: sel.objs, addObj: objs });
     this.select(next, objs);
   }
@@ -815,6 +850,15 @@ export class CanvasEngine {
       case "text":
         this.mode = "tap";
         return;
+      case "fill":
+      case "angle":
+        this.mode = "tap";
+        this.tapTool = tool;
+        return;
+      case "laser":
+      case "vanish":
+        this.ephemeral = tool;
+        return this.beginStroke(e, q);
     }
   };
 
@@ -903,6 +947,12 @@ export class CanvasEngine {
     for (let i = 0; i < this.pts.n; i++) pts.push({ x: d[i * PSTRIDE], y: d[i * PSTRIDE + 1] });
     const shape = recognize(pts);
     if (!shape) return false;
+    const h0 = this.tool.head0 ?? "none", h1 = this.tool.head1 ?? "none";
+    const nearTerminal = shape.kind === "line" && this.store.objects().some((o) => o.kind === "image" && o.data.vec?.t === "symbol" &&
+      [shape.points[0], shape.points[1]].some((p) => snapToTerminal(p, [o], 16 / this.cam.s) !== p));
+    if (!this.ephemeral && (shape.kind === "arrow" || nearTerminal || (shape.kind === "line" && (h0 !== "none" || h1 !== "none")))) {
+      this.shapeVec = { a: shape.points[0], b: shape.points[1], head0: h0, head1: shape.kind === "arrow" && h1 === "none" ? "filled" : h1 };
+    }
     const dense = densify(shape.points, Math.max(1.5, 3 / this.cam.s));
     this.pts.n = 0;
     this.pred.n = 0;
@@ -1032,6 +1082,13 @@ export class CanvasEngine {
     if (e.pointerType === "pen") this.palm.notePen(performance.now());
     if (e.pointerId !== this.activeId) {
       if (this.mode === "idle" && e.pointerType !== "touch" && e.buttons === 0) this.updateHover(this.local(e), e.pointerType);
+      if (this.mode === "idle" && e.pointerType !== "touch" && (this.tool.tool === "angle" || this.tool.tool === "laser")) {
+        this.rect = null;
+        const q = this.local(e);
+        if (this.tool.tool === "angle") this.angleHover = this.snapAnglePoint(this.toWorld(q.x, q.y));
+        else this.hover = q;
+        this.invalidate(false);
+      }
       if (this.mode === "idle" && e.pointerType !== "touch") {
         const eraser = this.tool.tool === "eraser" || (e.pointerType === "pen" && (e.buttons & 32) !== 0);
         if (eraser || this.hoverEraser) {
@@ -1144,9 +1201,16 @@ export class CanvasEngine {
       case "guide":
         this.gd = null;
         break;
-      case "tap":
-        if (this.maxFromDown < TAP_SLOP) this.events.onTextAt?.(this.toWorld(this.downPos.x, this.downPos.y), e.altKey);
+      case "tap": {
+        const tt = this.tapTool;
+        this.tapTool = null;
+        const w = this.toWorld(this.downPos.x, this.downPos.y);
+        if (this.maxFromDown >= TAP_SLOP) break;
+        if (tt === "fill") this.fillAt(w);
+        else if (tt === "angle") this.angleTap(w);
+        else this.events.onTextAt?.(w, e.altKey);
         break;
+      }
       case "erase":
         this.endErase();
         break;
@@ -1220,6 +1284,8 @@ export class CanvasEngine {
     this.gd = null;
     this.snap = null;
     this.shaped = false;
+    this.ephemeral = null;
+    this.tapTool = null;
     if (this.activeId !== -1 && this.active.hasPointerCapture(this.activeId)) this.active.releasePointerCapture(this.activeId);
     this.activeId = -1;
     this.activeType = "";
@@ -1296,6 +1362,8 @@ export class CanvasEngine {
     this.lastP = 0.5;
     this.rawSeen = false;
     this.shaped = false;
+    this.shapeVec = null;
+    if (this.ephemeral) this.livePressure = e.pointerType === "pen";
     this.addPoint(e);
     if (e.pointerType !== "mouse") this.armHold();
     else if (!this.snap) this.armHold(); // Maus: nur Formerkennung (Long-Press nicht nötig, Rechtsklick)
@@ -1356,7 +1424,43 @@ export class CanvasEngine {
 
   private commitStroke(): string | null {
     let id: string | null = null;
+    if (this.ephemeral) {
+      // Laserpointer / verschwindende Tinte: nie gespeichert
+      if (this.ephemeral === "vanish" && this.pts.n > 0) {
+        this.fading.push({
+          t: performance.now(),
+          s: makeStroke({ id: uid(), z: 0, pen: this.livePen === "highlighter" ? "ballpoint" : this.livePen, color: this.liveColor, width: this.liveWidth, opacity: 1, pressure: this.livePressure, points: this.pts.snapshot() }),
+        });
+      } else if (this.pts.n > 0) this.laserTail = { t: performance.now(), pts: this.pts.snapshot() };
+      this.ephemeral = null;
+      this.pts.n = 0;
+      this.pred.n = 0;
+      this.request();
+      return null;
+    }
     if (this.tool.shapeMode && !this.shaped && !this.snap && this.pts.n > 2) this.applyShape();
+    // Linie mit Pfeilspitzen: erkannte Linie/Pfeil oder am Lineal gezogene Gerade → Vektorlinie
+    const h0 = this.tool.head0 ?? "none", h1 = this.tool.head1 ?? "none";
+    if (!this.shapeVec && this.snap?.edge && this.pts.n > 1 && (h0 !== "none" || h1 !== "none")) {
+      const d = this.pts.data, j = (this.pts.n - 1) * PSTRIDE;
+      this.shapeVec = { a: { x: d[0], y: d[1] }, b: { x: d[j], y: d[j + 1] }, head0: h0, head1: h1 };
+    }
+    if (this.shapeVec && this.livePen !== "highlighter") {
+      const sv = this.shapeVec;
+      this.shapeVec = null;
+      const syms = this.store.objects().filter((o): o is ImageObj => o.kind === "image" && o.data.vec?.t === "symbol");
+      const tol = 16 / this.cam.s;
+      const spec: LineSpec = {
+        t: "line", pts: [snapToTerminal(sv.a, syms, tol), snapToTerminal(sv.b, syms, tol)],
+        color: this.liveColor, width: Math.max(1, this.liveWidth), head0: sv.head0, head1: sv.head1,
+      };
+      const o = vecObj(spec, null, this.store.nextZ());
+      this.store.commit({ add: [], remove: [], addObj: [o] });
+      this.pts.n = 0;
+      this.pred.n = 0;
+      return o.id;
+    }
+    this.shapeVec = null;
     if (this.pts.n > 0) {
       if (this.livePressure) clampPressureEdges(this.pts.data, this.pts.n);
       if (this.inkDebug) this.dbg = { pts: this.pts.snapshot(), n: this.pts.n, pen: this.livePen, width: this.liveWidth, pressure: this.livePressure };
@@ -1683,6 +1787,20 @@ export class CanvasEngine {
     return Math.max(1, this.setup.bgSpacingMm) * MM;
   }
 
+  private selHeads(): { head0: Head; head1: Head } | null {
+    const sel = this.sel!;
+    const line = sel.objs.find((o) => o.data.vec?.t === "line")?.data.vec as LineSpec | undefined;
+    if (line) return { head0: line.head0, head1: line.head1 };
+    if (sel.strokes.length && sel.strokes.length <= 8 && !sel.objs.length) {
+      const st = sel.strokes[0];
+      const pts: Vec[] = [];
+      for (let i = 0; i < st.points.length; i += PSTRIDE) pts.push({ x: st.points[i], y: st.points[i + 1] });
+      const k = recognize(pts)?.kind;
+      if (k === "line") return { head0: "none", head1: "none" };
+    }
+    return null;
+  }
+
   private emitSelection() {
     const cb = this.events.onSelection;
     if (!cb) return;
@@ -1700,7 +1818,333 @@ export class CanvasEngine {
       color: colors.size === 1 ? [...colors][0] : null,
       strokes: this.sel.strokes.length,
       images: this.sel.objs.length,
+      heads: this.selHeads(),
+      vec: this.sel.objs.length === 1 && !this.sel.strokes.length && this.sel.objs[0].data.vec && this.sel.objs[0].data.vec.t !== "fill"
+        ? this.sel.objs[0].data.vec : null,
     });
+  }
+
+
+  // ================= Formen, Füllen, Winkel, Laser =================
+
+  /** Bilder in Zeichenreihenfolge: feste PDF-Seiten, dann Füllungen, dann übrige (je nach z). */
+  private layeredImages(): ImageObj[] {
+    const imgs = this.store.objects().filter((o): o is ImageObj => o.kind === "image");
+    const rank = (o: ImageObj) => (o.data.locked ? 0 : o.data.vec?.t === "fill" ? 1 : 2);
+    return imgs.sort((a, b) => rank(a) - rank(b) || a.z - b.z);
+  }
+
+  /** Füllwerkzeug: geschlossenen Bereich um `w` füllen (Lücken bis 2 mm). */
+  private fillAt(w: Vec) {
+    const gap = 2 * MM;
+    const strokes = this.store.all().filter((s) => s.pen !== "highlighter");
+    const walls = this.store.objects().filter((o): o is ImageObj => o.kind === "image" && !!o.data.vec && o.data.vec.t !== "fill");
+    const draw: DrawWalls = (ctx, grow) => {
+      ctx.fillStyle = ctx.strokeStyle = "#000";
+      ctx.lineJoin = ctx.lineCap = "round";
+      ctx.lineWidth = grow;
+      for (const s of strokes) {
+        const p = strokePath(s);
+        ctx.fill(p);
+        ctx.stroke(p);
+      }
+      const d = grow / 2;
+      for (const o of walls) {
+        const img = this.image(o.data.src);
+        if (!img?.complete || !img.naturalWidth) continue;
+        for (const [dx, dy] of [[0, 0], [d, 0], [-d, 0], [0, d], [0, -d], [d, d], [-d, -d], [d, -d], [-d, d]]) {
+          ctx.save();
+          ctx.translate(o.x + o.w / 2 + dx, o.y + o.h / 2 + dy);
+          if (o.angle) ctx.rotate(o.angle);
+          ctx.drawImage(img, -o.w / 2, -o.h / 2, o.w, o.h);
+          ctx.restore();
+        }
+      }
+    };
+    const reg = findRegion(w, draw, gap, this.contentBounds());
+    const spec: FillSpec = { t: "fill", color: this.tool.color, opacity: this.tool.fillOpacity ?? 0.35, hatch: this.tool.fillHatch ?? null };
+    const painted = reg && paintRegion(reg, spec);
+    if (!painted) {
+      this.events.onToast?.("Kein geschlossener Bereich gefunden – Lücken bis 2 mm werden überbrückt");
+      return;
+    }
+    const r = painted.rect;
+    const o = makeObj<ImageObj>({ id: uid(), kind: "image", z: this.store.nextZ(), x: r.x, y: r.y, w: r.w, h: r.h, angle: 0, data: { src: painted.src, vec: spec } });
+    this.store.commit({ add: [], remove: [], addObj: [o] });
+  }
+
+  /** Punkt an Lineal/Geodreieck-Kante einrasten (Winkel messen mit dem Geodreieck). */
+  private snapAnglePoint(w: Vec): Vec {
+    const tol = 14 / this.cam.s;
+    for (const k of ["setsquare", "ruler"] as const) {
+      const g = this.guides.get(k);
+      const e = g && nearestEdge(g, w, tol);
+      if (g && e) return snapToEdge(g, e, w);
+    }
+    return w;
+  }
+
+  /** Gerade unter dem Punkt: Vektorlinie oder gerader Strich. */
+  private lineAt(w: Vec): { a: Vec; b: Vec } | null {
+    const tol = 10 / this.cam.s;
+    const near = (a: Vec, b: Vec) => {
+      const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy || 1;
+      const t = Math.max(0, Math.min(1, ((w.x - a.x) * dx + (w.y - a.y) * dy) / l2));
+      return Math.hypot(w.x - a.x - t * dx, w.y - a.y - t * dy) <= tol;
+    };
+    for (const o of [...this.store.objects()].reverse()) {
+      if (o.kind !== "image" || o.data.vec?.t !== "line") continue;
+      const p = vecLinePts(o);
+      for (let i = 1; i < p.length; i++) if (near(p[i - 1], p[i])) return { a: p[i - 1], b: p[i] };
+    }
+    for (const s of this.store.inRect({ x: w.x - tol, y: w.y - tol, w: 2 * tol, h: 2 * tol })) {
+      const pts: Vec[] = [];
+      for (let i = 0; i < s.points.length; i += PSTRIDE) pts.push({ x: s.points[i], y: s.points[i + 1] });
+      const sh = recognize(pts);
+      if (sh?.kind === "line" && near(sh.points[0], sh.points[1])) return { a: sh.points[0], b: sh.points[1] };
+    }
+    return null;
+  }
+
+  /** Winkel messen: drei Punkte (Schenkel, Scheitel, Schenkel) oder zwei Linien antippen. */
+  private angleTap(w0: Vec) {
+    if (this.angleDone) this.resetAngle();
+    const w = this.snapAnglePoint(w0);
+    if (!this.anglePts.length) {
+      const l = this.lineAt(w0);
+      if (l || this.angleLines.length) {
+        if (!l) return this.events.onToast?.("Zweite Linie antippen");
+        this.angleLines.push({ ...l, tap: w0 });
+        if (this.angleLines.length === 2) {
+          const [l1, l2] = this.angleLines;
+          const v = intersectLines(l1.a, l1.b, l2.a, l2.b);
+          if (!v) {
+            this.angleLines = [];
+            return this.events.onToast?.("Die Linien sind parallel");
+          }
+          const side = (l: { a: Vec; b: Vec; tap: Vec }) => {
+            const far = Math.hypot(l.a.x - v.x, l.a.y - v.y) > Math.hypot(l.b.x - v.x, l.b.y - v.y) ? l.a : l.b;
+            // Schenkel zur angetippten Seite
+            const dot = (l.tap.x - v.x) * (far.x - v.x) + (l.tap.y - v.y) * (far.y - v.y);
+            return dot >= 0 ? far : { x: 2 * v.x - far.x, y: 2 * v.y - far.y };
+          };
+          this.finishAngle(side(l1), v, side(l2));
+        } else this.events.onToast?.("Linie gewählt – jetzt die zweite Linie antippen");
+        this.invalidate(false);
+        return;
+      }
+    }
+    this.anglePts.push(w);
+    if (this.anglePts.length === 3) {
+      const [a, b, c] = this.anglePts;
+      this.finishAngle(a, b, c);
+    }
+    this.invalidate(false);
+  }
+
+  private finishAngle(a: Vec, b: Vec, c: Vec) {
+    this.angleDone = { a, b, c };
+    this.anglePts = [];
+    this.angleLines = [];
+    this.events.onAngle?.({ deg: angleDeg(a, b, c), at: this.toScreen(b.x, b.y) });
+  }
+
+  resetAngle() {
+    this.anglePts = [];
+    this.angleLines = [];
+    this.angleDone = null;
+    this.events.onAngle?.(null);
+    this.invalidate(false);
+  }
+
+  /** Gemessenen Winkel als Beschriftung (Bogen + Gradzahl) einfügen. */
+  insertAngleLabel() {
+    const d = this.angleDone;
+    if (!d) return;
+    const spec: AngleSpec = { t: "angle", a: d.a, b: d.b, c: d.c, color: this.tool.color };
+    this.store.commit({ add: [], remove: [], addObj: [vecObj(spec, null, this.store.nextZ())] });
+    this.resetAngle();
+  }
+
+  private renderAngleTool(ctx: CanvasRenderingContext2D) {
+    const pts = this.angleDone ? [this.angleDone.a, this.angleDone.b, this.angleDone.c]
+      : this.angleHover && this.anglePts.length ? [...this.anglePts, this.angleHover] : this.anglePts;
+    const dpr = this.dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.strokeStyle = "#f97316";
+    ctx.fillStyle = "#f97316";
+    ctx.lineWidth = 2;
+    for (const l of this.angleLines) {
+      const a = this.toScreen(l.a.x, l.a.y), b = this.toScreen(l.b.x, l.b.y);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    const sp = pts.map((p) => this.toScreen(p.x, p.y));
+    if (sp.length >= 2) {
+      ctx.beginPath();
+      sp.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+      ctx.stroke();
+    }
+    for (const p of sp) { ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2); ctx.fill(); }
+    if (pts.length === 3) {
+      const [a, b, c] = sp;
+      const ua = Math.atan2(a.y - b.y, a.x - b.x), uc = Math.atan2(c.y - b.y, c.x - b.x);
+      let da = uc - ua;
+      while (da > Math.PI) da -= 2 * Math.PI;
+      while (da < -Math.PI) da += 2 * Math.PI;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 34, ua, ua + da, da < 0);
+      ctx.stroke();
+      const mid = ua + da / 2, label = fmtDeg(angleDeg(pts[0], pts[1], pts[2]));
+      ctx.font = "600 15px system-ui, sans-serif";
+      const tx = b.x + Math.cos(mid) * 58, ty = b.y + Math.sin(mid) * 58;
+      const tw = ctx.measureText(label).width + 12;
+      ctx.fillStyle = "rgba(249,115,22,0.95)";
+      ctx.beginPath(); ctx.roundRect(tx - tw / 2, ty - 12, tw, 24, 12); ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, tx, ty);
+      ctx.textAlign = "start";
+      ctx.textBaseline = "alphabetic";
+    }
+  }
+
+  /** Laserpunkt mit Spur und verblassende Tinte; true = weitere Frames nötig. */
+  private renderEphemeral(ctx: CanvasRenderingContext2D): boolean {
+    const now = performance.now();
+    let more = false;
+    const vanish = this.tool.vanishMs ?? 2000, FADE = 450;
+    if (this.fading.length) {
+      this.fading = this.fading.filter((f) => now - f.t < vanish + FADE);
+      this.worldTransform(ctx);
+      for (const f of this.fading) {
+        const age = now - f.t;
+        ctx.globalAlpha = age < vanish ? 1 : 1 - (age - vanish) / FADE;
+        drawStroke(ctx, f.s, this.pal.dark, strokePath(f.s));
+      }
+      ctx.globalAlpha = 1;
+      if (this.fading.length) more = true;
+    }
+    const laserLive = this.mode === "draw" && this.ephemeral === "laser";
+    const tail = laserLive ? { t: now, pts: this.pts.data.subarray(0, this.pts.n * PSTRIDE) } : this.laserTail;
+    if (tail && tail.pts.length) {
+      const age = now - tail.t;
+      if (age > 350) this.laserTail = null;
+      else {
+        const dpr = this.dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.lineCap = ctx.lineJoin = "round";
+        const d = tail.pts, k = d.length / PSTRIDE, tEnd = d[(k - 1) * PSTRIDE + 4];
+        const fade = laserLive ? 1 : 1 - age / 350;
+        ctx.shadowColor = "#ef4444";
+        ctx.shadowBlur = 12;
+        for (let i = 1; i < k; i++) {
+          const dt = tEnd - d[i * PSTRIDE + 4] + (laserLive ? 0 : age);
+          if (dt > 300) continue; // kurze Spur
+          const a = this.toScreen(d[(i - 1) * PSTRIDE], d[(i - 1) * PSTRIDE + 1]), b = this.toScreen(d[i * PSTRIDE], d[i * PSTRIDE + 1]);
+          ctx.strokeStyle = `rgba(239,68,68,${(1 - dt / 300) * fade})`;
+          ctx.lineWidth = 2 + 4 * (1 - dt / 300);
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        }
+        const j = (k - 1) * PSTRIDE, p = this.toScreen(d[j], d[j + 1]);
+        this.laserDot(ctx, p, fade);
+        ctx.shadowBlur = 0;
+        more = true;
+      }
+    } else if (this.tool.tool === "laser" && this.hover && this.mode === "idle") {
+      ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      this.laserDot(ctx, this.hover, 0.7);
+    }
+    return more;
+  }
+
+  private laserDot(ctx: CanvasRenderingContext2D, p: Vec, alpha: number) {
+    const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 14);
+    g.addColorStop(0, `rgba(255,255,255,${alpha})`);
+    g.addColorStop(0.25, `rgba(248,113,113,${alpha})`);
+    g.addColorStop(1, "rgba(239,68,68,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 14, 0, Math.PI * 2); ctx.fill();
+  }
+
+  /** Pfeilspitzen der Auswahl ändern (Vektorlinien; gerade Striche werden zu Vektorlinien). */
+  setSelectionHeads(h: { head0?: Head; head1?: Head }) {
+    const sel = this.sel;
+    if (!sel) return;
+    this.commitSelection();
+    const objs: ImageObj[] = [], removeO: ImageObj[] = [], removeS: Stroke[] = [];
+    for (const o of sel.objs.map((x) => this.store.getObj(x.id) as ImageObj | undefined)) {
+      if (o?.data.vec?.t !== "line") continue;
+      removeO.push(o);
+      objs.push(updateVecObj(o, { ...o.data.vec, ...h }));
+    }
+    for (const st of sel.strokes.map((x) => this.store.get(x.id)).filter((x): x is Stroke => !!x)) {
+      const pts: Vec[] = [];
+      for (let i = 0; i < st.points.length; i += PSTRIDE) pts.push({ x: st.points[i], y: st.points[i + 1] });
+      const sh = recognize(pts);
+      if (sh?.kind !== "line" && sh?.kind !== "arrow") continue;
+      removeS.push(st);
+      objs.push(vecObj({ t: "line", pts: [sh.points[0], sh.points[1]], color: st.color, width: st.width, head0: h.head0 ?? "none", head1: h.head1 ?? "none" }, null, st.z));
+    }
+    if (!objs.length) return;
+    this.store.commit({ add: [], remove: removeS, removeObj: removeO, addObj: objs });
+    this.select([], objs);
+  }
+
+  /** Einzelnes ausgewähltes Vektor-Element neu parametrieren (Achsen, Linien …). */
+  updateSelectedVec(spec: VecSpec) {
+    const o = this.sel?.objs.length === 1 && !this.sel.strokes.length ? this.sel.objs[0] : null;
+    if (!o?.data.vec) return;
+    this.commitSelection();
+    const cur = this.store.getObj(o.id) as ImageObj;
+    this.replaceSelectionWith(cur, updateVecObj(cur, spec));
+  }
+
+  private replaceSelectionWith(before: ImageObj, after: ImageObj) {
+    this.store.commit({ add: [], remove: [], removeObj: [before], addObj: [after] });
+    this.select([], [after]);
+  }
+
+  /** Auswahl mit eingerechneter Transformation (für „Als Vorlage speichern“). */
+  selectionElements(): { strokes: Stroke[]; objs: ImageObj[]; bbox: BBox } | null {
+    const sel = this.sel;
+    if (!sel) return null;
+    const m = this.selMatrix();
+    const strokes = sel.strokes.map((x) => transformStroke(x, m));
+    const objs = sel.objs.map((o) => transformObj(o, m));
+    return { strokes, objs, bbox: unionAll(strokes, objs) };
+  }
+
+  /** Vorlage einfügen: Elemente (relativ zu 0,0) mit neuen IDs bei `at` (oben links), ausgewählt. */
+  insertElements(strokes: Stroke[], objs: ImageObj[], at: Vec) {
+    this.commitSelection();
+    const off: Mat = [1, 0, 0, 1, at.x, at.y];
+    const s2 = strokes.map((x) => ({ ...transformStroke(x, off, false), z: this.store.nextZ() }));
+    const o2 = objs.map((o) => ({ ...transformObj(o, off, uid()), z: this.store.nextZ() }));
+    this.store.commit({ add: s2, remove: [], addObj: o2 });
+    this.select(s2, o2);
+  }
+
+  /** Fertige Striche hinzufügen (Zoom-Schreibfeld), ein Undo-Schritt je Aufruf. */
+  addStrokes(strokes: Stroke[]) {
+    if (!strokes.length) return;
+    this.commitSelection();
+    this.store.commit({ add: strokes.map((s) => ({ ...s, z: this.store.nextZ() })), remove: [] });
+  }
+
+  /** Striche in einem Weltrechteck (für Vorschauen). */
+  strokesIn(r: BBox): Stroke[] {
+    return this.store.inRect(r).filter((s) => intersects(s.bbox, r));
+  }
+
+  /** Aktuelle Werkzeugeinstellungen (Farbe, Breite, Stift) – z. B. für das Zoom-Schreibfeld. */
+  get toolState(): ToolState {
+    return this.tool;
+  }
+
+  /** Kamera (Welt → Bildschirm: (w - x) * s). */
+  get camera() {
+    return { ...this.cam };
   }
 
   // ================= Rendering =================
@@ -1756,6 +2200,7 @@ export class CanvasEngine {
     if (this.activeDirty) {
       this.activeDirty = false;
       this.renderActive();
+      if (this.activeDirty) this.request(); // Laser/verblassende Tinte animieren
     }
     if (perf) {
       perf.frame(now, performance.now() - t0, tb, drewInput);
@@ -1815,9 +2260,9 @@ export class CanvasEngine {
 
   private drawTileContent(ctx: CanvasRenderingContext2D, r: BBox) {
     drawBackground(ctx, r, this.tiles.scale, this.setup, this.pal, this.pageCount);
-    for (const o of this.store.objects())
-      if (o.kind === "image" && !this.hidden.has(o.id) && intersects(o.bbox, r)) {
-        drawImageObj(ctx, o, this.image(o.data.src));
+    for (const o of this.layeredImages())
+      if (!this.hidden.has(o.id) && intersects(o.bbox, r)) {
+        drawImageObj(ctx, o, this.image(o.data.src), this.pal.dark);
         const ref = o.data.pdf;
         if (ref) {
           ctx.save();
@@ -1886,7 +2331,7 @@ export class CanvasEngine {
     ctx.clearRect(0, 0, this.active.width, this.active.height);
     const dark = this.pal.dark;
 
-    if (this.mode === "draw" && this.pts.n > 0) {
+    if (this.mode === "draw" && this.pts.n > 0 && this.ephemeral !== "laser") {
       this.worldTransform(ctx);
       const constant = this.livePen === "ballpoint";
       const pts = toFreehand(this.pts.data, this.pts.n, constant);
@@ -1897,12 +2342,15 @@ export class CanvasEngine {
       drawStroke(ctx, { pen: this.livePen, color: this.liveColor, opacity: this.liveOpacity } as Stroke, dark, path);
     }
 
+    if (this.renderEphemeral(ctx)) this.activeDirty = true;
+    if (this.tool.tool === "angle" || this.angleDone) this.renderAngleTool(ctx);
+
     if (this.sel) {
       this.worldTransform(ctx);
       const m = this.selMatrix();
       ctx.save();
       ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
-      for (const o of this.sel.objs) drawImageObj(ctx, o, this.image(o.data.src));
+      for (const o of this.sel.objs) drawImageObj(ctx, o, this.image(o.data.src), dark);
       for (const s of this.sel.strokes) drawStroke(ctx, s, dark, strokePath(s));
       ctx.restore();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1997,8 +2445,10 @@ function unionAll(strokes: Stroke[], objs: CanvasObj[]): BBox {
 }
 
 /** Bild (gedreht) in Weltkoordinaten zeichnen. */
-export function drawImageObj(ctx: CanvasRenderingContext2D, o: ImageObj, img: HTMLImageElement | undefined) {
+export function drawImageObj(ctx: CanvasRenderingContext2D, o: ImageObj, img: HTMLImageElement | undefined, dark = false) {
   ctx.save();
+  // Vektor-Elemente folgen der Tinte: im Dunkelmodus Helligkeit umkehren, Farbton behalten
+  if (dark && o.data.vec) ctx.filter = "invert(1) hue-rotate(180deg)";
   ctx.translate(o.x + o.w / 2, o.y + o.h / 2);
   if (o.angle) ctx.rotate(o.angle);
   if (img && img.complete && img.naturalWidth) ctx.drawImage(img, -o.w / 2, -o.h / 2, o.w, o.h);
@@ -2011,4 +2461,12 @@ export function drawImageObj(ctx: CanvasRenderingContext2D, o: ImageObj, img: HT
 
 function prevent(e: Event) {
   e.preventDefault();
+}
+
+/** Schnittpunkt zweier Geraden (durch a1,a2 und b1,b2) oder null bei Parallelen. */
+export function intersectLines(a1: Vec, a2: Vec, b1: Vec, b2: Vec): Vec | null {
+  const d = (a1.x - a2.x) * (b1.y - b2.y) - (a1.y - a2.y) * (b1.x - b2.x);
+  if (Math.abs(d) < 1e-9) return null;
+  const t = ((a1.x - b1.x) * (b1.y - b2.y) - (a1.y - b1.y) * (b1.x - b2.x)) / d;
+  return { x: a1.x + t * (a2.x - a1.x), y: a1.y + t * (a2.y - a1.y) };
 }

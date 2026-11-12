@@ -3,6 +3,8 @@ import type { PenKind } from "@/canvas/core/model";
 import { PENS } from "@/canvas/core/pens";
 import type { EraserMode, Tool, ToolState } from "@/canvas/core/engine";
 import type { GuideKind } from "@/canvas/tools/guides";
+import type { Head } from "@/canvas/vector/vec";
+import { MM } from "@/canvas/core/layout";
 
 export interface Preset {
   id: string;
@@ -21,10 +23,12 @@ export type BarSize = "s" | "m" | "l";
 export const TOOL_ITEMS = [
   "fountain", "ballpoint", "pencil", "highlighter", "eraser", "lasso", "pan", "text", "guides", "insert",
   "presets", "undo", "redo", "zoom", "page", "calc", "plot", "image",
+  "shapes", "heads", "fill", "angle", "zoomwrite", "laser", "vanish",
 ] as const;
 export type ToolItem = (typeof TOOL_ITEMS)[number];
 export const DEFAULT_ITEMS: ToolItem[] = [
   "fountain", "ballpoint", "pencil", "highlighter", "eraser", "lasso", "pan", "text", "guides", "insert",
+  "shapes", "heads", "fill", "angle", "zoomwrite", "laser",
   "presets", "undo", "redo", "zoom", "page",
 ];
 
@@ -56,6 +60,18 @@ interface ToolsStore extends ToolState {
   items: ToolItem[];
   /** Deckkraft aus Preset, null = Standard des Stifts */
   opacity: number | null;
+  head0: Head;
+  head1: Head;
+  fillOpacity: number;
+  fillHatch: { angle: number; gap: number } | null;
+  vanishMs: number;
+  /** Zoom-Schreibfeld: Vergrößerung und ob es offen ist (nicht gespeichert) */
+  zoomFactor: number;
+  zoomWrite: boolean;
+  setHeads: (h: Partial<{ head0: Head; head1: Head }>) => void;
+  setFill: (f: Partial<{ fillOpacity: number; fillHatch: { angle: number; gap: number } | null }>) => void;
+  setVanishMs: (ms: number) => void;
+  setZoom: (z: Partial<{ zoomFactor: number; zoomWrite: boolean }>) => void;
   setTool: (t: Tool) => void;
   setPen: (p: PenKind) => void;
   setColor: (c: string) => void;
@@ -81,7 +97,7 @@ interface ToolsStore extends ToolState {
 const KEY = "noteforge-tools";
 const MAX_PRESETS = 8;
 
-type Persisted = Pick<ToolsStore, "tool" | "pen" | "color" | "width" | "eraserMode" | "eraserSize" | "fingerDraws" | "shapeMode" | "perPen" | "presets" | "customColors" | "dock" | "floatPos" | "orient" | "size" | "items" | "opacity">;
+type Persisted = Pick<ToolsStore, "tool" | "pen" | "color" | "width" | "eraserMode" | "eraserSize" | "fingerDraws" | "shapeMode" | "perPen" | "presets" | "customColors" | "dock" | "floatPos" | "orient" | "size" | "items" | "opacity" | "head0" | "head1" | "fillOpacity" | "fillHatch" | "vanishMs" | "zoomFactor">;
 
 function load(): Partial<Persisted> {
   try {
@@ -114,7 +130,18 @@ export const useTools = create<ToolsStore>((set, get) => ({
   size: "m",
   items: DEFAULT_ITEMS,
   opacity: null,
+  head0: "none",
+  head1: "none",
+  fillOpacity: 0.35,
+  fillHatch: null,
+  vanishMs: 2000,
+  zoomFactor: 3,
   ...load(),
+  zoomWrite: false,
+  setHeads: (h) => set(h),
+  setFill: (f) => set({ ...f, tool: "fill" }),
+  setVanishMs: (vanishMs) => set({ vanishMs }),
+  setZoom: (z) => set(z),
 
   setTool: (tool) => set({ tool }),
   setPen: (pen) => {
@@ -151,10 +178,15 @@ export const useTools = create<ToolsStore>((set, get) => ({
 export const MAX_PRESET_COUNT = MAX_PRESETS;
 
 useTools.subscribe((s) => {
-  const { tool, pen, color, width, eraserMode, eraserSize, fingerDraws, shapeMode, perPen, presets, customColors, dock, floatPos, orient, size, items, opacity } = s;
+  const { tool, pen, color, width, eraserMode, eraserSize, fingerDraws, shapeMode, perPen, presets, customColors, dock, floatPos, orient, size, items, opacity, head0, head1, fillOpacity, fillHatch, vanishMs, zoomFactor } = s;
   try {
-    localStorage.setItem(KEY, JSON.stringify({ tool, pen, color, width, eraserMode, eraserSize, fingerDraws, shapeMode, perPen, presets, customColors, dock, floatPos, orient, size, items, opacity }));
+    // Laser/verschwindende Tinte nicht als Startwerkzeug merken
+    const t = tool === "laser" || tool === "vanish" ? "pen" : tool;
+    localStorage.setItem(KEY, JSON.stringify({ tool: t, pen, color, width, eraserMode, eraserSize, fingerDraws, shapeMode, perPen, presets, customColors, dock, floatPos, orient, size, items, opacity, head0, head1, fillOpacity, fillHatch, vanishMs, zoomFactor }));
   } catch {
     /* ignorieren */
   }
 });
+
+/** Standard-Schraffur: 45°, 3 mm Abstand. */
+export const DEFAULT_HATCH = { angle: 45, gap: 3 * MM };

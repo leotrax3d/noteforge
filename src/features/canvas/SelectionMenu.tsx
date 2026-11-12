@@ -1,12 +1,16 @@
 import { useState } from "react";
-import { Check, Copy, LineChart, Palette, ScanText, Sigma, Trash2, Type } from "lucide-react";
+import { BookmarkPlus, Check, Copy, LineChart, MoveRight, Palette, PencilRuler, ScanText, Sigma, Trash2, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { SelectionInfo } from "@/canvas/core/engine";
-import { ColorGrid } from "./Toolbar";
+import { ColorGrid, HeadPicker } from "./Toolbar";
+import type { Head } from "@/canvas/vector/vec";
 import { TagMenu } from "@/features/tags/TagMenu";
 
-export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDone, activeTags, onTag, onInkToText, onInkToLatex, onOcr, onEditPlot }: {
+export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDone, activeTags, onTag, onInkToText, onInkToLatex, onOcr, onEditPlot, onHeads, onEditVec, onSaveTemplate }: {
+  onHeads: (h: Partial<{ head0: Head; head1: Head }>) => void;
+  onEditVec: () => void;
+  onSaveTemplate: () => void;
   onEditPlot?: () => void;
   onInkToText: () => void;
   onInkToLatex: () => void;
@@ -21,6 +25,7 @@ export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDo
   onDone: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [headsOpen, setHeadsOpen] = useState(false);
   const above = sel.rect.y > 140;
   const top = above ? sel.rect.y - 64 : Math.min(hostHeight - 64, sel.rect.y + sel.rect.h + 52);
   const left = sel.rect.x + sel.rect.w / 2;
@@ -46,6 +51,20 @@ export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDo
       {sel.images > 0 && sel.strokes === 0 && (
         <Button variant="ghost" size="icon" aria-label="Text im Bild erkennen" title="Text im Bild erkennen (OCR)" onClick={onOcr}><ScanText /></Button>
       )}
+      {sel.heads && (
+        <Popover open={headsOpen} onOpenChange={setHeadsOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label="Pfeilspitzen" title="Pfeilspitzen ändern"><MoveRight /></Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80">
+            <HeadPicker head0={sel.heads.head0} head1={sel.heads.head1} onChange={onHeads} />
+          </PopoverContent>
+        </Popover>
+      )}
+      {sel.vec && ["coord", "numberline", "staff", "bond"].includes(sel.vec.t) && (
+        <Button variant="ghost" size="icon" aria-label="Form bearbeiten" title="Form bearbeiten (Achsen, Bereich …)" onClick={onEditVec}><PencilRuler /></Button>
+      )}
+      <Button variant="ghost" size="icon" aria-label="Als Vorlage speichern" title="Als Vorlage speichern (Formen-Bibliothek → Eigene)" onClick={onSaveTemplate}><BookmarkPlus /></Button>
       {onEditPlot && <Button variant="ghost" size="icon" aria-label="Graph bearbeiten" title="Graph im Plotter bearbeiten" onClick={onEditPlot}><LineChart /></Button>}
       <Button variant="ghost" size="icon" aria-label="Kopieren" title="Kopieren" onClick={onCopy}><Copy /></Button>
       <Button variant="ghost" size="icon" aria-label="Löschen" title="Löschen" onClick={onDelete}><Trash2 /></Button>

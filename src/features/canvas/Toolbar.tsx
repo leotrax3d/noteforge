@@ -3,7 +3,9 @@ import {
   Calculator, Check, LineChart, Palette, RotateCcw, SlidersHorizontal, X, ZoomIn,
   Crop, DraftingCompass, Eraser, GripVertical, Hand, Highlighter, ImagePlus, Lasso, Pen, PenTool, Pencil, Plus, Redo2, Ruler,
   Settings2, Shapes, Table, Trash2, TriangleRight, Type, Undo2, FileUp,
+  Angle, MoveRight, PaintBucket, ScanSearch, Sparkles, Wand,
 } from "lucide-react";
+import { HEADS, HEAD_LABELS, type Head } from "@/canvas/vector/vec";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -11,7 +13,7 @@ import { cn } from "@/lib/utils";
 import type { PenKind } from "@/canvas/core/model";
 import { PENS } from "@/canvas/core/pens";
 import type { Page, PagePatch } from "@/lib/types";
-import { HIGHLIGHTS, MAX_PRESET_COUNT, PALETTE, TOOL_ITEMS, useTools, type BarSize, type Dock, type ToolItem } from "./tool-store";
+import { DEFAULT_HATCH, HIGHLIGHTS, MAX_PRESET_COUNT, PALETTE, TOOL_ITEMS, useTools, type BarSize, type Dock, type ToolItem } from "./tool-store";
 
 export const PEN_ICONS: Record<PenKind, typeof Pen> = {
   fountain: PenTool,
@@ -32,7 +34,7 @@ export interface ToolbarProps {
   onInsert: (kind: InsertKind) => void;
 }
 
-export type InsertKind = "image" | "screenshot" | "table" | "text" | "pdf" | "plot" | "calc";
+export type InsertKind = "image" | "screenshot" | "table" | "text" | "pdf" | "plot" | "calc" | "shapes";
 
 function ToolButton({ label, active, onClick, children, className }: {
   label: string; active?: boolean; onClick: () => void; children: ReactNode; className?: string;
@@ -121,18 +123,59 @@ export const ITEM_INFO: Record<ToolItem, { label: string; key?: string }> = {
   insert: { label: "Einfügen" }, presets: { label: "Stift-Presets", key: "1–9" }, undo: { label: "Rückgängig", key: "Strg+Z" },
   redo: { label: "Wiederholen", key: "Strg+Y" }, zoom: { label: "Zoom", key: "Strg+0" }, page: { label: "Blatteinstellungen" },
   calc: { label: "Taschenrechner", key: "Strg+Umschalt+R" }, plot: { label: "Funktionsgraph", key: "Strg+Umschalt+G" }, image: { label: "Bild einfügen", key: "Strg+V" },
+  shapes: { label: "Formen-Bibliothek", key: "S" }, heads: { label: "Pfeilspitzen" }, fill: { label: "Füllen", key: "F" },
+  angle: { label: "Winkel messen", key: "W" }, zoomwrite: { label: "Zoom-Schreibfeld", key: "Z" },
+  laser: { label: "Laserpointer", key: "P" }, vanish: { label: "Verschwindende Tinte", key: "V" },
 };
 const ITEM_ICON: Record<ToolItem, ReactNode> = {
   fountain: <PenTool />, ballpoint: <Pen />, pencil: <Pencil />, highlighter: <Highlighter />, eraser: <Eraser />, lasso: <Lasso />,
   pan: <Hand />, text: <Type />, guides: <Ruler />, insert: <ImagePlus />, presets: <Palette />, undo: <Undo2 />, redo: <Redo2 />,
   zoom: <ZoomIn />, page: <Settings2 />, calc: <Calculator />, plot: <LineChart />, image: <ImagePlus />,
+  shapes: <Shapes />, heads: <MoveRight />, fill: <PaintBucket />, angle: <Angle />, zoomwrite: <ScanSearch />,
+  laser: <Wand />, vanish: <Sparkles />,
 };
+
+/** Kleine Vorschau einer Pfeilspitze (für Auswahl-Chips). */
+export function HeadIcon({ head, flip }: { head: Head; flip?: boolean }) {
+  const d = { none: "", arrow: "M15 3L21 8L15 13", filled: "M14 3L21 8L14 13Z", vector: "M13 3L21 8L13 13L16 8Z", dot: "" }[head];
+  return (
+    <svg viewBox="0 0 24 16" className="h-4 w-6" style={flip ? { transform: "scaleX(-1)" } : undefined} aria-hidden>
+      <path d="M2 8H19" stroke="currentColor" strokeWidth="2" fill="none" />
+      {d && <path d={d} stroke="currentColor" strokeWidth="2" fill={head === "arrow" ? "none" : "currentColor"} strokeLinejoin="round" />}
+      {head === "dot" && <circle cx="20" cy="8" r="3" fill="currentColor" />}
+    </svg>
+  );
+}
+
+/** Pfeilspitzen-Auswahl für Anfang und Ende. */
+export function HeadPicker({ head0, head1, onChange }: { head0: Head; head1: Head; onChange: (h: Partial<{ head0: Head; head1: Head }>) => void }) {
+  return (
+    <div className="space-y-2">
+      {(["head0", "head1"] as const).map((k) => (
+        <div key={k} className="space-y-1">
+          <p className="text-xs text-muted-foreground">{k === "head0" ? "Anfang" : "Ende"}</p>
+          <div role="radiogroup" aria-label={k === "head0" ? "Spitze am Anfang" : "Spitze am Ende"} className="flex flex-wrap gap-1">
+            {HEADS.map((h) => {
+              const on = (k === "head0" ? head0 : head1) === h;
+              return (
+                <Button key={h} role="radio" aria-checked={on} variant={on ? "secondary" : "outline"} title={HEAD_LABELS[h]} aria-label={HEAD_LABELS[h]}
+                  className={cn("h-11 min-w-11 px-2", on && "ring-2 ring-ring")} onClick={() => onChange({ [k]: h })}>
+                  <HeadIcon head={h} flip={k === "head0"} />
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 export const tip = (i: ToolItem) => ITEM_INFO[i].key ? `${ITEM_INFO[i].label} (${ITEM_INFO[i].key})` : ITEM_INFO[i].label;
 const SIZE_PX: Record<BarSize, number> = { s: 44, m: 48, l: 56 };
 
 export function Toolbar(p: ToolbarProps) {
   const t = useTools();
-  const [open, setOpen] = useState<null | "pen" | "eraser" | "page" | "guides" | "insert" | "bar" | "preset">(null);
+  const [open, setOpen] = useState<null | "pen" | "eraser" | "page" | "guides" | "insert" | "bar" | "preset" | "heads" | "fill" | "vanish">(null);
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
   const [editing, setEditing] = useState(false);
   const [presetEdit, setPresetEdit] = useState<string | null>(null);
@@ -247,6 +290,22 @@ export function Toolbar(p: ToolbarProps) {
             <span ref={p.zoomLabelRef}>100 %</span>
           </Button>
         );
+      case "shapes": return <ToolButton label={label} onClick={() => p.onInsert("shapes")}><Shapes /></ToolButton>;
+      case "heads":
+        return (
+          <ToolButton label={label} active={open === "heads" || t.head0 !== "none" || t.head1 !== "none"} onClick={() => setOpen(open === "heads" ? null : "heads")}>
+            <HeadIcon head={t.head1 === "none" && t.head0 === "none" ? "arrow" : t.head1} />
+          </ToolButton>
+        );
+      case "fill":
+        return <ToolButton label={label} active={t.tool === "fill"} onClick={() => (t.tool === "fill" ? setOpen(open === "fill" ? null : "fill") : t.setTool("fill"))}>
+          <PaintBucket /><span className="absolute right-1.5 bottom-1.5 size-2.5 rounded-full border border-black/10" style={{ background: t.color }} />
+        </ToolButton>;
+      case "angle": return <ToolButton label={label} active={t.tool === "angle"} onClick={() => t.setTool("angle")}><Angle /></ToolButton>;
+      case "zoomwrite": return <ToolButton label={label} active={t.zoomWrite} onClick={() => t.setZoom({ zoomWrite: !t.zoomWrite })}><ScanSearch /></ToolButton>;
+      case "laser": return <ToolButton label={label} active={t.tool === "laser"} onClick={() => t.setTool("laser")}><Wand /></ToolButton>;
+      case "vanish":
+        return <ToolButton label={label} active={t.tool === "vanish"} onClick={() => (t.tool === "vanish" ? setOpen(open === "vanish" ? null : "vanish") : t.setTool("vanish"))}><Sparkles /></ToolButton>;
       case "page": return <ToolButton label={label} active={open === "page"} onClick={() => setOpen(open === "page" ? null : "page")}><Settings2 /></ToolButton>;
       case "presets":
         return (
@@ -395,6 +454,49 @@ export function Toolbar(p: ToolbarProps) {
             </Button>
           ))}
           <p className="pt-1 text-xs text-muted-foreground">Bilder und PDFs auch per Strg+V oder Drag &amp; Drop.</p>
+        </PopoverContent>
+      </Popover>
+
+      <Popover open={open === "heads"} onOpenChange={(o) => setOpen(o ? "heads" : null)}>
+        <PopoverAnchor asChild><span className="absolute inset-0 -z-10" aria-hidden /></PopoverAnchor>
+        <PopoverContent side={side} className="w-80 space-y-2">
+          <p className="text-sm font-medium">Pfeilspitzen</p>
+          <HeadPicker head0={t.head0} head1={t.head1} onChange={t.setHeads} />
+          <p className="text-xs text-muted-foreground">Gilt für Linien am Lineal und für Freihand → Linie/Pfeil. Nachträglich: Linie mit dem Lasso auswählen.</p>
+        </PopoverContent>
+      </Popover>
+
+      <Popover open={open === "fill"} onOpenChange={(o) => setOpen(o ? "fill" : null)}>
+        <PopoverAnchor asChild><span className="absolute inset-0 -z-10" aria-hidden /></PopoverAnchor>
+        <PopoverContent side={side} className="w-80 space-y-3">
+          <p className="text-sm font-medium">Füllen</p>
+          <ColorGrid value={t.color} onPick={t.setColor} />
+          <Chips label="Füllart" value={t.fillHatch ? "hatch" : "solid"} onChange={(v) => t.setFill({ fillHatch: v === "hatch" ? (t.fillHatch ?? DEFAULT_HATCH) : null })}
+            options={[{ value: "solid", label: "Farbe" }, { value: "hatch", label: "Schraffur" }]} />
+          <div className="space-y-1">
+            <Label htmlFor="fill-op" className="text-xs text-muted-foreground">Deckkraft {Math.round(t.fillOpacity * 100)} %</Label>
+            <input id="fill-op" type="range" min={10} max={100} step={5} className="h-11 w-full" value={Math.round(t.fillOpacity * 100)}
+              onChange={(e) => t.setFill({ fillOpacity: Number(e.target.value) / 100 })} />
+          </div>
+          {t.fillHatch && (
+            <>
+              <Chips label="Schraffur-Winkel" value={t.fillHatch.angle} onChange={(angle) => t.setFill({ fillHatch: { ...t.fillHatch!, angle } })}
+                options={[0, 45, 90, 135].map((v) => ({ value: v, label: `${v}°` }))} />
+              <Chips label="Schraffur-Abstand" value={Math.round(t.fillHatch.gap / (DEFAULT_HATCH.gap / 3))} onChange={(mm) => t.setFill({ fillHatch: { ...t.fillHatch!, gap: mm * (DEFAULT_HATCH.gap / 3) } })}
+                options={[2, 3, 5, 8].map((v) => ({ value: v, label: `${v} mm` }))} />
+            </>
+          )}
+          <p className="text-xs text-muted-foreground">Geschlossene Form oder Freihand-Bereich antippen. Lücken bis 2 mm werden überbrückt. Die Füllung liegt unter der Tinte.</p>
+        </PopoverContent>
+      </Popover>
+
+      <Popover open={open === "vanish"} onOpenChange={(o) => setOpen(o ? "vanish" : null)}>
+        <PopoverAnchor asChild><span className="absolute inset-0 -z-10" aria-hidden /></PopoverAnchor>
+        <PopoverContent side={side} className="w-72 space-y-2">
+          <p className="text-sm font-medium">Verschwindende Tinte</p>
+          <Chips label="Sichtbar für" value={t.vanishMs} onChange={t.setVanishMs}
+            options={[1000, 2000, 4000, 8000].map((v) => ({ value: v, label: `${v / 1000} s` }))} />
+          <p className="text-xs text-muted-foreground">Zum Zeigen und Erklären – nichts davon wird gespeichert.</p>
         </PopoverContent>
       </Popover>
 
