@@ -53,5 +53,13 @@ jobs:
             Windows-Installer zum Ausprobieren (noch nicht signiert – SmartScreen: „Weitere Informationen“ → „Trotzdem ausführen“).
             - `Noteforge_*_x64-setup.exe` (NSIS, Installation pro Benutzer, empfohlen)
             - `Noteforge_*_x64_de-DE.msi` (MSI)
+
+            Neu in dieser Version:
+            - Blatt-Titel: kein Titelbalken mehr, Umbenennen per Doppeltipp/F2, automatischer Titel aus dem Inhalt
+            - Formen-Bibliothek (Koordinatensystem, Zahlenstrahl, Schaltzeichen, Laborgeräte, Notenlinien, eigene Formen)
+            - Pfeilspitzen, Füllwerkzeug, Winkel messen, Zoom-Schreibfeld, Laserpointer, verschwindende Tinte
+            - Automatische Sicherungen mit Aufbewahrung und Wiederherstellen (komplett oder einzelne Blätter/Fächer)
+            - Absturzschutz: ungespeicherte Änderungen werden nach einem Absturz wiederhergestellt
+            - Leistungsmodus im Akkubetrieb
           releaseDraft: false
           prerelease: false  # „latest“ muss auf das neueste Release zeigen (Update-Endpunkt)
