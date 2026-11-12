@@ -95,6 +95,7 @@ mod tests {
         let c = rusqlite::Connection::open(today).unwrap();
         let n: i64 = c.query_row("SELECT count(*) FROM subject", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 1);
+        drop(c); // Windows: offene Datei verhindert das Löschen
         std::fs::remove_dir_all(dir).unwrap();
     }
 }
