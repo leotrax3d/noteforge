@@ -1,5 +1,6 @@
 mod commands;
 mod integrations;
+mod recognition;
 mod reminders;
 pub mod db;
 
@@ -27,6 +28,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_version,
+            recognition::recognition_status, recognition::recognize_strokes,
+            recognition::ocr_image, recognition::recognize_page,
             commands::list_subjects, commands::create_subject, commands::update_subject,
             commands::delete_subject, commands::reorder_subjects,
             commands::list_sections, commands::create_section, commands::update_section,

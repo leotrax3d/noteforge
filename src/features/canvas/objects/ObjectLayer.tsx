@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { TagMenu } from "@/features/tags/TagMenu";
 import { tagIcon, useTagStore } from "@/features/tags/tag-store";
 import { isBlankHtml, linkifyHtml, sanitizeHtml } from "./sanitize";
+import { MathView } from "@/features/recognition/Math";
 
 export interface TagAnchor { id: string; bbox: BBox; tags: ElementTag[] }
 
@@ -26,6 +27,8 @@ export interface ObjectLayerProps {
   onTag: (elementId: string, tagId: string, on: boolean) => void;
   onTagDone: (elementId: string, tagId: string, done: boolean) => void;
   onLink: (title: string) => void;
+  /** Formel antippen (Textwerkzeug) → LaTeX-Dialog. */
+  onEditLatex?: (o: TextObj) => void;
 }
 
 /** DOM-Ebene für Textcontainer und Tabellen; Kamera-Transform setzt die Engine direkt. */
@@ -43,7 +46,9 @@ export function ObjectLayer(p: ObjectLayerProps) {
         onClickCapture={(e) => (e.target as HTMLElement).closest?.("a[data-link]") && e.preventDefault()}>
         {p.anchors.map((a) => <TagBadges key={a.id} anchor={a} onDone={p.onTagDone} />)}
         {p.objects.map((o) =>
-          o.kind === "text" ? (
+          o.kind === "text" && o.data.latex != null ? (
+            <MathBox key={o.id} obj={o} {...p} />
+          ) : o.kind === "text" ? (
             <TextBox key={o.id} obj={o} {...p} />
           ) : o.kind === "table" ? (
             <TableBox key={o.id} obj={o} {...p} />
@@ -208,6 +213,20 @@ function pastePlain(e: React.ClipboardEvent) {
   e.preventDefault();
   e.stopPropagation();
   document.execCommand("insertText", false, e.clipboardData.getData("text/plain"));
+}
+
+/** Formel (KaTeX); bearbeitet wird über den LaTeX-Dialog. */
+function MathBox(p: BoxProps<TextObj>) {
+  const latex = p.obj.data.latex ?? "";
+  return (
+    <Frame {...p} label="Formel">
+      <button type="button" aria-label={`Formel ${latex} bearbeiten`} title="Formel bearbeiten"
+        className="block min-h-11 w-full overflow-x-auto px-2 py-1 text-left text-xl text-foreground [&_.katex-display]:my-0 [&_.katex-display]:text-left"
+        onClick={() => p.onEditLatex?.(p.obj)}>
+        <MathView latex={latex} className="pointer-events-none" />
+      </button>
+    </Frame>
+  );
 }
 
 function TextBox(p: BoxProps<TextObj>) {

@@ -1,3 +1,4 @@
+import { latexToPlain } from "@/features/recognition/latex";
 // Offscreen-Rendering eines Blatts in DIN-A4-Bögen (PDF-Export, Drucken).
 import { PALETTES, drawBackground } from "../core/background";
 import { drawImageObj } from "../core/engine";
@@ -227,8 +228,11 @@ function rotated(ctx: CanvasRenderingContext2D, o: CanvasObj, draw: () => void) 
   ctx.restore();
 }
 
+const escapeHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
 export function drawTextObj(ctx: CanvasRenderingContext2D, o: TextObj) {
-  rotated(ctx, o, () => drawBlocks(ctx, htmlToBlocks(o.data.html), o.x + 8, o.y + 6, o.w - 16));
+  const html = o.data.latex != null ? `<i>${escapeHtml(latexToPlain(o.data.latex))}</i>` : o.data.html;
+  rotated(ctx, o, () => drawBlocks(ctx, htmlToBlocks(html), o.x + 8, o.y + 6, o.w - 16));
 }
 
 export function drawTableObj(ctx: CanvasRenderingContext2D, o: TableObj) {

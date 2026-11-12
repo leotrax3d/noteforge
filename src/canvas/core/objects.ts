@@ -4,7 +4,8 @@ import { apply, type Mat } from "./geometry";
 /** Nicht-Strich-Elemente (SPEC §3): Textcontainer, Bilder, Tabellen. */
 export type ObjKind = "text" | "image" | "table";
 
-export interface TextData { html: string }
+/** `latex` gesetzt = Formel (KaTeX-Anzeige statt Rich-Text). */
+export interface TextData { html: string; latex?: string }
 export interface ImageData {
   src: string;
   /** Fest im Hintergrund (importierte PDF-Seite): nicht auswählbar, Element-Typ „pdfPage“. */

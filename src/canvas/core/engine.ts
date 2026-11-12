@@ -14,7 +14,7 @@ import {
   type Vec,
 } from "./geometry";
 import { a4PageCount, a4Size, clampZoom, type PageSetup } from "./layout";
-import { PSTRIDE, intersects, makeStroke, uid, type PenKind, type Stroke } from "./model";
+import { PSTRIDE, computeBBox, intersects, makeStroke, uid, type PenKind, type Stroke } from "./model";
 import { PENS, buildPath, drawStroke, strokePath, toFreehand } from "./pens";
 import { StrokeStore, type Change } from "./store";
 import { TileCache } from "./tiles";
@@ -54,6 +54,9 @@ export interface SelectionInfo {
   /** Bildschirm-Rechteck (CSS-Pixel relativ zum Host). */
   rect: BBox;
   color: string | null;
+  /** Anzahl ausgewählter Striche bzw. Bilder (für Erkennung: Handschrift/Formel bzw. OCR). */
+  strokes: number;
+  images: number;
 }
 
 export interface EngineEvents {
@@ -443,6 +446,31 @@ export class CanvasEngine {
     const copiesO = bakedO.map((o) => ({ ...transformObj(o, off, uid()), z: this.store.nextZ() }));
     this.store.commit({ remove: [], add: copies, addObj: copiesO });
     this.select(copies, copiesO);
+  }
+
+  /** Ausgewählte Schrift (Transformation eingerechnet, ohne Textmarker) für die Erkennung. */
+  selectionInk(): { points: Float32Array[]; boxes: BBox[]; bbox: BBox; images: ImageObj[] } | null {
+    const sel = this.sel;
+    if (!sel) return null;
+    const m = this.selMatrix();
+    const strokes = sel.strokes.filter((s) => s.pen !== "highlighter").map((s) => (isIdentity(m) ? s : transformStroke(s, m)));
+    const images = sel.objs.map((o) => (isIdentity(m) ? o : transformObj(o, m)));
+    const all = [...strokes, ...images];
+    if (!all.length) return null;
+    return { points: strokes.map((s) => s.points), boxes: strokes.map((s) => computeBBox(s.points, 0)), bbox: unionAll(strokes, images), images };
+  }
+
+  /** Auswahl durch Objekte ersetzen (ein Undo-Schritt); `keep` behält die Striche. */
+  replaceSelection(objs: CanvasObj[], keep = false) {
+    const sel = this.sel;
+    if (!sel) return;
+    if (keep) this.commitSelection();
+    else {
+      this.sel = null;
+      this.unhide();
+    }
+    this.store.commit(keep ? { add: [], remove: [], addObj: objs } : { remove: sel.strokes, add: [], removeObj: sel.objs, addObj: objs });
+    this.emitSelection();
   }
 
   deleteSelection() {
@@ -1308,6 +1336,8 @@ export class CanvasEngine {
       ids: [anchor.id, ...all.filter((e) => e !== anchor).map((e) => e.id)],
       rect: { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y },
       color: colors.size === 1 ? [...colors][0] : null,
+      strokes: this.sel.strokes.length,
+      images: this.sel.objs.length,
     });
   }
 

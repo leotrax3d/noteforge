@@ -30,6 +30,8 @@ fn rows<T>(
 pub fn maintenance(conn: &mut Connection) -> Result<()> {
     purge_older_than(conn, now_ms() - TRASH_DAYS * 86_400_000)?;
     conn.execute("DELETE FROM page_fts WHERE page_id NOT IN (SELECT id FROM page)", [])?;
+    conn.execute("DELETE FROM page_ink WHERE page_id NOT IN (SELECT id FROM page)", [])?;
+    conn.execute("DELETE FROM image_ocr WHERE element_id NOT IN (SELECT id FROM element)", [])?;
     let indexed: i64 = conn.query_row("SELECT count(*) FROM page_fts", [], |r| r.get(0))?;
     let pages: i64 = conn.query_row("SELECT count(*) FROM page", [], |r| r.get(0))?;
     if indexed < pages {
@@ -170,7 +172,13 @@ pub fn element_text(kind: &str, data: &[u8]) -> String {
     };
     let d = &v["data"];
     match kind {
-        "text" => strip_html(d["html"].as_str().unwrap_or("")),
+        "text" => {
+            let t = strip_html(d["html"].as_str().unwrap_or(""));
+            match d["latex"].as_str() {
+                Some(l) if !l.trim().is_empty() => format!("{t} {}", l.trim()).trim().to_string(),
+                _ => t,
+            }
+        }
         "pdfPage" => d["text"].as_str().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" "),
         "table" => d["cells"]
             .as_array()
@@ -231,6 +239,24 @@ pub fn reindex_page(conn: &Connection, page_id: &str) -> Result<()> {
     .map(|(k, d)| element_text(&k, &d))
     .filter(|s| !s.is_empty())
     .collect();
+    let mut parts = parts;
+    // Erkannte Handschrift und OCR-Text aus Bildern (Phase 7)
+    if let Some(ink) = conn
+        .query_row("SELECT text FROM page_ink WHERE page_id=?1", [page_id], |r| r.get::<_, String>(0))
+        .optional()?
+        .filter(|t| !t.trim().is_empty())
+    {
+        parts.push(ink);
+    }
+    parts.extend(
+        rows(
+            conn,
+            "SELECT o.text FROM image_ocr o JOIN element e ON e.id = o.element_id
+             WHERE o.page_id=?1 AND o.text <> '' ORDER BY e.z",
+            [page_id],
+            |r| r.get::<_, String>(0),
+        )?,
+    );
     conn.execute(
         "INSERT INTO page_fts (page_id, title, body) VALUES (?1, ?2, ?3)",
         params![page_id, title, parts.join("\n")],

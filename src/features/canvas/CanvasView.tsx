@@ -29,12 +29,21 @@ import { ObjectLayer } from "./objects/ObjectLayer";
 import { FormatBar } from "./objects/FormatBar";
 import { captureScreen, encodeImage, fileToImage, type LoadedImage } from "./objects/images";
 import { useTools } from "./tool-store";
+import { recognition, dataUrlBytes, errText, UNAVAILABLE } from "@/lib/recognition";
+import { inkToLatex } from "@/features/recognition/latex";
+import { LatexDialog, type LatexRequest } from "@/features/recognition/LatexDialog";
+import { OcrDialog, type OcrView } from "@/features/recognition/OcrDialog";
 
 type SaveState = "saved" | "pending" | "saving" | "error";
 const SAVE_DELAY = 800;
 const SAVE_MAX_WAIT = 5000;
 /** Mindestabstand automatischer Seitenversionen. */
 const VERSION_INTERVAL = 10 * 60_000;
+/** Ruhezeit nach dem Speichern, bevor Handschrift/Bilder für die Suche erkannt werden. */
+const RECOGNIZE_DELAY = 4000;
+
+const escapeHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const textHtml = (t: string) => t.split("\n").map((l) => `<div>${escapeHtml(l) || "<br>"}</div>`).join("");
 
 /** Zeichenfläche eines Blatts: Engine + Werkzeugleiste + Autospeichern. */
 export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, onPageReplaced, sections = [], pages = [], subjectName = "" }: {
@@ -72,6 +81,9 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
   const [versions, setVersions] = useState(false);
   const [tplDialog, setTplDialog] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [latexReq, setLatexReq] = useState<(LatexRequest & { target?: TextObj }) | null>(null);
+  const [ocrView, setOcrView] = useState<OcrView | null>(null);
+  const recTimer = useRef(0);
   const tagsLoaded = useTagStore((s) => s.loaded);
   const loadTags = useTagStore((s) => s.load);
   const layerElRef = useRef<HTMLDivElement | null>(null);
@@ -103,6 +115,10 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
       ))
       .then(() => {
         setSave(engine.store.hasPending ? "pending" : "saved");
+        // Erkennung für die Suche (Handschrift + OCR) im Hintergrund, erst nach einer Ruhepause
+        clearTimeout(recTimer.current);
+        const pid = page.id;
+        recTimer.current = window.setTimeout(() => void recognition.recognizePage(pid).catch(console.error), RECOGNIZE_DELAY);
         if (batch.deletes.length) {
           const gone = new Set(batch.deletes);
           setPageTags((t) => (t.some((x) => gone.has(x.elementId)) ? t.filter((x) => !gone.has(x.elementId)) : t));
@@ -267,6 +283,77 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
     if (objs[0]) engine.focusOn(objs[0].bbox);
     flash(imgs.length === 1 ? "1 PDF-Seite eingefügt" : `${imgs.length} PDF-Seiten eingefügt`);
   }, "PDF-Import fehlgeschlagen");
+
+  // ---- Erkennung (Phase 7) ----
+  const inkToText = () => runBusy(async () => {
+    const engine = engineRef.current;
+    const ink = engine?.selectionInk();
+    if (!engine || !ink?.points.length) return;
+    setBusy("Handschrift wird erkannt …");
+    const r = await recognition.recognizeStrokes(ink.points);
+    if (!r.text.trim()) { flash("Keine Schrift erkannt"); return; }
+    const b = ink.bbox;
+    const o = makeObj<TextObj>({ id: uid(), kind: "text", z: engine.nextZ(), x: b.x, y: b.y, w: Math.max(160, b.w), h: Math.max(44, b.h), angle: 0, data: { html: textHtml(r.text) } });
+    engine.replaceSelection([o]);
+    flash("In Text umgewandelt");
+  }, "Erkennung fehlgeschlagen");
+
+  const inkToFormula = async () => {
+    const ink = engineRef.current?.selectionInk();
+    if (!ink?.points.length) return;
+    setBusy("Formel wird erkannt …");
+    try {
+      const r = await recognition.recognizeStrokes(ink.points);
+      setLatexReq({ latex: inkToLatex(r.words, ink.boxes) });
+    } catch (err) {
+      const msg = errText(err);
+      setLatexReq({ latex: "", note: msg === UNAVAILABLE ? `${msg} – Formel hier von Hand eingeben.` : `Erkennung fehlgeschlagen (${msg}) – Formel von Hand eingeben.` });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const insertFormula = (latex: string, keep: boolean) => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const target = latexReq?.target;
+    if (target) {
+      const cur = engine.store.getObj(target.id);
+      if (cur?.kind !== "text") return;
+      const next = { ...cur, data: { ...cur.data, latex } };
+      engine.updateObjectLive(next);
+      engine.recordObjectEdit(cur, next);
+      return;
+    }
+    const ink = engine.selectionInk();
+    if (!ink) return;
+    const b = ink.bbox;
+    // Beim Behalten der Handschrift die Formel rechts daneben setzen
+    const x = keep ? b.x + b.w + 16 : b.x;
+    const o = makeObj<TextObj>({ id: uid(), kind: "text", z: engine.nextZ(), x, y: b.y, w: Math.max(120, b.w), h: Math.max(44, b.h), angle: 0, data: { html: "", latex } });
+    engine.replaceSelection([o], keep);
+  };
+
+  const ocrSelection = () => runBusy(async () => {
+    const img = engineRef.current?.selectionInk()?.images[0];
+    const bytes = img && dataUrlBytes(img.data.src);
+    if (!img || !bytes) return;
+    setBusy("Text im Bild wird gelesen …");
+    try {
+      const r = await recognition.ocrImage(bytes);
+      setOcrView({ text: r.text });
+    } catch (err) {
+      setOcrView({ text: "", error: errText(err) });
+    }
+  }, "OCR fehlgeschlagen");
+
+  const insertOcrText = (text: string) => {
+    const engine = engineRef.current;
+    const img = engine?.selectionInk()?.images[0];
+    if (!engine || !img) return;
+    engine.commitSelection();
+    engine.addObject(makeObj<TextObj>({ id: uid(), kind: "text", z: engine.nextZ(), x: img.bbox.x + img.bbox.w + 16, y: img.bbox.y, w: 320, h: 44, angle: 0, data: { html: textHtml(text) } }));
+  };
 
   const doExport = (scope: ExportScope) => runBusy(async () => {
     setBusy("PDF wird erstellt …");
@@ -460,6 +547,7 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
           onTag={(id, tagId, on) => void toggleTag(id, tagId, on)}
           onTagDone={setTagDone}
           onLink={(t) => onOpenLink?.(t)}
+          onEditLatex={(o) => setLatexReq({ latex: o.data.latex ?? "", edit: true, target: o })}
         />
         <input ref={fileRef} type="file" accept="image/*" multiple hidden aria-hidden
           onChange={(ev) => { void insertFiles([...(ev.target.files ?? [])]); ev.target.value = ""; }} />
@@ -499,6 +587,9 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
             onCopy={() => e()?.duplicateSelection()}
             onDelete={() => e()?.deleteSelection()}
             onDone={() => e()?.commitSelection()}
+            onInkToText={() => void inkToText()}
+            onInkToLatex={() => void inkToFormula()}
+            onOcr={() => void ocrSelection()}
             activeTags={new Set((tagMap.get(sel.ids[0]) ?? []).map((t) => t.tagId))}
             onTag={(tagId, on) => void toggleTag(sel.ids[0], tagId, on)}
           />
@@ -511,6 +602,8 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
           </div>
         )}
       </div>
+      <LatexDialog req={latexReq} onOpenChange={(o) => !o && setLatexReq(null)} onInsert={insertFormula} />
+      <OcrDialog view={ocrView} onOpenChange={(o) => !o && setOcrView(null)} onInsert={insertOcrText} />
       <VersionsDialog open={versions} onOpenChange={setVersions} pageId={page.id}
         beforeAction={async () => { engineRef.current?.commitSelection(); await flush(); }}
         onRestored={() => onPageReplaced?.()} />

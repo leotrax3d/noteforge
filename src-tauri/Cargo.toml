@@ -34,6 +34,14 @@ base64 = "0.22"
 
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }
+# Phase 7: InkAnalyzer + Windows.Media.Ocr (WinRT)
+windows = { version = "0.62", features = [
+  "Foundation", "Foundation_Collections", "Globalization", "Graphics_Imaging", "Media_Ocr",
+  "Security_Cryptography", "Storage_Streams", "UI_Input_Inking", "UI_Input_Inking_Analysis",
+  "Win32_System_WinRT",
+] }
+windows-collections = "0.3"
+windows-numerics = "0.3"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

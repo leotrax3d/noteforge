@@ -1,12 +1,15 @@
 import { useState } from "react";
-import { Check, Copy, Palette, Trash2 } from "lucide-react";
+import { Check, Copy, Palette, ScanText, Sigma, Trash2, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { SelectionInfo } from "@/canvas/core/engine";
 import { ColorGrid } from "./Toolbar";
 import { TagMenu } from "@/features/tags/TagMenu";
 
-export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDone, activeTags, onTag }: {
+export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDone, activeTags, onTag, onInkToText, onInkToLatex, onOcr }: {
+  onInkToText: () => void;
+  onInkToLatex: () => void;
+  onOcr: () => void;
   activeTags: Set<string>;
   onTag: (tagId: string, on: boolean) => void;
   sel: SelectionInfo;
@@ -33,6 +36,15 @@ export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDo
         </PopoverContent>
       </Popover>
       <TagMenu active={activeTags} onToggle={onTag} />
+      {sel.strokes > 0 && (
+        <>
+          <Button variant="ghost" size="icon" aria-label="In Text umwandeln" title="Handschrift → Text" onClick={onInkToText}><Type /></Button>
+          <Button variant="ghost" size="icon" aria-label="Als Formel (LaTeX)" title="Formel → LaTeX" onClick={onInkToLatex}><Sigma /></Button>
+        </>
+      )}
+      {sel.images > 0 && sel.strokes === 0 && (
+        <Button variant="ghost" size="icon" aria-label="Text im Bild erkennen" title="Text im Bild erkennen (OCR)" onClick={onOcr}><ScanText /></Button>
+      )}
       <Button variant="ghost" size="icon" aria-label="Kopieren" title="Kopieren" onClick={onCopy}><Copy /></Button>
       <Button variant="ghost" size="icon" aria-label="Löschen" title="Löschen" onClick={onDelete}><Trash2 /></Button>
       <Button variant="ghost" size="icon" aria-label="Auswahl aufheben" title="Fertig" onClick={onDone}><Check /></Button>
