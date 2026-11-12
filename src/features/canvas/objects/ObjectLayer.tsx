@@ -1,10 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Check, GripVertical, Minus, MoveHorizontal, Plus, Trash2 } from "lucide-react";
+import { Check, Minus, Plus } from "lucide-react";
 import type { CanvasEngine } from "@/canvas/core/engine";
 import { makeObj, type CanvasObj, type TableObj, type TextObj } from "@/canvas/core/objects";
 import type { BBox, ElementTag } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { TagMenu } from "@/features/tags/TagMenu";
 import { tagIcon, useTagStore } from "@/features/tags/tag-store";
 import { isBlankHtml, linkifyHtml, sanitizeHtml } from "./sanitize";
 import { MathView } from "@/features/recognition/Math";
@@ -64,7 +63,7 @@ export function ObjectLayer(p: ObjectLayerProps) {
 type BoxProps<T> = ObjectLayerProps & { obj: T };
 
 /** Gemeinsamer Rahmen: Verschiebegriff, Breite ändern, Löschen. */
-function Frame({ obj, engine, interactive, editingId, hoverId, onEditing, children, label, tags, onTag }: BoxProps<CanvasObj> & { children: ReactNode; label: string }) {
+function Frame({ obj, engine, interactive, editingId, hoverId, onEditing, children, label }: BoxProps<CanvasObj> & { children: ReactNode; label: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const active = editingId === obj.id;
   const [held, setHeld] = useState(false);
@@ -114,6 +113,34 @@ function Frame({ obj, engine, interactive, editingId, hoverId, onEditing, childr
     el.addEventListener("pointercancel", up);
   };
 
+  const startMove = (el: HTMLElement, pointerId: number, x0: number, y0: number) => {
+    if (!engine) return;
+    const before = engine.store.getObj(obj.id);
+    if (!before) return;
+    try { el.setPointerCapture(pointerId); } catch { /* Zeiger schon losgelassen */ }
+    el.style.cursor = "grabbing";
+    const scale = engine.zoom;
+    // Eingerastete Textfelder bleiben beim Verschieben auf den Linien (Grundlinie) bzw. Kästchen
+    const lh = before.kind === "text" ? before.data.lh : undefined;
+    const grid = before.kind === "text" && before.data.padX === 0;
+    const snap = (d: number, on: boolean) => (lh && on ? Math.round(d / lh) * lh : d);
+    const move = (ev: PointerEvent) => {
+      const dx = snap((ev.clientX - x0) / scale, grid), dy = snap((ev.clientY - y0) / scale, true);
+      engine.updateObjectLive(makeObj({ ...before, x: before.x + dx, y: before.y + dy }) as CanvasObj);
+    };
+    const up = () => {
+      el.style.cursor = "";
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+      const after = engine.store.getObj(obj.id);
+      if (after) engine.recordObjectEdit(before, after);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+  };
+
   return (
     <div
       ref={ref}
@@ -123,7 +150,7 @@ function Frame({ obj, engine, interactive, editingId, hoverId, onEditing, childr
       className={cn(
         "absolute rounded-sm",
         live ? "pointer-events-auto" : "pointer-events-none",
-        active ? "outline-2 outline-[var(--subject,#3b82f6)] outline-dashed" : interactive && "outline-1 outline-border outline-dashed",
+        active && "outline outline-1 outline-foreground/25",
       )}
       style={{ left: obj.x, top: obj.y, width: obj.w, transform: obj.angle ? `rotate(${obj.angle}rad)` : undefined }}
       onPointerEnter={() => hovered && setHeld(true)}
@@ -131,36 +158,64 @@ function Frame({ obj, engine, interactive, editingId, hoverId, onEditing, childr
       onPointerDown={(e) => {
         e.stopPropagation();
         if (!active) onEditing(obj.id);
+        // Gedrückt halten → verschieben (kurzes Antippen bleibt Bearbeiten/Markieren)
+        const x0 = e.clientX, y0 = e.clientY, el = e.currentTarget as HTMLElement, id = e.pointerId;
+        const cancel = () => { clearTimeout(t); el.removeEventListener("pointermove", mv); el.removeEventListener("pointerup", cancel); };
+        const mv = (ev: PointerEvent) => { if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8) cancel(); };
+        const t = window.setTimeout(() => {
+          cancel();
+          (document.activeElement as HTMLElement | null)?.blur?.();
+          window.getSelection()?.removeAllRanges();
+          startMove(el, id, x0, y0);
+        }, 380);
+        el.addEventListener("pointermove", mv);
+        el.addEventListener("pointerup", cancel);
       }}
     >
       {children}
-      {live && (
-        <div className="absolute -top-12 left-0 flex gap-1" style={{ transformOrigin: "0 100%" }}>
-          <button type="button" aria-label={`${label} verschieben`} title="Verschieben" onPointerDown={(e) => drag(e, "move")}
-            className="flex size-11 cursor-grab touch-none items-center justify-center rounded-md border bg-card shadow-sm">
-            <GripVertical className="size-5" />
+      {active && (
+        // Kopfleiste wie in OneNote: Mitte = verschieben, rechts = Breite ändern
+        <div className="absolute inset-x-[-1px] -top-3.5 flex h-3.5 items-center rounded-t-sm bg-foreground/10 text-foreground/50" data-format-bar>
+          <button type="button" aria-label={`${label} verschieben`} title="Verschieben" tabIndex={-1}
+            onPointerDown={(e) => { e.stopPropagation(); startMove(e.currentTarget, e.pointerId, e.clientX, e.clientY); }}
+            className="mx-auto flex h-full w-16 cursor-move touch-none items-center justify-center gap-0.5 after:absolute after:-inset-y-3 after:inset-x-0 relative">
+            {[0, 1, 2, 3].map((i) => <span key={i} className="size-[3px] rounded-full bg-current" />)}
           </button>
-          <button type="button" aria-label={`${label} löschen`} title="Löschen"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => { onEditing(null); engine?.removeObject(obj.id); }}
-            className="flex size-11 items-center justify-center rounded-md border bg-card text-destructive shadow-sm">
-            <Trash2 className="size-5" />
+          <button type="button" aria-label={`Breite von ${label} ändern`} title="Breite ändern" tabIndex={-1} onPointerDown={(e) => drag(e, "width")}
+            className="relative flex h-full w-6 cursor-ew-resize touch-none items-center justify-center after:absolute after:-inset-3">
+            <svg width="12" height="8" viewBox="0 0 12 8" fill="currentColor" aria-hidden><path d="M0 4 4 0v8zM12 4 8 0v8z" /></svg>
           </button>
-          <TagMenu className="size-11 border bg-card shadow-sm" active={new Set((tags.get(obj.id) ?? []).map((t) => t.tagId))}
-            onToggle={(tagId, on) => onTag(obj.id, tagId, on)} />
         </div>
-      )}
-      {live && (
-        <button type="button" aria-label={`Breite von ${label} ändern`} title="Breite ändern" onPointerDown={(e) => drag(e, "width")}
-          className="absolute top-1/2 -right-6 flex size-11 -translate-y-1/2 cursor-ew-resize touch-none items-center justify-center rounded-full border bg-card shadow-sm">
-          <MoveHorizontal className="size-4" />
-        </button>
       )}
     </div>
   );
 }
 
 /** innerHTML nur setzen, wenn das Element nicht gerade bearbeitet wird (Anzeige mit Seitenlinks). */
+/** „- “, „* “ bzw. „1. “ am Zeilenanfang → Aufzählung bzw. nummerierte Liste (wie in OneNote/Word). */
+function autoList(): boolean {
+  const sel = window.getSelection();
+  if (!sel?.rangeCount || !sel.isCollapsed) return false;
+  const node = sel.anchorNode;
+  if (!node || node.nodeType !== Node.TEXT_NODE) return false;
+  const before = (node.textContent ?? "").slice(0, sel.anchorOffset);
+  // nur am Anfang eines Absatzes (Textknoten ist erstes Kind seines Blocks)
+  const block = node.parentElement?.closest("div, p, li, [role=textbox]");
+  if (!block || block.tagName === "LI") return false;
+  const first = (() => { let n: Node | null = node; while (n && n.parentNode !== block) n = n.parentNode; return n === block.firstChild || !n?.previousSibling || n.previousSibling.nodeName === "BR"; })();
+  if (!first) return false;
+  const kind = /^[-*•]$/.test(before) ? "insertUnorderedList" : /^1[.)]$/.test(before) ? "insertOrderedList" : null;
+  if (!kind) return false;
+  const r = document.createRange();
+  r.setStart(node, 0);
+  r.setEnd(node, sel.anchorOffset);
+  sel.removeAllRanges();
+  sel.addRange(r);
+  document.execCommand("delete");
+  document.execCommand(kind);
+  return true;
+}
+
 function useHtml(ref: React.RefObject<HTMLElement | null>, html: string) {
   useLayoutEffect(() => {
     const el = ref.current;
@@ -245,7 +300,14 @@ function TextBox(p: BoxProps<TextObj>) {
 
   useEffect(() => {
     if (active && document.activeElement !== ed.current) ed.current?.focus();
-  }, [active]);
+    if (active) return;
+    // Leere Textfelder verschwinden, sobald sie nicht mehr bearbeitet werden
+    const t = window.setTimeout(() => {
+      const cur = engine?.store.getObj(obj.id);
+      if (cur?.kind === "text" && isBlankHtml(cur.data.html) && document.activeElement !== ed.current) engine?.removeObject(obj.id);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [active, engine, obj.id]);
 
   const pushLive = () => {
     clearTimeout(timer.current);
@@ -283,6 +345,21 @@ function TextBox(p: BoxProps<TextObj>) {
         onPaste={pastePlain}
         onKeyDown={(e) => {
           if (e.key === "Escape") (e.currentTarget as HTMLElement).blur();
+          if (e.key === " " && autoList()) { e.preventDefault(); e.stopPropagation(); return; }
+          if (e.key === "Tab" && !e.shiftKey && engine) {
+            // Tab macht aus dem Textfeld eine Tabelle (Zeilen → erste Spalte), weiter in Zelle 1/2
+            e.preventDefault();
+            const cur = engine.store.getObj(obj.id);
+            if (cur?.kind !== "text") return;
+            const lines = (ed.current?.innerText ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+            const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+            const cells = lines.length ? lines.map((l) => [esc(l), ""]) : [["", ""], ["", ""]];
+            const table = makeObj<TableObj>({ id: cur.id + "-t", kind: "table", z: cur.z, x: cur.x, y: cur.y, w: Math.max(cur.w, 320), h: 44 * cells.length, angle: cur.angle, data: { cells } });
+            before.current = null;
+            engine.replaceObject(cur, table);
+            onEditing(table.id);
+            window.setTimeout(() => (document.querySelector(`[data-id="${table.id}"] td:nth-child(2)`) as HTMLElement | null)?.focus(), 50);
+          }
           e.stopPropagation();
         }}
         onBlur={(e) => {
@@ -306,6 +383,7 @@ function TextBox(p: BoxProps<TextObj>) {
 function TableBox(p: BoxProps<TableObj>) {
   const { obj, engine, interactive, editingId } = p;
   const live = interactive || editingId === obj.id;
+  const editing = editingId === obj.id;
   const cells = obj.data.cells;
   const cols = cells[0]?.length ?? 1;
 
@@ -328,13 +406,21 @@ function TableBox(p: BoxProps<TableObj>) {
           {cells.map((row, r) => (
             <tr key={r}>
               {row.map((html, c) => (
-                <Cell key={c} html={html} editable={live} header={r === 0} onCommit={(h) => setCell(r, c, h)} label={`Zelle ${r + 1}, ${c + 1}`} />
+                <Cell key={c} html={html} editable={live} header={r === 0} onCommit={(h) => setCell(r, c, h)} label={`Zelle ${r + 1}, ${c + 1}`}
+                  onTab={(back) => {
+                    const all = [...document.querySelectorAll<HTMLElement>(`[data-id="${obj.id}"] td`)];
+                    const i = r * cols + c + (back ? -1 : 1);
+                    if (i < all.length && i >= 0) return all[i].focus();
+                    if (back) return;
+                    commit([...engine!.store.getObj(obj.id)!.kind === "table" ? (engine!.store.getObj(obj.id) as TableObj).data.cells : cells, Array(cols).fill("")]);
+                    window.setTimeout(() => document.querySelectorAll<HTMLElement>(`[data-id="${obj.id}"] td`)[i]?.focus(), 30);
+                  }} />
               ))}
             </tr>
           ))}
         </tbody>
       </table>
-      {live && (
+      {editing && (
         <div className="absolute -bottom-12 left-0 flex gap-1" data-format-bar>
           <TBtn label="Zeile hinzufügen" onClick={() => commit([...cells, Array(cols).fill("")])}><Plus className="size-4" />Zeile</TBtn>
           <TBtn label="Zeile entfernen" disabled={cells.length <= 1} onClick={() => commit(cells.slice(0, -1))}><Minus className="size-4" />Zeile</TBtn>
@@ -356,8 +442,8 @@ function TBtn({ label, onClick, children, disabled }: { label: string; onClick: 
   );
 }
 
-function Cell({ html, editable, header, onCommit, label }: {
-  html: string; editable: boolean; header: boolean; onCommit: (h: string) => void; label: string;
+function Cell({ html, editable, header, onCommit, label, onTab }: {
+  html: string; editable: boolean; header: boolean; onCommit: (h: string) => void; label: string; onTab: (back: boolean) => void;
 }) {
   const ref = useRef<HTMLTableCellElement>(null);
   useHtml(ref, html);
@@ -371,7 +457,10 @@ function Cell({ html, editable, header, onCommit, label }: {
       className={cn("h-11 border border-foreground/40 px-2 py-1 align-top outline-none focus:bg-primary/5", header && "font-semibold bg-foreground/5")}
       onPaste={pastePlain}
       onFocus={(e) => unlinkify(e.currentTarget)}
-      onKeyDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === "Tab") { e.preventDefault(); onCommit(sanitizeHtml(e.currentTarget.innerHTML)); onTab(e.shiftKey); }
+      }}
       onBlur={(e) => {
         const h = sanitizeHtml(e.currentTarget.innerHTML);
         onCommit(h);

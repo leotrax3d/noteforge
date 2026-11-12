@@ -2110,6 +2110,13 @@ export class CanvasEngine {
     return o?.kind === "image" && o.data.mol ? o : null;
   }
 
+  /** Beliebiges Objekt durch ein anderes ersetzen (ein Undo-Schritt), z. B. Textfeld → Tabelle. */
+  replaceObject(before: CanvasObj, after: CanvasObj) {
+    this.commitSelection();
+    const cur = this.store.getObj(before.id) ?? before;
+    this.store.commit({ add: [], remove: [], removeObj: [cur], addObj: [after] });
+  }
+
   /** Bild-Element ersetzen (ein Undo-Schritt) und auswählen. */
   replaceImage(before: ImageObj, after: ImageObj) {
     this.commitSelection();
