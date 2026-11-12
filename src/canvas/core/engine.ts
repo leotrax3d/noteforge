@@ -55,6 +55,8 @@ export interface ToolState {
   eraserSize: number;
   /** Ein Finger zeichnet (sonst: verschiebt). */
   fingerDraws: boolean;
+  /** Finger und Maus mit Zeichenwerkzeug: Tippen = Textfeld, Ziehen = Verschieben; danach gilt wieder das gewählte Werkzeug. */
+  pointerGrab: boolean;
   /** Dauerhafter Formmodus: jeder Strich wird, wenn möglich, zur Form. */
   shapeMode: boolean;
   /** Eingeblendete Zeichenhilfen. */
@@ -191,7 +193,7 @@ export class CanvasEngine {
 
   private tool: ToolState = {
     tool: "pen", pen: "fountain", color: "#1e3a8a", width: 2.5,
-    eraserMode: "stroke", eraserSize: 14, fingerDraws: true, shapeMode: false,
+    eraserMode: "stroke", eraserSize: 14, fingerDraws: true, pointerGrab: true, shapeMode: false,
     guides: { ruler: false, setsquare: false, compass: false },
   };
 
@@ -802,7 +804,10 @@ export class CanvasEngine {
     const barrelTool: Tool = this.input.barrel === "eraser" ? "eraser" : "lasso";
     let tool: Tool = penEraser ? "eraser" : penBarrel ? barrelTool : this.tool.tool;
     if (e.pointerType === "mouse" && e.button === 1) tool = "pan";
-    const fingerPans = e.pointerType === "touch" && !this.tool.fingerDraws && tool !== "pan";
+    const drawing = tool === "pen" || tool === "eraser" || tool === "laser" || tool === "vanish";
+    this.grabTap = this.tool.pointerGrab && drawing && !penEraser && !penBarrel
+      && (e.pointerType === "touch" || (e.pointerType === "mouse" && e.button === 0));
+    const fingerPans = this.grabTap || (e.pointerType === "touch" && !this.tool.fingerDraws && tool !== "pan");
     if (fingerPans) tool = "pan";
     this.barrel = penBarrel;
     if (penBarrel && this.input.barrel === "radial") {
@@ -1231,7 +1236,13 @@ export class CanvasEngine {
         break;
       case "pan":
         this.settle();
-        if (this.activeType === "touch" && this.isTap()) {
+        if (this.grabTap && this.maxFromDown < TAP_SLOP) {
+          // Kurz getippt (Finger/Maus) → Textfeld; das Zeichenwerkzeug bleibt gewählt
+          const w = this.toWorld(this.downPos.x, this.downPos.y);
+          const o = this.topObjAt(w);
+          if (o?.kind === "image") { this.hoverObj = o; this.invalidate(false); }
+          else this.events.onTextAt?.(w, e.altKey);
+        } else if (this.activeType === "touch" && this.isTap()) {
           const o = this.topObjAt(this.toWorld(this.downPos.x, this.downPos.y));
           if (o?.kind === "image") this.hoverObj = o; // Antippen zeigt den Greifbalken
           else this.hoverObj = null;
@@ -1409,6 +1420,9 @@ export class CanvasEngine {
   }
 
   private lastTap: { t: number; p: Vec; stroke: string | null } | null = null;
+
+  /** Aktueller Zeiger: Finger/Maus mit Zeichenwerkzeug (→ verschieben bzw. Text). */
+  private grabTap = false;
 
   private isTap() {
     return this.maxFromDown < TAP_SLOP && performance.now() - this.downT < TAP_MS;

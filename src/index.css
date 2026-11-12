@@ -148,3 +148,10 @@ select { -webkit-appearance: none; appearance: none; background-image: url("data
 input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type="range"].hue::-webkit-slider-runnable-track { height: 12px; background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
 input[type="range"].hue::-webkit-slider-thumb { margin-top: -4px; background: #fff; }
+
+/* Werkzeuggruppen auf-/zuklappen */
+@keyframes nf-grp-in { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
+@keyframes nf-grp-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(.6); } }
+.nf-grp-in { animation: nf-grp-in 180ms cubic-bezier(.2,.8,.2,1); transform-origin: center; }
+.nf-grp-out { animation: nf-grp-out 160ms ease-in forwards; transform-origin: center; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .nf-grp-in, .nf-grp-out { animation-duration: 1ms; } }

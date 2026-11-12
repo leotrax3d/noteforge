@@ -6,6 +6,36 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { integrations, syncNow, useSyncRev, type IntegrationStatus } from "@/lib/integrations";
 import { fmtDate, fmtTime } from "@/features/calendar/dates";
+import { setupApi, type School } from "@/lib/setup-api";
+
+/** Schulsuche wie im Einrichtungsassistenten: füllt Server und Schulkürzel automatisch. */
+function SchoolPicker({ onPick }: { onPick: (s: School) => void }) {
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<School[]>([]);
+  const [info, setInfo] = useState("");
+  useEffect(() => {
+    if (q.trim().length < 3) { setHits([]); setInfo(""); return; }
+    const t = window.setTimeout(() => {
+      setInfo("Suche …");
+      void setupApi.searchSchools(q).then((r) => { setHits(r); setInfo(r.length ? "" : "Keine Schule gefunden"); })
+        .catch((e) => setInfo(String(e).replace(/^Error: /, "")));
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [q]);
+  return (
+    <div className="grid gap-1.5">
+      <Label htmlFor="u-search">Schule suchen</Label>
+      <Input id="u-search" placeholder="Name oder Ort der Schule" value={q} onChange={(e) => setQ(e.target.value)} />
+      {info && <p className="text-sm text-muted-foreground">{info}</p>}
+      {hits.slice(0, 6).map((h) => (
+        <button key={`${h.server}/${h.login}`} type="button" onClick={() => { onPick(h); setQ(""); setHits([]); }}
+          className="flex min-h-11 w-full items-center gap-2 truncate rounded-md border px-3 text-left text-sm hover:bg-accent">
+          <b className="truncate">{h.name}</b> <span className="truncate text-muted-foreground">{h.address}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const when = (t: number | null) => (t ? `zuletzt abgeglichen ${fmtDate(t, false)}, ${fmtTime(t)}` : "noch nicht abgeglichen");
 
@@ -18,6 +48,8 @@ export function AccountsDialog({ open, onOpenChange, onMapping }: { open: boolea
   const [u, setU] = useState({ server: "", school: "", username: "", password: "" });
   const [m, setM] = useState({ url: "", username: "", password: "", token: "" });
   const [useToken, setUseToken] = useState(false);
+  const [manual, setManual] = useState(false);
+  const [schoolName, setSchoolName] = useState("");
 
   const load = async () => {
     const s = await integrations.status();
@@ -65,11 +97,22 @@ export function AccountsDialog({ open, onOpenChange, onMapping }: { open: boolea
             <h3 id="untis-h" className="mr-auto font-medium">WebUntis</h3>
             {st?.untis && <span className="flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="size-4" /> verbunden · {when(st.untisLastSync)}</span>}
           </div>
+          {u.server && u.school && !manual ? (
+            <div className="flex min-h-11 items-center gap-2 rounded-md bg-muted/50 px-3 text-sm">
+              <span className="mr-auto truncate"><b>{schoolName || u.school}</b> <span className="text-muted-foreground">{u.server}</span></span>
+              <Button type="button" variant="ghost" className="h-11" onClick={() => { setU({ ...u, server: "", school: "" }); setSchoolName(""); }}>Ändern</Button>
+            </div>
+          ) : !manual && <SchoolPicker onPick={(h) => { setU({ ...u, server: h.server, school: h.login }); setSchoolName(h.name); }} />}
+          {!manual && !(u.server && u.school) && (
+            <Button type="button" variant="link" className="h-11 justify-self-start px-0" onClick={() => setManual(true)}>Server manuell eingeben</Button>
+          )}
           <div className="grid grid-cols-2 gap-3">
+            {manual && <>
             <div className="grid gap-1.5"><Label htmlFor="u-server">Server</Label>
               <Input id="u-server" placeholder="z. B. neilo.webuntis.com" value={u.server} onChange={(e) => setU({ ...u, server: e.target.value })} /></div>
             <div className="grid gap-1.5"><Label htmlFor="u-school">Schule (Kürzel)</Label>
               <Input id="u-school" placeholder="wie in der WebUntis-Adresse" value={u.school} onChange={(e) => setU({ ...u, school: e.target.value })} /></div>
+            </>}
             <div className="grid gap-1.5"><Label htmlFor="u-user">Benutzername</Label>
               <Input id="u-user" autoComplete="username" value={u.username} onChange={(e) => setU({ ...u, username: e.target.value })} /></div>
             <div className="grid gap-1.5"><Label htmlFor="u-pw">Passwort</Label>

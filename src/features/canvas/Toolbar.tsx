@@ -38,6 +38,15 @@ export interface ToolbarProps {
 
 export type InsertKind = "image" | "screenshot" | "table" | "text" | "pdf" | "plot" | "calc" | "shapes" | "molecule";
 
+/** Schwarz oder Weiß – je nachdem, was auf der Hintergrundfarbe besser lesbar ist. */
+export function onColor(hex: string): string {
+  const h = hex.replace("#", "");
+  const f = h.length === 3 ? h.split("").map((c) => c + c).join("") : h.slice(0, 6);
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(f.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return Number.isNaN(l) || l < 0.18 ? "#fff" : "#000";
+}
+
 function ToolButton({ label, active, onClick, children, className }: {
   label: string; active?: boolean; onClick: () => void; children: ReactNode; className?: string;
 }) {
@@ -209,6 +218,22 @@ export function Toolbar(p: ToolbarProps) {
   const [expanded, setExpanded] = useState<string>(GROUP_OF[curItem] ?? "schreiben");
   // Situation: beim Werkzeugwechsel (Taste, Stiftende, Radialmenü) die passende Gruppe aufklappen
   useEffect(() => { const g = GROUP_OF[curItem]; if (g) setExpanded(g); }, [curItem]);
+  // Sobald auf dem Canvas gezeichnet wird: aufgeklappte Gruppe animiert einklappen
+  const [closing, setClosing] = useState<string | null>(null);
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      if (!(e.target instanceof HTMLCanvasElement)) return;
+      setExpanded((cur) => {
+        if (cur && cur !== "verlauf" && cur !== "ansicht") {
+          setClosing(cur);
+          window.setTimeout(() => setClosing((c) => (c === cur ? null : c)), 170);
+        }
+        return "";
+      });
+    };
+    window.addEventListener("pointerdown", onDown, true);
+    return () => window.removeEventListener("pointerdown", onDown, true);
+  }, []);
   const [open, setOpen] = useState<null | "pen" | "eraser" | "page" | "guides" | "insert" | "bar" | "preset" | "heads" | "fill" | "vanish">(null);
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
   const [editing, setEditing] = useState(false);
@@ -267,6 +292,23 @@ export function Toolbar(p: ToolbarProps) {
     fit();
     window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);
+  });
+
+  // Nicht über den Blatt-Aktionen (oben rechts/links) liegen: bei Überschneidung darunter ausweichen
+  const [dodge, setDodge] = useState(0);
+  useEffect(() => {
+    const check = () => {
+      const el = rootRef.current, pill = el?.parentElement?.querySelector<HTMLElement>("[data-page-actions]");
+      if (!el || !pill || drag || pill.offsetParent === null) { if (dodge) setDodge(0); return; }
+      const r = el.getBoundingClientRect(), p = pill.getBoundingClientRect();
+      const top = r.top - dodge, bottom = r.bottom - dodge;
+      const hit = r.left < p.right + 8 && r.right > p.left - 8 && top < p.bottom + 8 && bottom > p.top - 8;
+      const want = hit ? Math.ceil(p.bottom + 8 - top) : 0;
+      if (want !== dodge) setDodge(want);
+    };
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
   });
 
   // Bearbeiten-Modus: Elemente per Ziehen (Stift/Finger/Maus) umsortieren, in die Ablage ziehen = entfernen
@@ -374,7 +416,7 @@ export function Toolbar(p: ToolbarProps) {
                   onContextMenu={(e) => { e.preventDefault(); setPresetEdit(pr.id); setOpen("preset"); }}
                   className={cn("flex size-11 shrink-0 items-center justify-center rounded-full border-2", active ? "border-ring" : "border-transparent hover:bg-accent")}>
                   <span className="flex size-8 items-center justify-center rounded-full" style={{ background: pr.color, opacity: pr.opacity ?? 1 }}>
-                    <Icon className="size-4 text-white mix-blend-difference" />
+                    <Icon className="size-4" style={{ color: onColor(pr.color) }} />
                   </span>
                 </button>
               );
@@ -405,6 +447,7 @@ export function Toolbar(p: ToolbarProps) {
       )}
       style={{
         ...(drag ? { left: drag.x, top: drag.y, transform: "translate(-22px, -22px)" } : t.dock === "float" ? { left: `${t.floatPos.x * 100}%`, top: `${t.floatPos.y * 100}%` } : {}),
+        ...(dodge && !drag ? { marginTop: dodge } : {}),
         // Größe: Schaltflächen skalieren (mind. 44 px Touch-Ziel)
         zoom: px / 44,
       } as React.CSSProperties}
@@ -417,15 +460,17 @@ export function Toolbar(p: ToolbarProps) {
 
       {!editing && groupsOf(t.items).map(([g, items]) => {
         const activeItem = items.find(isActive);
-        const show = g === "verlauf" || g === "ansicht" || expanded === g;
+        const fixed = g === "verlauf" || g === "ansicht";
+        const show = fixed || expanded === g || closing === g;
         if (show) return (
           <div key={g} role="group" aria-label={GROUP_LABEL[g]} data-group={g} className={cn("flex shrink-0 items-center gap-0.5", vertical ? "flex-col" : "flex-row",
+            !fixed && (closing === g ? "nf-grp-out" : "nf-grp-in"),
             g !== "verlauf" && g !== "ansicht" && "rounded-xl bg-accent/40")}>
             {items.map((item) => <div key={item} data-item={item} className={cn("relative flex shrink-0", vertical ? "flex-col" : "flex-row")}>{render(item)}</div>)}
           </div>
         );
         return (
-          <ToolButton key={g} label={GROUP_LABEL[g]} active={!!activeItem} onClick={() => setExpanded(g)}>
+          <ToolButton key={g} label={GROUP_LABEL[g]} active={!!activeItem} className="nf-grp-in" onClick={() => { setClosing(null); setExpanded(g); }}>
             {ITEM_ICON[activeItem ?? items[0]]}
           </ToolButton>
         );
@@ -638,6 +683,8 @@ export function Toolbar(p: ToolbarProps) {
 function PageSettings({ page, onChange, side }: { page: Page; onChange: (p: PagePatch) => void; side: "top" | "bottom" | "left" | "right" }) {
   const fingerDraws = useTools((s) => s.fingerDraws);
   const setFingerDraws = useTools((s) => s.setFingerDraws);
+  const pointerGrab = useTools((s) => s.pointerGrab);
+  const setPointerGrab = useTools((s) => s.setPointerGrab);
   return (
     <PopoverContent side={side} className="w-80 space-y-3">
       <div className="space-y-1">
@@ -670,6 +717,10 @@ function PageSettings({ page, onChange, side }: { page: Page; onChange: (p: Page
       <label className="flex h-11 items-center gap-3 text-sm">
         <input type="checkbox" className="size-5" checked={fingerDraws} onChange={(e) => setFingerDraws(e.target.checked)} />
         Mit dem Finger zeichnen (sonst verschieben)
+      </label>
+      <label className="flex h-11 items-center gap-3 text-sm">
+        <input type="checkbox" className="size-5" checked={pointerGrab} onChange={(e) => setPointerGrab(e.target.checked)} />
+        Finger und Maus: tippen = Text, ziehen = verschieben
       </label>
     </PopoverContent>
   );

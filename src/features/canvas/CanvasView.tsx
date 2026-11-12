@@ -731,7 +731,7 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
         <canvas ref={baseRef} className="absolute inset-0" />
         {perfOn && loaded && <PerfOverlay engine={engineRef.current} />}
         {/* Blatt-Aktionen: klein oben rechts statt Titelbalken */}
-        <div className={cn("absolute top-2 z-20 flex items-center gap-1 rounded-full border bg-background/85 px-1 shadow-sm backdrop-blur", leftHanded ? "left-2" : "right-2", focusMode && "hidden")}>
+        <div data-page-actions className={cn("absolute top-2 z-20 flex items-center gap-1 rounded-full border bg-background/85 px-1 shadow-sm backdrop-blur", leftHanded ? "left-2" : "right-2", focusMode && "hidden")}>
           <span role="status" data-testid="save-status" data-state={save} title={saveLabel[save]}
             className={cn("px-2 text-xs", save === "error" ? "text-destructive" : "text-muted-foreground")}>
             {save === "saved" ? "✓" : saveLabel[save]}

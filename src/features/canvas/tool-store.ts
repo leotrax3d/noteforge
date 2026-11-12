@@ -78,6 +78,7 @@ interface ToolsStore extends ToolState {
   setWidth: (w: number) => void;
   setEraser: (m: Partial<{ eraserMode: EraserMode; eraserSize: number }>) => void;
   setFingerDraws: (v: boolean) => void;
+  setPointerGrab: (v: boolean) => void;
   setShapeMode: (v: boolean) => void;
   toggleGuide: (k: GuideKind) => void;
   applyPreset: (p: Preset) => void;
@@ -97,7 +98,7 @@ interface ToolsStore extends ToolState {
 const KEY = "noteforge-tools";
 const MAX_PRESETS = 8;
 
-type Persisted = Pick<ToolsStore, "tool" | "pen" | "color" | "width" | "eraserMode" | "eraserSize" | "fingerDraws" | "shapeMode" | "perPen" | "presets" | "customColors" | "dock" | "floatPos" | "orient" | "size" | "items" | "opacity" | "head0" | "head1" | "fillOpacity" | "fillHatch" | "vanishMs" | "zoomFactor">;
+type Persisted = Pick<ToolsStore, "tool" | "pen" | "color" | "width" | "eraserMode" | "eraserSize" | "fingerDraws" | "pointerGrab" | "shapeMode" | "perPen" | "presets" | "customColors" | "dock" | "floatPos" | "orient" | "size" | "items" | "opacity" | "head0" | "head1" | "fillOpacity" | "fillHatch" | "vanishMs" | "zoomFactor">;
 
 function load(): Partial<Persisted> {
   try {
@@ -125,6 +126,7 @@ export const useTools = create<ToolsStore>((set, get) => ({
   eraserMode: "stroke",
   eraserSize: 14,
   fingerDraws: true,
+  pointerGrab: true,
   shapeMode: false,
   guides: { ruler: false, setsquare: false, compass: false },
   perPen: perPenDefault,
@@ -158,6 +160,7 @@ export const useTools = create<ToolsStore>((set, get) => ({
   setWidth: (width) => set((s) => ({ width, perPen: { ...s.perPen, [s.pen]: { ...s.perPen[s.pen], width } } })),
   setEraser: (m) => set({ tool: "eraser", ...m }),
   setFingerDraws: (fingerDraws) => set({ fingerDraws }),
+  setPointerGrab: (pointerGrab) => set({ pointerGrab }),
   setShapeMode: (shapeMode) => set({ shapeMode }),
   toggleGuide: (k) => set((s) => ({ guides: { ...s.guides, [k]: !s.guides[k] } })),
   applyPreset: (p) =>
@@ -184,11 +187,11 @@ export const useTools = create<ToolsStore>((set, get) => ({
 export const MAX_PRESET_COUNT = MAX_PRESETS;
 
 useTools.subscribe((s) => {
-  const { tool, pen, color, width, eraserMode, eraserSize, fingerDraws, shapeMode, perPen, presets, customColors, dock, floatPos, orient, size, items, opacity, head0, head1, fillOpacity, fillHatch, vanishMs, zoomFactor } = s;
+  const { tool, pen, color, width, eraserMode, eraserSize, fingerDraws, pointerGrab, shapeMode, perPen, presets, customColors, dock, floatPos, orient, size, items, opacity, head0, head1, fillOpacity, fillHatch, vanishMs, zoomFactor } = s;
   try {
     // Laser/verschwindende Tinte nicht als Startwerkzeug merken
     const t = tool === "laser" || tool === "vanish" ? "pen" : tool;
-    localStorage.setItem(KEY, JSON.stringify({ tool: t, pen, color, width, eraserMode, eraserSize, fingerDraws, shapeMode, perPen, presets, customColors, dock, floatPos, orient, size, items, opacity, head0, head1, fillOpacity, fillHatch, vanishMs, zoomFactor, seen: ["molecule"] }));
+    localStorage.setItem(KEY, JSON.stringify({ tool: t, pen, color, width, eraserMode, eraserSize, fingerDraws, pointerGrab, shapeMode, perPen, presets, customColors, dock, floatPos, orient, size, items, opacity, head0, head1, fillOpacity, fillHatch, vanishMs, zoomFactor, seen: ["molecule"] }));
   } catch {
     /* ignorieren */
   }
