@@ -1,6 +1,7 @@
 import { getStroke, type StrokeOptions } from "perfect-freehand";
 import { PSTRIDE, type PenKind, type Stroke } from "./model";
 import { invertLightness } from "./color";
+import { dotPath, isDot, tuneForWidth } from "./ink-filter";
 
 export interface PenDef {
   label: string;
@@ -71,13 +72,28 @@ export function outlinePath(outline: number[][]): Path2D {
   return path;
 }
 
-export function buildPath(pen: PenKind, width: number, pressure: boolean, pts: number[][], last: boolean): Path2D {
-  const opts = PENS[pen].options(pressure);
+/** Umriss eines Strichs. `raw` (Float32-Punkte) erlaubt die Sonderbehandlung sehr kurzer Striche. */
+export function buildPath(
+  pen: PenKind, width: number, pressure: boolean, pts: number[][], last: boolean,
+  raw?: { data: Float32Array; n: number },
+): Path2D {
+  const opts = tuneForWidth(PENS[pen].options(pressure), width);
+  if (raw && pen !== "highlighter" && isDot(raw.data, raw.n, width))
+    return dotPath(raw.data, raw.n, width, pressure, opts.thinning ?? 0);
   return outlinePath(getStroke(pts, { size: width, ...opts, last }));
 }
 
+/** Umriss als Zahlenfeld (für Debug-Ansicht). */
+export function buildOutline(pen: PenKind, width: number, pressure: boolean, pts: number[][], last: boolean): number[][] {
+  return getStroke(pts, { size: width, ...tuneForWidth(PENS[pen].options(pressure), width), last });
+}
+
 export function strokePath(s: Stroke): Path2D {
-  if (!s.path) s.path = buildPath(s.pen, s.width, s.pressure, toFreehand(s.points, undefined, s.pen === "ballpoint"), true);
+  if (!s.path) {
+    const constant = s.pen === "ballpoint";
+    s.path = buildPath(s.pen, s.width, s.pressure, toFreehand(s.points, undefined, constant), true,
+      { data: s.points, n: s.points.length / PSTRIDE });
+  }
   return s.path;
 }
 
@@ -118,7 +134,7 @@ export function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, dark: boole
   ctx.globalAlpha = s.opacity;
   ctx.globalCompositeOperation = s.pen === "highlighter" && !dark ? "multiply" : "source-over";
   ctx.fillStyle = s.pen === "pencil" ? pencilPattern(ctx, color) : color;
-  ctx.fill(path);
+  ctx.fill(path, "nonzero"); // Selbstüberschneidungen bleiben gefüllt
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = "source-over";
 }

@@ -1,6 +1,7 @@
 import type { BBox, CanvasElement } from "@/lib/types";
 import { apply, type Mat } from "./geometry";
 import type { PlotSpec } from "@/features/calc/plot";
+import type { PdfRef } from "./pdf-raster";
 
 /** Nicht-Strich-Elemente (SPEC §3): Textcontainer, Bilder, Tabellen. */
 export type ObjKind = "text" | "image" | "table";
@@ -15,6 +16,8 @@ export interface ImageData {
   text?: string;
   /** Funktionsgraph (Phase 11): `src` ist das gerenderte SVG, die Spezifikation macht ihn editierbar. */
   plot?: PlotSpec;
+  /** PDF-Seite mit Original: wird zoomabhängig scharf gerendert, `src` dient als Vorschau. */
+  pdf?: PdfRef;
 }
 export interface TableData { cells: string[][] }
 

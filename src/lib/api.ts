@@ -137,3 +137,25 @@ export async function saveExport(bytes: Uint8Array, fileName: string): Promise<b
   await invoke("write_export", bytes, { headers: { "x-path": encodeURIComponent(path) } });
   return true;
 }
+
+// ---------- Assets (Original-PDFs für scharfes Zoomen) ----------
+const memAssets = new Map<string, Uint8Array>();
+
+/** Speichert die Original-PDF eines Blatts; liefert die Asset-ID. */
+export async function putAsset(pageId: string, bytes: Uint8Array, mime = "application/pdf"): Promise<string> {
+  if (!inTauri) {
+    const id = "a" + Math.random().toString(36).slice(2);
+    memAssets.set(id, bytes);
+    return id;
+  }
+  return invoke<string>("put_asset", bytes, { headers: { "x-page": encodeURIComponent(pageId), "x-mime": mime } });
+}
+
+export async function getAsset(id: string): Promise<Uint8Array> {
+  if (!inTauri) {
+    const b = memAssets.get(id);
+    if (!b) throw new Error("Asset fehlt");
+    return b;
+  }
+  return new Uint8Array(await invoke<ArrayBuffer>("get_asset", { id }));
+}

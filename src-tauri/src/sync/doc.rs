@@ -26,6 +26,9 @@ pub struct PageDoc {
     pub page: Row,
     pub elements: Vec<Row>,
     pub tags: Vec<Row>,
+    /// Original-PDFs des Blatts (zoomabhängiges Rendering); fehlt in älteren Dokumenten.
+    #[serde(default)]
+    pub assets: Vec<Row>,
 }
 
 /// Tabelle → (id → Zeile)
@@ -158,7 +161,7 @@ pub fn fingerprint(conn: &Connection, page_id: &str) -> Result<Option<String>> {
     let page = dump(conn, "SELECT * FROM page WHERE id=?1", [page_id])?;
     let Some(page) = page.first() else { return Ok(None) };
     let els: String = conn.query_row(
-        "SELECT coalesce(group_concat(x, ';'), '') FROM (SELECT id||':'||z||':'||bbox_x||':'||bbox_y||':'||bbox_w||':'||bbox_h||':'||length(data) AS x
+        "SELECT coalesce(group_concat(x, ';'), '') || '|' || (SELECT coalesce(group_concat(id, ','), '') FROM asset WHERE page_id=?1) FROM (SELECT id||':'||z||':'||bbox_x||':'||bbox_y||':'||bbox_w||':'||bbox_h||':'||length(data) AS x
            FROM element WHERE page_id=?1 ORDER BY id)",
         [page_id],
         |r| r.get(0),
@@ -187,6 +190,7 @@ pub fn page_doc(conn: &Connection, page_id: &str, device: &str, edited: i64) -> 
             "SELECT et.* FROM element_tag et JOIN element e ON e.id=et.element_id WHERE e.page_id=?1 ORDER BY 1, 2",
             [page_id],
         )?,
+        assets: dump(conn, "SELECT * FROM asset WHERE page_id=?1 ORDER BY id", [page_id])?,
     }))
 }
 
@@ -214,6 +218,11 @@ pub fn apply_page(conn: &Connection, doc: &PageDoc) -> Result<()> {
         }
         let done = if cols.iter().any(|c| c == "done") { t.get("done").and_then(Value::as_i64).unwrap_or(0) } else { 0 };
         conn.execute("INSERT OR REPLACE INTO element_tag (element_id, tag_id, done) VALUES (?1, ?2, ?3)", rusqlite::params![el, tag, done])?;
+    }
+    for a in &doc.assets {
+        let mut a = a.clone();
+        a.insert("page_id".into(), Value::String(id.clone()));
+        upsert(conn, "asset", &a)?;
     }
     onenote::reindex_page(conn, &id)?;
     Ok(())

@@ -179,6 +179,24 @@ pub fn write_export(request: tauri::ipc::Request) -> Result<()> {
     Ok(())
 }
 
+/// Asset (Original-PDF) speichern: Rohdaten im Body, Blatt in `x-page`, Typ in `x-mime`. Liefert die ID (Inhalts-Hash).
+#[tauri::command]
+pub fn put_asset(db: S, request: tauri::ipc::Request) -> Result<String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err(crate::db::Error::Invalid("Erwartet Binärdaten".into()));
+    };
+    let h = |k: &str| request.headers().get(k).and_then(|v| v.to_str().ok()).map(percent_decode);
+    let page = h("x-page").ok_or_else(|| crate::db::Error::Invalid("Kein Blatt".into()))?;
+    let mime = h("x-mime").unwrap_or_else(|| "application/pdf".into());
+    crate::db::repo::put_asset(&db.conn(), &page, &mime, bytes)
+}
+
+/// Asset als Rohdaten (ohne JSON-Umweg).
+#[tauri::command]
+pub fn get_asset(db: S, id: String) -> Result<tauri::ipc::Response> {
+    Ok(tauri::ipc::Response::new(crate::db::repo::get_asset(&db.conn(), &id)?))
+}
+
 fn percent_decode(s: &str) -> String {
     let b = s.as_bytes();
     let mut out = Vec::with_capacity(b.len());
@@ -196,14 +214,6 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn decodes_percent() {
-        assert_eq!(super::percent_decode("C%3A%5CNotizen%5CM%C3%BCll.pdf"), "C:\\Notizen\\Müll.pdf");
-        assert_eq!(super::percent_decode("a%2"), "a%2");
-    }
-}
 
 // ---------- Phase 10: Hausaufgaben + Noten ----------
 use crate::db::school::{self, GradeConfig, Grade, Homework};
@@ -230,3 +240,12 @@ pub fn set_subject_weight(db: S, subject_id: String, written_pct: i64) -> Result
 }
 #[tauri::command]
 pub fn set_grade_scale(db: S, scale: String) -> Result<()> { school::set_grade_scale(&mut db.conn(), &scale) }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn decodes_percent() {
+        assert_eq!(super::percent_decode("C%3A%5CNotizen%5CM%C3%BCll.pdf"), "C:\\Notizen\\Müll.pdf");
+        assert_eq!(super::percent_decode("a%2"), "a%2");
+    }
+}

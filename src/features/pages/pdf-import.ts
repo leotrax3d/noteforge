@@ -5,6 +5,8 @@ import { makeObj, type ImageObj } from "@/canvas/core/objects";
 import type { PageOrientation } from "@/lib/types";
 
 export interface PdfPageImage {
+  /** Index in der Original-PDF (ab 0) */
+  index?: number;
   src: string;
   /** Seitengröße in PDF-Punkten (1/72 Zoll). */
   w: number;
@@ -12,7 +14,7 @@ export interface PdfPageImage {
   text: string;
 }
 
-/** Zielbreite der Rasterung in Pixeln (≈ 155 dpi auf A4) – Kompromiss aus Schärfe und Größe. */
+/** Breite des Vorschaubilds (Fallback ohne Original/auf alten Geräten); scharf wird zoomabhängig aus der Original-PDF gerendert. */
 const RENDER_W = 1280;
 const MAX_PAGES = 200;
 
@@ -38,7 +40,7 @@ export async function pdfToImages(data: ArrayBuffer, onProgress?: (done: number,
       await page.render({ canvas, canvasContext: ctx, viewport: vp }).promise;
       const tc = await page.getTextContent();
       const text = tc.items.map((it) => ("str" in it ? it.str : "")).join(" ").replace(/\s+/g, " ").trim();
-      out.push({ src: canvas.toDataURL("image/jpeg", 0.82), w: base.width, h: base.height, text });
+      out.push({ index: i - 1, src: canvas.toDataURL("image/jpeg", 0.82), w: base.width, h: base.height, text });
       page.cleanup();
       onProgress?.(i, n);
     }
@@ -56,7 +58,11 @@ export const orientationOf = (p: PdfPageImage): PageOrientation => (p.w > p.h ? 
  */
 export function layoutPdfPages(
   pages: PdfPageImage[],
-  opts: { mode: "a4" | "infinite"; orientation: PageOrientation; firstIndex?: number; top?: number; z: number },
+  opts: {
+    mode: "a4" | "infinite"; orientation: PageOrientation; firstIndex?: number; top?: number; left?: number; z: number;
+    /** Asset-ID der Original-PDF → scharfes, zoomabhängiges Rendering */
+    asset?: string;
+  },
 ): ImageObj[] {
   let z = opts.z;
   let y = opts.top ?? 0;
@@ -73,11 +79,16 @@ export function layoutPdfPages(
     } else {
       w = a4Size("portrait").w;
       h = w * aspect;
-      x = 0;
+      x = opts.left ?? 0;
       top = y;
       y += h + A4_GAP;
     }
-    return makeObj<ImageObj>({ id: uid(), kind: "image", z: z++, x, y: top, w, h, angle: 0, data: { src: p.src, locked: true, text: p.text } });
+    // A4: feste Hintergrundseite. Endlos: freies Element (verschieben, skalieren, beschreiben).
+    const pdf = opts.asset ? { asset: opts.asset, page: p.index ?? i, pw: p.w, ph: p.h } : undefined;
+    return makeObj<ImageObj>({
+      id: uid(), kind: "image", z: z++, x, y: top, w, h, angle: 0,
+      data: { src: p.src, locked: opts.mode === "a4" || undefined, text: p.text, pdf },
+    });
   });
 }
 

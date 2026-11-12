@@ -7,6 +7,9 @@ interface Prefs {
   leftHanded: boolean;
   /** Leistungsanzeige auf dem Canvas */
   perfOverlay: boolean;
+  /** Debug-Modus: Rohpunkte/Druck/Umriss + FPS (Strg+Umschalt+D, nicht gespeichert) */
+  inkDebug: boolean;
+  setInkDebug: (v: boolean) => void;
   /** Fokusmodus: nur Blatt + Werkzeugleiste (nicht gespeichert) */
   focus: boolean;
   /** Offene globale Dialoge */
@@ -39,12 +42,14 @@ export const usePrefs = create<Prefs>((set, get) => ({
   leftHanded: false,
   perfOverlay: false,
   focus: false,
+  inkDebug: false,
   dialog: null,
   ...load(),
   setDialog: (dialog) => set({ dialog }),
   setLeftHanded: (leftHanded) => { set({ leftHanded }); save(get()); },
   setPerfOverlay: (perfOverlay) => { set({ perfOverlay }); save(get()); },
   setFocus: (focus) => set({ focus }),
+  setInkDebug: (inkDebug) => set({ inkDebug }),
 }));
 
 /** Fokusmodus: nur Blatt + Werkzeugleiste; in der App zusätzlich Vollbild. */

@@ -15,7 +15,7 @@ import {
 } from "./geometry";
 import { a4PageCount, a4Size, clampZoom, type PageSetup } from "./layout";
 import { PSTRIDE, computeBBox, intersects, makeStroke, uid, type PenKind, type Stroke } from "./model";
-import { PENS, buildPath, drawStroke, strokePath, toFreehand } from "./pens";
+import { PENS, buildOutline, buildPath, drawStroke, strokePath, toFreehand } from "./pens";
 import { StrokeStore, type Change } from "./store";
 import { TileCache } from "./tiles";
 import { PerfMeter, type PerfSample } from "./perf";
@@ -32,6 +32,9 @@ import {
 } from "../tools/guides";
 import { MM } from "./layout";
 import type { BBox } from "@/lib/types";
+import { PdfRaster } from "./pdf-raster";
+import { getAsset } from "@/lib/api";
+import { PressureSmoother, clampPressureEdges, minDistWorld } from "./ink-filter";
 
 export type Tool = "pen" | "eraser" | "lasso" | "pan" | "text";
 export const GUIDE_KINDS: GuideKind[] = ["ruler", "setsquare", "compass"];
@@ -106,6 +109,7 @@ const TAP_MS = 350;
 const TAP_SLOP = 12;
 
 /** Wachsender Punktpuffer (x, y, p, tilt, t) ohne Allokation pro Event. */
+
 class Points {
   data = new Float32Array(1024 * PSTRIDE);
   n = 0;
@@ -200,6 +204,11 @@ export class CanvasEngine {
   private liveColor = "#000";
   private liveWidth = 2;
   private livePressure = false;
+  private smooth = new PressureSmoother();
+  private lastP = 0.5;
+  private rawSeen = false;
+  private inkDebug = false;
+  private dbg: { pts: Float32Array; n: number; pen: PenKind; width: number; pressure: boolean } | null = null;
 
   // Radierer
   private erased = { add: new Map<string, Stroke>(), remove: new Map<string, Stroke>() };
@@ -237,6 +246,7 @@ export class CanvasEngine {
     const a = active;
     a.addEventListener("pointerdown", this.onDown);
     a.addEventListener("pointermove", this.onMove);
+    if (RAW) a.addEventListener("pointerrawupdate" as "pointermove", this.onRaw);
     a.addEventListener("pointerup", this.onUp);
     a.addEventListener("pointercancel", this.onCancel);
     a.addEventListener("pointerleave", this.onLeave);
@@ -244,6 +254,12 @@ export class CanvasEngine {
     a.addEventListener("contextmenu", this.onContext);
     a.addEventListener("touchstart", prevent, { passive: false });
     this.store.onApply = this.onApply;
+    // Fertige PDF-Kacheln: einmal pro Frame betroffene Tiles an Ort und Stelle neu zeichnen (kein Aufblitzen)
+    this.pdf.onReady = (asset, page) => {
+      this.pdfReady.add(asset + "|" + page);
+      this.baseDirty = true;
+      this.request();
+    };
     this.store.onHistory = () => this.events.onHistory?.(this.store.canUndo, this.store.canRedo);
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(host);
@@ -252,12 +268,14 @@ export class CanvasEngine {
 
   destroy() {
     this.perf = null;
+    this.pdf.destroy();
     cancelAnimationFrame(this.raf);
     clearTimeout(this.rescaleTimer);
     this.ro.disconnect();
     const a = this.active;
     a.removeEventListener("pointerdown", this.onDown);
     a.removeEventListener("pointermove", this.onMove);
+    if (RAW) a.removeEventListener("pointerrawupdate" as "pointermove", this.onRaw);
     a.removeEventListener("pointerup", this.onUp);
     a.removeEventListener("pointercancel", this.onCancel);
     a.removeEventListener("pointerleave", this.onLeave);
@@ -570,7 +588,7 @@ export class CanvasEngine {
         this.rescaleNow = true;
         this.invalidate(true);
         this.emitSelection();
-      }, 180);
+      }, 150); // nach 150 ms Ruhe in der scharfen Stufe neu rendern
     }
     this.invalidate(true);
   }
@@ -918,9 +936,12 @@ export class CanvasEngine {
       case "draw": {
         this.trackHold(this.local(e));
         if (this.shaped) return;
-        const list = e.getCoalescedEvents?.();
-        if (list && list.length) for (let i = 0; i < list.length; i++) this.addPoint(list[i]);
-        else this.addPoint(e);
+        // Mit pointerrawupdate kommen die Punkte schon dort an; hier nur die Vorhersage
+        if (!RAW || !this.rawSeen) {
+          const list = e.getCoalescedEvents?.();
+          if (list && list.length) for (let i = 0; i < list.length; i++) this.addPoint(list[i]);
+          else this.addPoint(e);
+        }
         this.pred.n = 0;
         const pr = e.getPredictedEvents?.();
         if (pr) for (let i = 0; i < pr.length; i++) this.addPoint(pr[i], this.pred);
@@ -959,6 +980,23 @@ export class CanvasEngine {
       }
     }
   };
+
+  /** Eingaben nur sammeln; gezeichnet wird einmal pro Frame (requestAnimationFrame). */
+  private onRaw = (e: PointerEvent) => {
+    if (this.mode !== "draw" || e.pointerId !== this.activeId || this.shaped) return;
+    this.rawSeen = true;
+    const list = e.getCoalescedEvents?.();
+    if (list && list.length) for (let i = 0; i < list.length; i++) this.addPoint(list[i]);
+    else this.addPoint(e);
+    this.activeDirty = true;
+    this.request();
+  };
+
+  /** Debug-Ansicht: Rohpunkte, Druck und Umriss des aktuellen/letzten Strichs. */
+  setInkDebug(on: boolean) {
+    this.inkDebug = on;
+    this.invalidate(false);
+  }
 
   private onUp = (e: PointerEvent) => {
     this.palm.onUp(e.pointerType, e.pointerId, performance.now());
@@ -1122,6 +1160,9 @@ export class CanvasEngine {
     this.t0 = e.timeStamp;
     this.pts.n = 0;
     this.pred.n = 0;
+    this.smooth.reset();
+    this.lastP = 0.5;
+    this.rawSeen = false;
     this.shaped = false;
     this.addPoint(e);
     if (e.pointerType !== "mouse") this.armHold();
@@ -1140,21 +1181,32 @@ export class CanvasEngine {
       y = v.y;
       if (sn.r && buf === this.pts) sn.g.angle = Math.atan2(y - sn.g.y, x - sn.g.x);
     }
-    const p = e.pointerType === "pen" ? (e.pressure > 0 ? e.pressure : 0.3) : 0.5;
+    const raw = e.pointerType === "pen" ? (e.pressure > 0 ? e.pressure : this.lastP) : 0.5;
+    this.lastP = raw;
     const tilt = Math.max(Math.abs(e.tiltX || 0), Math.abs(e.tiltY || 0));
-    if (buf === this.pts && buf.n > 0) {
-      const i = (buf.n - 1) * PSTRIDE;
-      if (buf.data[i] === x && buf.data[i + 1] === y) {
-        buf.data[i + 2] = p;
-        return;
+    if (buf === this.pts) {
+      const p = this.smooth.push(raw);
+      if (buf.n > 0) {
+        // Fast identische Punkte (unter 0,3 Bildschirmpixel) nicht übernehmen, nur Druck aktualisieren
+        const i = (buf.n - 1) * PSTRIDE;
+        if (Math.hypot(buf.data[i] - x, buf.data[i + 1] - y) < minDistWorld(this.cam.s)) {
+          buf.data[i + 2] = p;
+          return;
+        }
       }
+      buf.push(x, y, p, tilt, e.timeStamp - this.t0);
+      return;
     }
-    buf.push(x, y, p, tilt, e.timeStamp - this.t0);
+    // Vorhersage: nur temporär, mit letztem geglätteten Druck
+    const li = Math.max(0, this.pts.n - 1) * PSTRIDE;
+    buf.push(x, y, this.pts.n ? this.pts.data[li + 2] : raw, tilt, e.timeStamp - this.t0);
   }
 
   private commitStroke() {
     if (this.tool.shapeMode && !this.shaped && !this.snap && this.pts.n > 2) this.applyShape();
     if (this.pts.n > 0) {
+      if (this.livePressure) clampPressureEdges(this.pts.data, this.pts.n);
+      if (this.inkDebug) this.dbg = { pts: this.pts.snapshot(), n: this.pts.n, pen: this.livePen, width: this.liveWidth, pressure: this.livePressure };
       const s = makeStroke({
         id: uid(),
         z: this.store.nextZ(),
@@ -1369,6 +1421,22 @@ export class CanvasEngine {
 
   private perf: PerfMeter | null = null;
   private tileBuf: Stroke[] = [];
+  private pdf = new PdfRaster(getAsset);
+  private pdfReady = new Set<string>();
+
+  private redrawPdfTiles() {
+    const ws = this.tiles.worldSize;
+    for (const o of this.store.objects()) {
+      if (o.kind !== "image" || !o.data.pdf || !this.pdfReady.has(o.data.pdf.asset + "|" + o.data.pdf.page)) continue;
+      const b = o.bbox;
+      for (let ty = Math.floor(b.y / ws); ty <= Math.floor((b.y + b.h) / ws); ty++)
+        for (let tx = Math.floor(b.x / ws); tx <= Math.floor((b.x + b.w) / ws); tx++) {
+          const ctx = this.tiles.existing(tx, ty);
+          if (ctx) this.drawTileContent(ctx, this.tiles.tileRect(tx, ty));
+        }
+    }
+    this.pdfReady.clear();
+  }
 
   /** Leistungsmessung ein/aus. `cb` läuft alle 500 ms – nur DOM schreiben, kein React-State. */
   setProfiling(cb: ((s: PerfSample) => void) | null) {
@@ -1384,6 +1452,7 @@ export class CanvasEngine {
     let tb = 0;
     if (this.baseDirty) {
       this.baseDirty = false;
+      if (this.pdfReady.size) this.redrawPdfTiles();
       this.renderBase();
       if (perf) tb = performance.now() - t0;
     }
@@ -1443,15 +1512,28 @@ export class CanvasEngine {
   private renderTile(tx: number, ty: number): HTMLCanvasElement | undefined {
     const ctx = this.tiles.create(tx, ty);
     if (!ctx) return undefined;
-    const r = this.tiles.tileRect(tx, ty);
+    this.drawTileContent(ctx, this.tiles.tileRect(tx, ty));
+    this.perf?.tile();
+    return this.tiles.peek(tx, ty);
+  }
+
+  private drawTileContent(ctx: CanvasRenderingContext2D, r: BBox) {
     drawBackground(ctx, r, this.tiles.scale, this.setup, this.pal, this.pageCount);
     for (const o of this.store.objects())
-      if (o.kind === "image" && !this.hidden.has(o.id) && intersects(o.bbox, r)) drawImageObj(ctx, o, this.image(o.data.src));
+      if (o.kind === "image" && !this.hidden.has(o.id) && intersects(o.bbox, r)) {
+        drawImageObj(ctx, o, this.image(o.data.src));
+        const ref = o.data.pdf;
+        if (ref) {
+          ctx.save();
+          ctx.translate(o.x + o.w / 2, o.y + o.h / 2);
+          if (o.angle) ctx.rotate(o.angle);
+          this.pdf.draw(ctx, o, ref, this.tiles.scale, r);
+          ctx.restore();
+        }
+      }
     for (const s of this.store.inRect(r, this.tileBuf)) {
       if (!this.hidden.has(s.id) && intersects(s.bbox, r)) drawStroke(ctx, s, this.pal.dark);
     }
-    this.perf?.tile();
-    return this.tiles.peek(tx, ty);
   }
 
   /** Dekodiertes Bild (gecacht); nach dem Laden werden betroffene Tiles neu gezeichnet. */
@@ -1475,6 +1557,32 @@ export class CanvasEngine {
     ctx.setTransform(k, 0, 0, k, -this.cam.x * k, -this.cam.y * k);
   }
 
+  private drawInkDebug(ctx: CanvasRenderingContext2D) {
+    const live = this.mode === "draw" && this.pts.n > 0;
+    const d = live ? { pts: this.pts.data, n: this.pts.n, pen: this.livePen, width: this.liveWidth, pressure: this.livePressure } : this.dbg;
+    if (!d) return;
+    this.worldTransform(ctx);
+    const k = this.cam.s * this.dpr;
+    const outline = buildOutline(d.pen, d.width, d.pressure, toFreehand(d.pts, d.n, d.pen === "ballpoint"), !live);
+    ctx.lineWidth = 1 / k;
+    ctx.strokeStyle = "#ef4444";
+    ctx.beginPath();
+    outline.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+    ctx.closePath();
+    ctx.stroke();
+    for (let i = 0; i < d.n; i++) {
+      const j = i * PSTRIDE, p = d.pts[j + 2];
+      ctx.fillStyle = `hsl(${220 - p * 220} 90% 50%)`; // blau = wenig, rot = viel Druck
+      ctx.beginPath();
+      ctx.arc(d.pts[j], d.pts[j + 1], (1.5 + p * 2.5) / k, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.font = "12px ui-monospace, monospace";
+    ctx.fillStyle = this.pal.dark ? "#fff" : "#000";
+    ctx.fillText(`Punkte ${d.n} · Umriss ${outline.length} · Breite ${d.width} · Zoom ${Math.round(this.cam.s * 100)} %`, 12, this.H - 12);
+  }
+
   private renderActive() {
     const ctx = this.activeCtx;
     const dpr = this.dpr;
@@ -1487,7 +1595,9 @@ export class CanvasEngine {
       const constant = this.livePen === "ballpoint";
       const pts = toFreehand(this.pts.data, this.pts.n, constant);
       if (this.pred.n) for (const p of toFreehand(this.pred.data, this.pred.n, constant)) pts.push(p);
-      const path = buildPath(this.livePen, this.liveWidth, this.livePressure, pts, false);
+      this.pred.n = 0; // Vorhersage nur für diesen Frame, nie in den Strich übernehmen
+      const path = buildPath(this.livePen, this.liveWidth, this.livePressure, pts, false,
+        this.pts.n < 3 ? { data: this.pts.data, n: this.pts.n } : undefined);
       drawStroke(ctx, { pen: this.livePen, color: this.liveColor, opacity: PENS[this.livePen].opacity } as Stroke, dark, path);
     }
 
@@ -1556,6 +1666,8 @@ export class CanvasEngine {
       }
     }
 
+    if (this.inkDebug) this.drawInkDebug(ctx);
+
     const showEraser = this.mode === "erase" || (this.mode === "idle" && this.hover && (this.tool.tool === "eraser" || this.hoverEraser));
     if (showEraser && this.hover) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1569,6 +1681,8 @@ export class CanvasEngine {
     }
   }
 }
+
+const RAW = typeof window !== "undefined" && "onpointerrawupdate" in window;
 
 const xy = (v: Vec): [number, number] => [v.x, v.y];
 

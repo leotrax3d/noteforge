@@ -594,6 +594,28 @@ pub fn delete_event(conn: &Connection, id: &str) -> Result<()> {
     changed(conn.execute("DELETE FROM event WHERE id=?1", [id])?, "Termin", id)
 }
 
+// ---------- Assets (Original-PDFs) ----------
+
+/// Speichert ein Asset für ein Blatt; gleiche Bytes auf demselben Blatt → gleiche ID.
+pub fn put_asset(conn: &Connection, page_id: &str, mime: &str, data: &[u8]) -> Result<String> {
+    let id = format!("a{}", crate::recognition::fnv(&[page_id.as_bytes(), data]));
+    conn.execute(
+        "INSERT OR IGNORE INTO asset (id, page_id, mime, data, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![id, page_id, mime, data, chrono_ms()],
+    )?;
+    Ok(id)
+}
+
+pub fn get_asset(conn: &Connection, id: &str) -> Result<Vec<u8>> {
+    conn.query_row("SELECT data FROM asset WHERE id=?1", [id], |r| r.get(0))
+        .optional()?
+        .ok_or_else(|| Error::NotFound(format!("Asset {id}")))
+}
+
+fn chrono_ms() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

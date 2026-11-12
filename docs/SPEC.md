@@ -31,6 +31,11 @@ Strokes: Punkte als `Float32Array` (x, y, pressure, tilt, t), Stift-ID, Farbe, B
 - **Modi:** endlos (unbegrenzt in alle Richtungen, Tiles) oder DIN A4 (210×297 mm, untereinander gestapelt, neue Seite automatisch beim Schreiben unten). Pro Blatt wählbar, nachträglich umschaltbar.
 - **Hintergründe:** kariert (5 mm Standard), liniert (Lineatur 8 mm), punktiert, leer; Abstand einstellbar.
 - **Rendering:** Hintergrund-Pattern gecacht, gespeicherte Striche in Tile-Bitmaps, aktiver Strich auf eigenem Layer (low latency, `desynchronized: true`). Ziel: < 16 ms Frame, Eingabelatenz so niedrig wie möglich.
+  - Gezeichnet wird ausschließlich per `requestAnimationFrame` (folgt automatisch 60/90/120/144 Hz), keine feste FPS-Grenze. Eingaben (`pointerrawupdate`, wo verfügbar, sonst `pointermove` + `getCoalescedEvents()`) werden nur gesammelt.
+  - Eingabefilter: Mindestabstand 0,3 Bildschirmpixel (in Welt umgerechnet), gleitender Druck-Mittelwert (4 Punkte), Kappung von Druckspitzen an Strichanfang/-ende, breitenabhängige perfect-freehand-Parameter, sehr kurze Striche als Punkt/Kapsel. Vorhersagepunkte (`getPredictedEvents()`) nur für den aktuellen Frame, nie im Strich. Füllregel „nonzero“, Rendering in devicePixelRatio, keine Koordinatenrundung.
+  - Debug-Ansicht **Strg+Umschalt+D**: Rohpunkte (Farbe = Druck), Umriss-Polygon, FPS/Latenz.
+  - **PDF-Seiten:** Original-PDF wird als Asset (Tabelle `asset`, mit dem Blatt synchronisiert) gespeichert und zoomabhängig (Zoom × DPR, Stufen als Zweierpotenzen) in 512-px-Kacheln mit pdf.js gerendert; LRU-Cache max. 192 MB. Beim Zoomen erst die vorhandene Stufe skaliert, nach 150 ms Ruhe die scharfe Stufe. Nur sichtbare Kacheln. Ohne Asset (alte Blätter): Vorschaubild.
+- **Start:** Fenster startet unsichtbar, Theme/Hintergrund werden vor dem React-Mount gesetzt, Anzeige nach dem ersten fertigen Frame.
 - **Zoom:** 10 %–800 %, Pinch, Strg+Mausrad.
 - **Stifte:** Füller (druckabh.), Kugelschreiber (konstant), Bleistift (Textur), Textmarker (transparent, unter Schrift), Radierer (strichweise / partiell), Stift-Radierende automatisch erkannt.
 - **Farben:** Palette + eigene Farben; 5–8 Stift-Presets.

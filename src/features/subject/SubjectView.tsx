@@ -5,7 +5,7 @@ import { useCloudRev } from "@/lib/sync";
 import { typing } from "@/lib/shortcuts";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
-import { api } from "@/lib/api";
+import { api, putAsset } from "@/lib/api";
 import { subjectIcon } from "@/lib/catalog";
 import { mutate, useAsync } from "@/lib/use-async";
 import { useNav } from "@/store/nav";
@@ -111,12 +111,13 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
   const importPdf = async (bytes: ArrayBuffer, fileName: string, sectionId: string) => {
     setBusy("PDF wird gelesen …");
     try {
-      const imgs = await pdfToImages(bytes, (d, n) => setBusy(`PDF-Seite ${d} von ${n} …`));
+      const imgs = await pdfToImages(bytes.slice(0), (d, n) => setBusy(`PDF-Seite ${d} von ${n} …`));
       if (!imgs.length) throw new Error("Die PDF enthält keine Seiten");
       const orientation = orientationOf(imgs[0]);
       const p = await api.createPage(sectionId, null, fileName.replace(/\.pdf$/i, ""));
       await api.updatePage(p.id, { mode: "a4", orientation, background: "blank" });
-      const objs = layoutPdfPages(imgs, { mode: "a4", orientation, z: 0 });
+      const asset = await putAsset(p.id, new Uint8Array(bytes));
+      const objs = layoutPdfPages(imgs, { mode: "a4", orientation, z: 0, asset });
       await api.saveElements(p.id, objs.map((o) => objToElement(o, p.id)), []);
       reload();
       select(p.id);

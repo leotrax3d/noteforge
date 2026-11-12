@@ -12,7 +12,7 @@ import { elementToStroke, strokeToElement } from "@/canvas/core/codec";
 import { uid, type Stroke } from "@/canvas/core/model";
 import { elementToObj, makeObj, objToElement, type CanvasObj, type ImageObj, type TableObj, type TextObj } from "@/canvas/core/objects";
 import type { Vec } from "@/canvas/core/geometry";
-import { api, saveExport } from "@/lib/api";
+import { api, putAsset, saveExport } from "@/lib/api";
 import type { ElementTag, Page, PagePatch, Section } from "@/lib/types";
 import { A4_GAP } from "@/canvas/core/layout";
 import { useTagStore } from "@/features/tags/tag-store";
@@ -275,16 +275,20 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
       setBusy(null);
     }
   };
-  const insertPdf = (file: File) => runBusy(async () => {
+  const insertPdf = (file: File, at?: Vec) => runBusy(async () => {
     const engine = engineRef.current;
     if (!engine) return;
     setBusy("PDF wird gelesen …");
-    const imgs = await pdfToImages(await file.arrayBuffer(), (d, n) => setBusy(`PDF-Seite ${d} von ${n} …`));
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const asset = await putAsset(page.id, bytes);
+    const imgs = await pdfToImages(bytes.slice().buffer, (d, n) => setBusy(`PDF-Seite ${d} von ${n} …`));
     const b = engine.contentBounds();
     const bottom = b ? b.y + b.h : null;
     const objs = layoutPdfPages(imgs, page.mode === "a4"
-      ? { mode: "a4", orientation: page.orientation, firstIndex: firstFreeA4(bottom, page.orientation), z: 0 }
-      : { mode: "infinite", orientation: page.orientation, top: bottom === null ? 0 : bottom + A4_GAP, z: 0 })
+      ? { mode: "a4", orientation: page.orientation, firstIndex: firstFreeA4(bottom, page.orientation), z: 0, asset }
+      : at
+        ? { mode: "infinite", orientation: page.orientation, top: at.y, left: at.x, z: 0, asset }
+        : { mode: "infinite", orientation: page.orientation, top: bottom === null ? 0 : bottom + A4_GAP, z: 0, asset })
       .map((o) => ({ ...o, z: engine.nextZ() }));
     engine.addObjects(objs);
     if (objs[0]) engine.focusOn(objs[0].bbox);
@@ -420,6 +424,10 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
 
   const insertFiles = useCallback(async (files: Iterable<File>, at?: Vec) => {
     for (const f of files) {
+      if (f.type === "application/pdf" || /\.pdf$/i.test(f.name)) {
+        await insertPdf(f, at);
+        continue;
+      }
       if (!f.type.startsWith("image/")) continue;
       try {
         insertImage(await fileToImage(f), at);
@@ -428,7 +436,8 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
         flash("Bild konnte nicht eingefügt werden");
       }
     }
-  }, [insertImage, flash]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [insertImage, flash, page.id, page.mode]);
 
   // ---- Rechner/Plotter (Phase 11): Graph als Bild mit Spezifikation, Rechnung als Textfeld ----
   useEffect(() => {
@@ -512,7 +521,9 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
   }, [tool]);
 
   const focusMode = usePrefs((s) => s.focus);
-  const perfOn = usePrefs((s) => s.perfOverlay);
+  const inkDebug = usePrefs((s) => s.inkDebug);
+  const perfOn = usePrefs((s) => s.perfOverlay) || inkDebug;
+  useEffect(() => { engineRef.current?.setInkDebug(inkDebug); }, [inkDebug, loaded]);
 
   const editingText = editingId && objects.find((o) => o.id === editingId)?.kind === "text";
   const saveLabel: Record<SaveState, string> = {
@@ -565,7 +576,7 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
       <div ref={hostRef} data-testid="canvas-host" data-loaded={loaded} data-tool={tool}
         className="relative min-h-0 flex-1 touch-none overflow-hidden select-none"
         onDragOver={(ev) => {
-          if ([...ev.dataTransfer.items].some((i) => i.type.startsWith("image/"))) ev.preventDefault();
+          if ([...ev.dataTransfer.items].some((i) => i.type.startsWith("image/") || i.type === "application/pdf")) ev.preventDefault();
         }}
         onDrop={(ev) => {
           const files = [...ev.dataTransfer.files];

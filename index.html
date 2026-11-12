@@ -4,6 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
     <title>Noteforge</title>
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <!-- Theme vor dem ersten Zeichnen setzen: kein weißes Aufblitzen im Dunkelmodus -->
+    <script>
+      (function () {
+        var t = "system";
+        try { t = localStorage.getItem("noteforge-theme") || "system"; } catch (e) {}
+        var dark = t === "dark" || (t === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+        var r = document.documentElement;
+        if (dark) r.classList.add("dark");
+        r.style.colorScheme = dark ? "dark" : "light";
+        r.style.background = dark ? "#0a0a0a" : "#ffffff";
+        try {
+          var a = localStorage.getItem("noteforge-accent");
+          if (a) r.style.setProperty("--accent-user", a);
+        } catch (e) {}
+      })();
+    </script>
+    <style>html, body, #root { height: 100%; margin: 0; } body { background: inherit; }</style>
   </head>
   <body>
     <div id="root"></div>

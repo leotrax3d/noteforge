@@ -46,6 +46,7 @@ export default function App() {
       else if (e.key === "F1" || (e.key === "?" && !mod && !typing(e.target))) p.setDialog("shortcuts");
       else if (e.key === "F11" || (mod && e.shiftKey && k === "f")) toggleFocus();
       else if (mod && e.shiftKey && k === "p") p.setPerfOverlay(!p.perfOverlay);
+      else if (mod && e.shiftKey && k === "d") p.setInkDebug(!p.inkDebug);
       else if (mod && e.shiftKey && k === "r") useCalc.getState().toggle();
       else if (mod && e.shiftKey && k === "g") useCalc.getState().openPlot(null, false);
       else if (e.altKey && k === "h") go({ view: "homework" });

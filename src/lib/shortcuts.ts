@@ -12,6 +12,7 @@ export const SHORTCUTS: ShortcutGroup[] = [
       { keys: ["F11"], label: "Fokusmodus ein/aus (auch Strg+Umschalt+F)" },
       { keys: ["Strg", "Umschalt", "S"], label: "Jetzt mit Nextcloud synchronisieren" },
       { keys: ["Strg", "Umschalt", "P"], label: "Leistungsanzeige ein/aus" },
+      { keys: ["Strg", "Umschalt", "D"], label: "Debug-Ansicht Stift (Rohpunkte, Druck, Umriss, FPS)" },
       { keys: ["Alt", "Pos1"], label: "Zur Startseite" },
       { keys: ["Alt", "H"], label: "Hausaufgaben" },
       { keys: ["Alt", "N"], label: "Noten" },

@@ -26,6 +26,15 @@ pub fn run() {
             app.manage(db);
             reminders::spawn(app.handle().clone());
             sync::spawn(app.handle().clone());
+            // Das Fenster startet unsichtbar und zeigt sich nach dem ersten fertigen Frame (Frontend).
+            // Sicherheitsnetz, falls das Frontend nie meldet: nach 4 s trotzdem anzeigen.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(4));
+                if let Some(w) = handle.get_webview_window("main") {
+                    let _ = w.show();
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -49,7 +58,7 @@ pub fn run() {
             commands::list_versions, commands::create_version, commands::auto_version,
             commands::restore_version, commands::delete_version,
             commands::list_templates, commands::save_template, commands::delete_template,
-            commands::create_page_from_template, commands::write_export,
+            commands::create_page_from_template, commands::write_export, commands::put_asset, commands::get_asset,
             commands::list_homework, commands::save_homework, commands::set_homework_done, commands::delete_homework,
             commands::list_grades, commands::save_grade, commands::delete_grade, commands::grade_config,
             commands::set_subject_weight, commands::set_grade_scale,
