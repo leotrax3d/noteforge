@@ -841,7 +841,7 @@ export class CanvasEngine {
     }
 
     // Auswahl-Griffe haben Vorrang (Lasso-Auswahl lässt sich mit jedem Werkzeug direkt ziehen)
-    if (this.sel && tool !== "pan") {
+    if (this.sel && (tool !== "pan" || this.grabTap)) {
       const h = this.hitHandle(q);
       if (h) return this.beginTransform(h, q);
       this.commitSelection();
@@ -1265,9 +1265,7 @@ export class CanvasEngine {
         if (this.grabTap && this.maxFromDown < TAP_SLOP) {
           // Kurz getippt (Finger/Maus) → Textfeld; das Zeichenwerkzeug bleibt gewählt
           const w = this.toWorld(this.downPos.x, this.downPos.y);
-          const o = this.topObjAt(w);
-          if (o?.kind === "image") { this.hoverObj = o; this.invalidate(false); }
-          else this.events.onTextAt?.(w, e.altKey);
+          if (!this.pickAt(w)) this.events.onTextAt?.(w, e.altKey);
         } else if (this.activeType === "touch" && this.isTap()) {
           const o = this.topObjAt(this.toWorld(this.downPos.x, this.downPos.y));
           if (o?.kind === "image") this.hoverObj = o; // Antippen zeigt den Greifbalken
@@ -1592,9 +1590,7 @@ export class CanvasEngine {
         this.events.onRadial?.(this.downPos);
         return;
       }
-      const w = this.toWorld(this.downPos.x, this.downPos.y);
-      const imgs = this.store.objects().filter((o): o is ImageObj => o.kind === "image" && !o.data.locked && hitObj(o, w.x, w.y));
-      if (imgs.length) this.select([], [imgs[imgs.length - 1]]);
+      this.pickAt(this.toWorld(this.downPos.x, this.downPos.y));
       return;
     }
     const picked = this.store.all().filter((s) => strokeInLasso(s, poly));
@@ -1604,6 +1600,17 @@ export class CanvasEngine {
       return c.filter((p) => pointInPolygon(p.x, p.y, poly)).length >= 3 || pointInPolygon(o.x + o.w / 2, o.y + o.h / 2, poly);
     });
     if (picked.length || objs.length) this.select(picked, objs);
+  }
+
+  /** Antippen wählt den obersten Strich / die Form oder ein Bild darunter (wie „Auswählen“ in OneNote). */
+  private pickAt(w: Vec): boolean {
+    const r = 10 / this.cam.s;
+    let hit: Stroke | null = null;
+    for (const s of this.store.all()) if (!this.hidden.has(s.id) && hitStroke(s, w.x, w.y, r)) hit = s;
+    if (hit) { this.select([hit]); return true; }
+    const imgs = this.store.objects().filter((o): o is ImageObj => o.kind === "image" && !o.data.locked && hitObj(o, w.x, w.y));
+    if (imgs.length) { this.select([], [imgs[imgs.length - 1]]); return true; }
+    return false;
   }
 
   private select(strokes: Stroke[], objs: ImageObj[] = []) {

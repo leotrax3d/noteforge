@@ -254,13 +254,42 @@ fn day_start_ms(d: NaiveDate) -> i64 {
     local_ms(d.year(), d.month(), d.day(), 0, 0).unwrap_or(0)
 }
 
+/// Beginn des laufenden Schuljahres (1. August).
+fn schoolyear_start() -> NaiveDate {
+    let t = Local::now().date_naive();
+    let y = if t.month() >= 8 { t.year() } else { t.year() - 1 };
+    NaiveDate::from_ymd_opt(y, 8, 1).unwrap_or(t)
+}
+
+/// Stundenplan abgleichen. Vergangene Tage bleiben im Cache und werden nie gelöscht; beim ersten
+/// Abgleich wird das laufende Schuljahr nachgeladen (in 4-Wochen-Stücken).
 async fn sync_untis(db: &Db, cfg: &UntisConfig, password: &str) -> R<usize> {
     let s = webuntis::Session::login(cfg, password).await?;
     let (a, b) = untis_range();
-    let res = s.timetable(yyyymmdd(a), yyyymmdd(b)).await;
+    let backfilled: Option<bool> = get_setting(&db.conn(), "untis_history")?;
+    let mut ranges = Vec::new();
+    if backfilled != Some(true) {
+        let mut d = schoolyear_start();
+        while d < a {
+            let e = (d + Duration::days(27)).min(a - Duration::days(1));
+            ranges.push((d, e));
+            d = e + Duration::days(1);
+        }
+    }
+    ranges.push((a, b));
+    let mut n = 0;
+    let mut err = None;
+    for (from, to) in &ranges {
+        match s.timetable(yyyymmdd(*from), yyyymmdd(*to)).await {
+            Ok(ps) => n += store_lessons(&mut db.conn(), day_start_ms(*from), day_start_ms(*to + Duration::days(1)), &ps)?,
+            Err(e) => { err = Some(e); break; }
+        }
+    }
     s.logout().await;
-    let ps = res?;
-    let n = store_lessons(&mut db.conn(), day_start_ms(a), day_start_ms(b + Duration::days(1)), &ps)?;
+    if let Some(e) = err {
+        return Err(e);
+    }
+    set_setting(&db.conn(), "untis_history", &true)?;
     set_setting(&db.conn(), "untis_last_sync", &now_ms())?;
     Ok(n)
 }
@@ -297,6 +326,7 @@ pub fn untis_disconnect(db: S) -> R<()> {
     let c = db.conn();
     del_setting(&c, "untis")?;
     del_setting(&c, "untis_last_sync")?;
+    del_setting(&c, "untis_history")?;
     c.execute("DELETE FROM lesson", [])?;
     Ok(())
 }

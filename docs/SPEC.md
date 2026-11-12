@@ -74,6 +74,13 @@ Strokes: Punkte als `Float32Array` (x, y, pressure, tilt, t), Stift-ID, Farbe, B
 - Möglichst wenig Text: keine erklärenden Untertitel oder Hinweise. Startseiten-Leiste nur mit Symbolen; Alt blendet Beschriftungen ein/aus.
 - Kein natives Ziehen/Markieren in der Oberfläche; eigene Scrollleisten, Regler und Farbwähler statt Windows-Standardelementen.
 
+### 4.6 Auswählen, Raster, Zeichenhilfen (v0.2.4)
+- **Antippen wählt aus** (wie „Auswählen“ in OneNote): Lasso-Tipp sowie Finger- oder Maus-Tipp mit einem Zeichenwerkzeug wählen den obersten Strich bzw. die oberste Form oder das Bild unter dem Zeiger. Danach lässt es sich über die Griffe verschieben, skalieren und drehen. Nur wenn dort nichts liegt, entsteht ein Textfeld.
+- **Finger/Maus mit Zeichenwerkzeug:** Ziehen verschiebt das Blatt; das gewählte Werkzeug bleibt aktiv. Abschaltbar unter Blatt-Einstellungen.
+- **Am Raster einrasten** (Hilfsmittel): Ecken erkannter Formen, Kreismittelpunkt und Radius (ganze Rasterschritte), Lineal-Striche und das Verschieben der Zeichenhilfen springen auf das Blattraster. Auf linierten Blättern nur senkrecht.
+- **Lineal/Geodreieck vergrößern:** Doppelpfeil-Griff, 1-cm-Schritte (Lineal 10–60 cm, Geodreieck 8–40 cm Hypotenuse). Die mm-Skala wird verlängert, nicht gestreckt.
+- Aufgeklappte Werkzeuggruppen klappen beim Zeichnen animiert ein. Die Leiste weicht den Blatt-Aktionen aus.
+
 ### 4.2 Blatt-Titel
 - Kein Titelbalken auf dem Blatt: der Canvas beginnt direkt oben. Speicherstatus, Versionen, Ink-Wiedergabe und Blatt-Aktionen (Export, Vorlage, Erstellt/Geändert) sitzen in einer kleinen Leiste oben rechts (Linkshänder: links).
 - **Umbenennen** nur in der Seitenleiste: Doppelklick/Doppeltipp auf den Namen → Inline-Eingabe (Enter oder Klick daneben speichert, Esc bricht ab), Kontextmenü „Umbenennen“, Taste **F2** für das offene Blatt.
@@ -105,6 +112,7 @@ Vollbild-Assistent mit Fortschrittsanzeige, Zurück/Weiter, fortsetzbar (Schritt
 ## 8. Integrationen
 - **WebUntis:** inoffizielle JSON-RPC-API (`/WebUntis/jsonrpc.do?school=…`), Login Schulname/Benutzer/Passwort, Stundenplan + Vertretungen + Ausfälle, Cache in SQLite, Fach-Mapping. „Aktuelle Stunde öffnen“ springt ins Fach.
   - **Freistunden:** Lücken > 25 min zwischen stattfindenden Stunden („Lücke“) und entfallene Stunden zwischen zwei stattfindenden („Entfall“) werden in Startseite und Kalender-Woche als „Freistunde“ gezeigt (eigene Farbe, Streifenmuster; Entfall dichter gestreift). Lücken/Entfall vor der ersten bzw. nach der letzten Stunde sind keine Freistunden (Entfall bleibt als „entfällt“ sichtbar).
+  - **Verlauf:** Vergangene Tage bleiben dauerhaft im Cache. Beim ersten Abgleich wird das laufende Schuljahr ab 1. August in 4-Wochen-Stücken nachgeladen; danach wird ab Montag der Vorwoche aktualisiert.
 - **Moodle BW:** Token über `/login/token.php?service=moodle_mobile_app`, Webservice-Funktionen `core_enrol_get_users_courses`, `core_course_get_contents`, `core_calendar_get_action_events_by_timesort`; PDFs als Blatt importieren.
 - Zugangsdaten im Windows Credential Manager.
 
