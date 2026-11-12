@@ -339,6 +339,9 @@ export class CanvasEngine {
 
   /** DOM-Ebene für Text/Tabellen; die Engine setzt nur ihren Kamera-Transform. */
   setObjectLayer(el: HTMLElement | null) {
+    // Zoomen/Scrollen auch, wenn der Mauszeiger über einem Textfeld/einer Tabelle steht
+    this.objLayer?.removeEventListener("wheel", this.onWheel);
+    el?.addEventListener("wheel", this.onWheel, { passive: false });
     this.objLayer = el;
     this.applyLayerTransform();
   }
