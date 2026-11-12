@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { Check, Copy, Palette, ScanText, Sigma, Trash2, Type } from "lucide-react";
+import { Check, Copy, LineChart, Palette, ScanText, Sigma, Trash2, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { SelectionInfo } from "@/canvas/core/engine";
 import { ColorGrid } from "./Toolbar";
 import { TagMenu } from "@/features/tags/TagMenu";
 
-export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDone, activeTags, onTag, onInkToText, onInkToLatex, onOcr }: {
+export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDone, activeTags, onTag, onInkToText, onInkToLatex, onOcr, onEditPlot }: {
+  onEditPlot?: () => void;
   onInkToText: () => void;
   onInkToLatex: () => void;
   onOcr: () => void;
@@ -45,6 +46,7 @@ export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDo
       {sel.images > 0 && sel.strokes === 0 && (
         <Button variant="ghost" size="icon" aria-label="Text im Bild erkennen" title="Text im Bild erkennen (OCR)" onClick={onOcr}><ScanText /></Button>
       )}
+      {onEditPlot && <Button variant="ghost" size="icon" aria-label="Graph bearbeiten" title="Graph im Plotter bearbeiten" onClick={onEditPlot}><LineChart /></Button>}
       <Button variant="ghost" size="icon" aria-label="Kopieren" title="Kopieren" onClick={onCopy}><Copy /></Button>
       <Button variant="ghost" size="icon" aria-label="Löschen" title="Löschen" onClick={onDelete}><Trash2 /></Button>
       <Button variant="ghost" size="icon" aria-label="Auswahl aufheben" title="Fertig" onClick={onDone}><Check /></Button>

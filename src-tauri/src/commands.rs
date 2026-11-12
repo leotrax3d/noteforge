@@ -204,3 +204,29 @@ mod tests {
         assert_eq!(super::percent_decode("a%2"), "a%2");
     }
 }
+
+// ---------- Phase 10: Hausaufgaben + Noten ----------
+use crate::db::school::{self, GradeConfig, Grade, Homework};
+
+#[tauri::command]
+pub fn list_homework(db: S, done_since: i64) -> Result<Vec<Homework>> { school::list_homework(&db.conn(), done_since) }
+#[tauri::command]
+pub fn save_homework(db: S, homework: Homework) -> Result<Homework> { school::save_homework(&db.conn(), homework) }
+#[tauri::command]
+pub fn set_homework_done(db: S, id: String, done: bool) -> Result<Homework> { school::set_homework_done(&db.conn(), &id, done) }
+#[tauri::command]
+pub fn delete_homework(db: S, id: String) -> Result<()> { school::delete_homework(&db.conn(), &id) }
+#[tauri::command]
+pub fn list_grades(db: S) -> Result<Vec<Grade>> { school::list_grades(&db.conn()) }
+#[tauri::command]
+pub fn save_grade(db: S, grade: Grade) -> Result<Grade> { school::save_grade(&db.conn(), grade) }
+#[tauri::command]
+pub fn delete_grade(db: S, id: String) -> Result<()> { school::delete_grade(&db.conn(), &id) }
+#[tauri::command]
+pub fn grade_config(db: S) -> Result<GradeConfig> { school::grade_config(&db.conn()) }
+#[tauri::command]
+pub fn set_subject_weight(db: S, subject_id: String, written_pct: i64) -> Result<()> {
+    school::set_subject_weight(&db.conn(), &subject_id, written_pct)
+}
+#[tauri::command]
+pub fn set_grade_scale(db: S, scale: String) -> Result<()> { school::set_grade_scale(&mut db.conn(), &scale) }

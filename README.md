@@ -120,3 +120,15 @@ Bilder werden in die Tiles gerendert (Tinte liegt darüber), Text und Tabellen l
   - Der Raster-Index (`StrokeStore.inRect`) halbiert etwa die Suche nach den Strichen pro Kachel (0,19 statt 0,34 ms).
   - Kacheln werden mit einem Zeitbudget statt einer festen Anzahl gerendert (8 ms pro Frame, nach einem Zoom 32 ms). Dadurch sank der längste Frame beim Zoomen von rund 55–75 ms auf rund 38 ms.
 - **Installer:** Die CI baut MSI (WiX, de-DE) und NSIS (deutsch, Installation pro Benutzer, WebView2 per Bootstrapper) und lädt beide als Artefakt `noteforge-installer` hoch.
+
+### Hausaufgaben & Noten (Phase 10)
+- **Hausaufgaben** (Alt+H): eigene Aufgaben mit Fach und Frist, gruppiert nach Überfällig/Heute/Morgen/Woche/Später, abhaken mit 44-px-Kreis. Moodle-Abgaben werden beim Moodle-Abgleich automatisch übernommen (ID `moodle:<Event>`, Erledigt-Status und Notiz bleiben erhalten; Löschen blendet sie nur aus).
+- **Noten** (Alt+N): Notensystem 1–6 (Eingabe auch `2-`/`2+`) oder 0–15 Punkte (Umrechnung beim Wechsel), Noten schriftlich/mündlich mit Gewicht, Fachgewichtung per Regler, Fach- und Gesamtschnitt, „Was brauche ich?“ für die nächste Leistung.
+- Startseite: Widgets „Hausaufgaben“ und „Noten“. Beides wird über Nextcloud mitsynchronisiert (Struktur-Datei).
+- Migration `0007_school.sql`, Backend `src-tauri/src/db/school.rs`, Rechenlogik `src/lib/school.ts` (getestet).
+
+### Taschenrechner & Funktionsplotter (Phase 11)
+- Panel über Einfügen-Menü, Strg+Umschalt+R (Rechner) bzw. Strg+Umschalt+G (Graph); wird erst beim Öffnen geladen (mathjs).
+- **Rechner:** Tastenfeld mit 44-px-Tasten, Dezimalkomma, `;` als Argumenttrenner, DEG/RAD, Variablen (`a = 4`), `ans`, Verlauf, „Aufs Blatt“ fügt die Rechnung als Textfeld ein. Metafunktionen (`import`, `evaluate` …) sind in Ausdrücken gesperrt.
+- **Plotter:** bis zu 6 Funktionen, Ziehen/Mausrad/Knöpfe zum Zoomen, Auto-y; Nullstellen (auch Berührpunkte, ohne Polstellen), Hoch-/Tiefpunkte und Schnittpunkte numerisch.
+- **Auf dem Blatt:** Graph als SVG-Bild mit gespeicherter Spezifikation (`data.plot`) – auswählen → „Graph bearbeiten“ öffnet ihn wieder im Plotter, „aktualisieren“ ersetzt ihn in einem Rückgängig-Schritt.

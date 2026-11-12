@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode, type RefObject } from "react";
 import {
+  Calculator, LineChart,
   Crop, DraftingCompass, Eraser, GripVertical, Hand, Highlighter, ImagePlus, Lasso, Pen, PenTool, Pencil, Plus, Redo2, Ruler,
   Settings2, Shapes, Table, Trash2, TriangleRight, Type, Undo2, FileUp,
 } from "lucide-react";
@@ -30,7 +31,7 @@ export interface ToolbarProps {
   onInsert: (kind: InsertKind) => void;
 }
 
-export type InsertKind = "image" | "screenshot" | "table" | "text" | "pdf";
+export type InsertKind = "image" | "screenshot" | "table" | "text" | "pdf" | "plot" | "calc";
 
 function ToolButton({ label, active, onClick, children, className }: {
   label: string; active?: boolean; onClick: () => void; children: ReactNode; className?: string;
@@ -273,6 +274,8 @@ export function Toolbar(p: ToolbarProps) {
             ["table", "Tabelle", <Table key="t" />],
             ["text", "Textfeld", <Type key="x" />],
             ["pdf", "PDF-Seiten …", <FileUp key="p" />],
+            ["plot", "Funktionsgraph …", <LineChart key="g" />],
+            ["calc", "Taschenrechner", <Calculator key="r" />],
           ] as [InsertKind, string, ReactNode][]).map(([k, label, icon]) => (
             <Button key={k} variant="ghost" className="h-11 w-full justify-start" onClick={() => { setOpen(null); p.onInsert(k); }}>
               {icon} {label}

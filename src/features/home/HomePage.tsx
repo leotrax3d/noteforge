@@ -5,7 +5,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CalendarDays, KeyRound, MoreVertical, PenLine, Pencil, Plus, RefreshCw, Search, Settings, Tags, Trash2 } from "lucide-react";
+import { BookCheck, CalendarDays, GraduationCap, KeyRound, MoreVertical, PenLine, Pencil, Plus, RefreshCw, Search, Settings, Tags, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -23,6 +23,7 @@ import { useNav } from "@/store/nav";
 import { SubjectDialog } from "./SubjectDialog";
 import { UpcomingExams } from "./UpcomingExams";
 import { TodayTimetable } from "./TodayTimetable";
+import { SchoolWidgets } from "./SchoolWidgets";
 import { AccountsDialog } from "@/features/settings/AccountsDialog";
 import { MappingDialog } from "@/features/settings/MappingDialog";
 
@@ -65,6 +66,8 @@ export function HomePage() {
         <h1 className="mr-auto text-xl font-semibold tracking-tight">Noteforge</h1>
         <Button variant="ghost" onClick={() => go({ view: "search" })} title="Suche (Strg+K)"><Search /> Suche</Button>
         <Button variant="ghost" onClick={() => go({ view: "calendar" })}><CalendarDays /> Kalender</Button>
+        <Button variant="ghost" onClick={() => go({ view: "homework" })}><BookCheck /> Hausaufgaben</Button>
+        <Button variant="ghost" onClick={() => go({ view: "grades" })}><GraduationCap /> Noten</Button>
         <Button variant="ghost" onClick={() => go({ view: "tags" })}><Tags /> Tags</Button>
         <Button variant="ghost" onClick={() => setAccounts(true)}><KeyRound /> Konten</Button>
         <Button variant="ghost" onClick={() => go({ view: "pen-test" })}>
@@ -81,6 +84,7 @@ export function HomePage() {
       <main className="flex-1 overflow-auto p-6">
         <TodayTimetable subjects={subjects ?? []} onSetup={() => setAccounts(true)} />
         <UpcomingExams subjects={subjects ?? []} />
+        <SchoolWidgets subjects={subjects ?? []} />
         <h2 className="mb-4 text-lg font-medium">Meine Fächer</h2>
         {error && <p className="mb-4 text-destructive">{error}</p>}
 

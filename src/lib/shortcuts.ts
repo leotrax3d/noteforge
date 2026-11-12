@@ -13,6 +13,10 @@ export const SHORTCUTS: ShortcutGroup[] = [
       { keys: ["Strg", "Umschalt", "S"], label: "Jetzt mit Nextcloud synchronisieren" },
       { keys: ["Strg", "Umschalt", "P"], label: "Leistungsanzeige ein/aus" },
       { keys: ["Alt", "Pos1"], label: "Zur Startseite" },
+      { keys: ["Alt", "H"], label: "Hausaufgaben" },
+      { keys: ["Alt", "N"], label: "Noten" },
+      { keys: ["Strg", "Umschalt", "R"], label: "Taschenrechner ein/aus" },
+      { keys: ["Strg", "Umschalt", "G"], label: "Funktionsplotter" },
     ],
   },
   {

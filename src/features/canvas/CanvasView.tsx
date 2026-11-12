@@ -35,6 +35,8 @@ import { recognition, dataUrlBytes, errText, UNAVAILABLE } from "@/lib/recogniti
 import { inkToLatex } from "@/features/recognition/latex";
 import { LatexDialog, type LatexRequest } from "@/features/recognition/LatexDialog";
 import { OcrDialog, type OcrView } from "@/features/recognition/OcrDialog";
+import { svgDataUrl, useCalc } from "@/features/calc/calc-store";
+import type { PlotSpec } from "@/features/calc/plot";
 
 type SaveState = "saved" | "pending" | "saving" | "error";
 const SAVE_DELAY = 800;
@@ -68,6 +70,8 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
   const engineRef = useRef<CanvasEngine | null>(null);
   const [history, setHistory] = useState({ canUndo: false, canRedo: false });
   const [sel, setSel] = useState<SelectionInfo | null>(null);
+  // Genau ein Funktionsgraph ausgewählt → im Plotter bearbeitbar
+  const plotSel = useMemo(() => (sel?.count === 1 ? engineRef.current?.selectionInk()?.images[0]?.data.plot ?? null : null), [sel]);
   const [save, setSave] = useState<SaveState>("saved");
   const [loaded, setLoaded] = useState(false);
   const [objects, setObjects] = useState<CanvasObj[]>([]);
@@ -426,10 +430,44 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
     }
   }, [insertImage, flash]);
 
+  // ---- Rechner/Plotter (Phase 11): Graph als Bild mit Spezifikation, Rechnung als Textfeld ----
+  useEffect(() => {
+    const host = {
+      insertPlot(spec: PlotSpec, svg: string, replace: boolean) {
+        const engine = engineRef.current;
+        if (!engine) return;
+        const src = svgDataUrl(svg);
+        const old = replace ? engine.selectionInk()?.images.find((i) => i.data.plot) : undefined;
+        if (old) {
+          engine.replaceSelectedImage(makeObj<ImageObj>({ ...old, h: old.w * 0.75, data: { src, plot: spec } }));
+          flash("Graph aktualisiert");
+          return;
+        }
+        const c = engine.viewCenter();
+        engine.addObject(makeObj<ImageObj>({ id: uid(), kind: "image", z: engine.nextZ(), x: c.x - 240, y: c.y - 180, w: 480, h: 360, angle: 0, data: { src, plot: spec } }));
+        useCalc.setState({ editing: true }); // weitere Änderungen ersetzen diesen Graphen (er ist ausgewählt)
+        useTools.getState().setTool("lasso");
+      },
+      insertText(text: string) {
+        const engine = engineRef.current;
+        if (!engine) return;
+        const c = engine.viewCenter();
+        engine.addObject(makeObj<TextObj>({ id: uid(), kind: "text", z: engine.nextZ(), x: c.x - 160, y: c.y - 22, w: 320, h: 44, angle: 0, data: { html: textHtml(text) } }));
+        flash("Rechnung eingefügt");
+      },
+    };
+    useCalc.getState().setHost(host);
+    return () => { if (useCalc.getState().host === host) useCalc.getState().setHost(null); };
+  }, [flash]);
+
   const onInsert = async (kind: InsertKind) => {
     const engine = engineRef.current;
     if (!engine) return;
-    if (kind === "image") fileRef.current?.click();
+    if (kind === "plot") {
+      engine.commitSelection();
+      useCalc.getState().openPlot(null, false);
+    } else if (kind === "calc") useCalc.getState().toggle(true);
+    else if (kind === "image") fileRef.current?.click();
     else if (kind === "pdf") pdfRef.current?.click();
     else if (kind === "screenshot") {
       try {
@@ -598,6 +636,7 @@ export function CanvasView({ page, onRename, onPageChange, focus, onOpenLink, on
             onInkToText={() => void inkToText()}
             onInkToLatex={() => void inkToFormula()}
             onOcr={() => void ocrSelection()}
+            onEditPlot={plotSel ? () => useCalc.getState().openPlot(plotSel, true) : undefined}
             activeTags={new Set((tagMap.get(sel.ids[0]) ?? []).map((t) => t.tagId))}
             onTag={(tagId, on) => void toggleTag(sel.ids[0], tagId, on)}
           />

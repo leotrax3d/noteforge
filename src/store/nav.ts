@@ -7,6 +7,8 @@ export type Route =
   | { view: "search"; query?: string }
   | { view: "tags"; tagId?: string }
   | { view: "calendar"; date?: number }
+  | { view: "homework"; subjectId?: string }
+  | { view: "grades"; subjectId?: string }
   | { view: "pen-test" };
 
 interface NavState {

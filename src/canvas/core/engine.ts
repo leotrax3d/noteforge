@@ -480,6 +480,12 @@ export class CanvasEngine {
     this.emitSelection();
   }
 
+  /** Ausgewähltes Bild ersetzen (ein Undo-Schritt) und das neue auswählen (z. B. bearbeiteter Graph). */
+  replaceSelectedImage(o: ImageObj) {
+    this.replaceSelection([o]);
+    this.select([], [o]);
+  }
+
   deleteSelection() {
     const sel = this.sel;
     if (!sel) return;

@@ -3,6 +3,7 @@
 pub mod models;
 pub mod onenote;
 pub mod repo;
+pub mod school;
 
 use rusqlite::Connection;
 use std::path::Path;
@@ -38,6 +39,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/0004_integrations.sql"),
     include_str!("../../migrations/0005_recognition.sql"),
     include_str!("../../migrations/0006_sync.sql"),
+    include_str!("../../migrations/0007_school.sql"),
 ];
 
 pub struct Db {

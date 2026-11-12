@@ -160,6 +160,7 @@ pub fn untis_subjects_db(conn: &Connection) -> R<Vec<UntisSubject>> {
 pub fn store_moodle_events(conn: &mut Connection, now: i64, evs: &[moodle::ActionEvent]) -> R<usize> {
     let tx = conn.transaction()?;
     let mut keep = Vec::with_capacity(evs.len());
+    let mut hw_keep = Vec::with_capacity(evs.len());
     for e in evs {
         let ext = format!("moodle:{}", e.id);
         let subject: Option<String> = match e.course_id {
@@ -189,7 +190,9 @@ pub fn store_moodle_events(conn: &mut Connection, now: i64, evs: &[moodle::Actio
             params![new_id(), subject, e.name, e.time, note, ext],
         )?;
         keep.push(ext);
+        hw_keep.push(crate::db::school::upsert_moodle_homework(&tx, e.id, subject.as_deref(), &e.name, e.time, &e.url)?);
     }
+    crate::db::school::prune_moodle_homework(&tx, now, &hw_keep)?;
     let existing: Vec<String> = {
         let mut st = tx.prepare(
             "SELECT external_id FROM event WHERE source='moodle' AND external_id IS NOT NULL AND start >= ?1",
@@ -453,5 +456,9 @@ mod tests {
         assert_eq!(all.len(), 1);
         assert_eq!((all[0].start, all[0].note.as_str()), (15_000, "eigene Notiz"));
         assert_eq!(all[0].remind_before, Some(1440));
+        // Abgaben landen auch in der Hausaufgaben-Liste (Abgabe 2 entfiel)
+        let hw = crate::db::school::list_homework(&c, 0).unwrap();
+        assert_eq!(hw.len(), 1);
+        assert_eq!((hw[0].id.as_str(), hw[0].due, hw[0].subject_id.as_deref()), ("moodle:1", Some(15_000), Some(s.id.as_str())));
     }
 }

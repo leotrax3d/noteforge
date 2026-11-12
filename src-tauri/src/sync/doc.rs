@@ -46,6 +46,10 @@ const STRUCT_TABLES: &[(&str, &str)] = &[
     ("template", "SELECT * FROM template"),
     // Moodle-Termine holt jedes Gerät selbst; „notified“ ist gerätelokal.
     ("event", "SELECT * FROM event WHERE source='manual'"),
+    // Hausaufgaben inkl. Moodle-Abgaben (deterministische ID → Erledigt-Status gilt auf allen Geräten)
+    ("homework", "SELECT * FROM homework"),
+    ("grade", "SELECT * FROM grade"),
+    ("grade_config", "SELECT * FROM grade_config"),
 ];
 const LOCAL_ONLY: &[(&str, &str)] = &[("event", "notified")];
 
