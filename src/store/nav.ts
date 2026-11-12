@@ -6,6 +6,7 @@ export type Route =
   | { view: "subject"; subjectId: string; pageId: string | null; focus?: string }
   | { view: "search"; query?: string }
   | { view: "tags"; tagId?: string }
+  | { view: "calendar"; date?: number }
   | { view: "pen-test" };
 
 interface NavState {

@@ -1,4 +1,5 @@
 mod commands;
+mod reminders;
 pub mod db;
 
 use tauri::Manager;
@@ -14,11 +15,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
             let db = db::Db::open(&dir.join("noteforge.sqlite"))?;
             app.manage(db);
+            reminders::spawn(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

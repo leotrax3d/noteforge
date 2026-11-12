@@ -2,7 +2,7 @@
 import type { Backend } from "./api";
 import type {
   CanvasElement, ElementTag, Page, PagePatch, PageRef, SearchHit, Section, SectionPatch, Subject, SubjectPatch,
-  Tag, TaggedItem, TemplateMeta, TrashItem, VersionMeta,
+  Tag, TaggedItem, TemplateMeta, TrashItem, VersionMeta, CalendarEvent,
 } from "./types";
 import { BUILTIN_TAG_IDS } from "./types";
 import { elementText, fold } from "./text";
@@ -33,6 +33,7 @@ export class MemoryBackend implements Backend {
   elementTags: ElementTag[] = [];
   versions: (VersionMeta & { snap: Snap })[] = [];
   templates: (TemplateMeta & { snap: Snap })[] = [];
+  events: CalendarEvent[] = [];
 
   private subject(id: string) {
     const s = this.subjects.find((x) => x.id === id);
@@ -79,6 +80,7 @@ export class MemoryBackend implements Backend {
     this.pages = this.pages.filter((p) => !secs.has(p.sectionId));
     this.sections = this.sections.filter((x) => x.subjectId !== id);
     this.subjects = this.subjects.filter((x) => x.id !== id);
+    for (const e of this.events) if (e.subjectId === id) e.subjectId = null;
   }
   async reorderSubjects(ids: string[]) {
     MemoryBackend.sameSet(this.subjects.map((s) => s.id), ids);
@@ -381,5 +383,24 @@ export class MemoryBackend implements Backend {
     if (!t) throw new Error(`Nicht gefunden: Vorlage ${templateId}`);
     const p = await this.createPage(sectionId, parentPageId, title);
     return this.apply(p.id, t.snap, false, true);
+  }
+
+  // ---------- Kalender ----------
+  async listEvents(from: number, to: number) {
+    return clone(this.events.filter((e) => e.start < to && (e.end ?? e.start) >= from).sort((a, b) => a.start - b.start));
+  }
+  async saveEvent(e: CalendarEvent) {
+    const title = e.title.trim();
+    if (!title) throw new Error("Ungültig: Titel darf nicht leer sein");
+    if (e.end != null && e.end < e.start) throw new Error("Ungültig: Ende liegt vor dem Beginn");
+    const ev = { ...clone(e), title, id: e.id || uid() };
+    const i = this.events.findIndex((x) => x.id === ev.id);
+    if (i >= 0) this.events[i] = ev; else this.events.push(ev);
+    return clone(ev);
+  }
+  async deleteEvent(id: string) {
+    const n = this.events.length;
+    this.events = this.events.filter((e) => e.id !== id);
+    if (this.events.length === n) throw new Error(`Nicht gefunden: Termin ${id}`);
   }
 }

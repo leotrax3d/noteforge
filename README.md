@@ -79,3 +79,9 @@ Bilder werden in die Tiles gerendert (Tinte liegt darüber), Text und Tabellen l
 - **PDF-Import:** Themengruppe → „PDF als Blatt importieren“ (neues A4-Blatt) oder Einfügen → „PDF-Seiten“ ins aktuelle Blatt. Seiten werden als feste Hintergrundseiten (`pdfPage`) gerastert (pdf.js), ihr Text ist durchsuchbar.
 - **PDF-Export:** Blatt-Aktionen → Blatt / Themengruppe / ganzes Fach. A4-Blätter 1:1, Endlosblätter auf A4-Breite eingepasst; eigener PDF-Writer (JPEG je Seite), Speichern über den Tauri-Dialog (Rust schreibt die Datei).
 - **Ink-Wiedergabe:** ▶ in der Blatt-Kopfzeile spielt die Handschrift in Entstehungsreihenfolge mit echtem Schreibtempo ab (1×–8×, Zeitleiste, Leertaste/Esc).
+
+### Kalender (Phase 5)
+- **Monat/Woche** (Startseite → „Kalender“): Woche beginnt Montag, KW-Anzeige, „Heute“, Tag antippen öffnet die Woche; „+“ im Tag bzw. Stundenraster legt einen Termin an.
+- **Termine** nach SPEC §3: Klassenarbeit, Test, Abgabe, Sonstiges – mit Fach (Fachfarbe), Datum, optional Uhrzeit/Ende (ohne Uhrzeit ganztägig), Notiz.
+- **Erinnerungen** als Windows-Benachrichtigung (`tauri-plugin-notification`): Vorlauf wählbar (Beginn … 1 Woche, Vorschlag je Typ). Ein Rust-Hintergrund-Thread prüft alle 20 s; jede Erinnerung kommt genau einmal, Verschieben des Termins setzt sie zurück.
+- **Startseiten-Widget „Nächste Klassenarbeiten“** mit Tages-Countdown (rot ab 3 Tagen), minütlich aktualisiert.

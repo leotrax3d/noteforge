@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { ThemeProvider } from "@/components/theme/theme-provider";
+import { CalendarPage } from "@/features/calendar/CalendarPage";
 import { HomePage } from "@/features/home/HomePage";
 import { PenTestPage } from "@/features/pen-test/PenTestPage";
 import { SearchPage } from "@/features/search/SearchPage";
@@ -29,6 +30,7 @@ export default function App() {
       {route.view === "subject" && <SubjectView subjectId={route.subjectId} pageId={route.pageId} focus={route.focus} />}
       {route.view === "search" && <SearchPage query={route.query} />}
       {route.view === "tags" && <TagsPage tagId={route.tagId} />}
+      {route.view === "calendar" && <CalendarPage key={route.date ?? 0} date={route.date} mode={route.date ? "week" : undefined} />}
       {route.view === "pen-test" && <PenTestPage />}
     </ThemeProvider>
   );

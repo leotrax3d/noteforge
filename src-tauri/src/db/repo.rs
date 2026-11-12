@@ -521,6 +521,9 @@ fn validate_event(e: &Event) -> Result<()> {
     non_empty(&e.title, "Titel")?;
     one_of(&e.kind, &["exam", "test", "deadline", "other"], "Termintyp")?;
     one_of(&e.source, &["manual", "moodle"], "Quelle")?;
+    if matches!(e.remind_before, Some(m) if !(0..=60 * 24 * 30).contains(&m)) {
+        return Err(Error::Invalid("Erinnerung muss zwischen 0 Minuten und 30 Tagen liegen".into()));
+    }
     if matches!(e.end, Some(end) if end < e.start) {
         return Err(Error::Invalid("Ende liegt vor dem Beginn".into()));
     }
@@ -529,22 +532,43 @@ fn validate_event(e: &Event) -> Result<()> {
 
 pub fn list_events(conn: &Connection, from: i64, to: i64) -> Result<Vec<Event>> {
     let mut stmt = conn.prepare_cached(
-        r#"SELECT id, subject_id, type, title, start, "end", note, source FROM event
+        r#"SELECT id, subject_id, type, title, start, "end", note, source, remind_before FROM event
            WHERE start < ?2 AND COALESCE("end", start) >= ?1 ORDER BY start"#,
     )?;
-    let rows = stmt.query_map([from, to], |r| {
-        Ok(Event {
-            id: r.get(0)?,
-            subject_id: r.get(1)?,
-            kind: r.get(2)?,
-            title: r.get(3)?,
-            start: r.get(4)?,
-            end: r.get(5)?,
-            note: r.get(6)?,
-            source: r.get(7)?,
-        })
-    })?;
+    let rows = stmt.query_map([from, to], event_row)?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+fn event_row(r: &rusqlite::Row) -> rusqlite::Result<Event> {
+    Ok(Event {
+        id: r.get(0)?,
+        subject_id: r.get(1)?,
+        kind: r.get(2)?,
+        title: r.get(3)?,
+        start: r.get(4)?,
+        end: r.get(5)?,
+        note: r.get(6)?,
+        source: r.get(7)?,
+        remind_before: r.get(8)?,
+    })
+}
+
+/// Fällige, noch nicht gemeldete Erinnerungen; markiert sie als gemeldet.
+/// Termine, die schon länger als `grace_ms` begonnen haben, werden still übersprungen.
+pub fn take_due_reminders(conn: &Connection, now: i64, grace_ms: i64) -> Result<Vec<Event>> {
+    let due: Vec<Event> = {
+        let mut stmt = conn.prepare_cached(
+            r#"SELECT id, subject_id, type, title, start, "end", note, source, remind_before FROM event
+               WHERE notified=0 AND remind_before IS NOT NULL
+                 AND start - remind_before*60000 <= ?1 ORDER BY start"#,
+        )?;
+        let rows = stmt.query_map([now], event_row)?;
+        rows.collect::<rusqlite::Result<_>>()?
+    };
+    for e in &due {
+        conn.execute("UPDATE event SET notified=1 WHERE id=?1", [&e.id])?;
+    }
+    Ok(due.into_iter().filter(|e| e.start + grace_ms >= now).collect())
 }
 
 /// Legt an (leere `id`) oder aktualisiert.
@@ -554,12 +578,14 @@ pub fn save_event(conn: &Connection, mut e: Event) -> Result<Event> {
         e.id = new_id();
     }
     conn.execute(
-        r#"INSERT INTO event (id, subject_id, type, title, start, "end", note, source)
-           VALUES (?1,?2,?3,?4,?5,?6,?7,?8)
+        r#"INSERT INTO event (id, subject_id, type, title, start, "end", note, source, remind_before)
+           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
            ON CONFLICT(id) DO UPDATE SET subject_id=excluded.subject_id, type=excluded.type,
-             title=excluded.title, start=excluded.start, "end"=excluded."end",
-             note=excluded.note, source=excluded.source"#,
-        params![e.id, e.subject_id, e.kind, e.title.trim(), e.start, e.end, e.note, e.source],
+             title=excluded.title, "end"=excluded."end", note=excluded.note, source=excluded.source,
+             notified = CASE WHEN start=excluded.start AND remind_before IS excluded.remind_before
+                             THEN notified ELSE 0 END,
+             start=excluded.start, remind_before=excluded.remind_before"#,
+        params![e.id, e.subject_id, e.kind, e.title.trim(), e.start, e.end, e.note, e.source, e.remind_before],
     )?;
     Ok(e)
 }
@@ -621,7 +647,7 @@ mod tests {
         reorder_subjects(&mut c, &[b.id.clone(), a.id.clone()]).unwrap();
         let names: Vec<_> = list_subjects(&c).unwrap().into_iter().map(|s| s.name).collect();
         assert_eq!(names, ["Deutsch", "Mathe"]);
-        assert!(reorder_subjects(&mut c, &[a.id.clone()]).is_err());
+        assert!(reorder_subjects(&mut c, std::slice::from_ref(&a.id)).is_err());
 
         let u = update_subject(&c, &a.id, SubjectPatch { name: Some("Mathematik".into()), ..Default::default() }).unwrap();
         assert_eq!((u.name.as_str(), u.icon.as_str()), ("Mathematik", "calculator"));
@@ -710,11 +736,37 @@ mod tests {
         set_element_tag(&c, "e1", "todo", true).unwrap();
 
         let ev = save_event(&c, Event { id: String::new(), subject_id: Some(s.id.clone()), kind: "exam".into(),
-            title: "KA 1".into(), start: 1000, end: None, note: String::new(), source: "manual".into() }).unwrap();
+            title: "KA 1".into(), start: 1000, end: None, note: String::new(), source: "manual".into(), remind_before: None }).unwrap();
         assert_eq!(list_events(&c, 0, 2000).unwrap().len(), 1);
         assert!(list_events(&c, 1001, 2000).unwrap().is_empty());
         delete_subject(&c, &s.id).unwrap();
         assert_eq!(list_events(&c, 0, 2000).unwrap()[0].subject_id, None);
         delete_event(&c, &ev.id).unwrap();
+    }
+
+    #[test]
+    fn reminders() {
+        let d = db();
+        let c = d.conn();
+        const MIN: i64 = 60_000;
+        let mk = |start: i64, rb: Option<i64>| Event { id: String::new(), subject_id: None, kind: "test".into(),
+            title: "Vokabeltest".into(), start, end: None, note: String::new(), source: "manual".into(), remind_before: rb };
+        let ev = save_event(&c, mk(100 * MIN, Some(30))).unwrap();
+        save_event(&c, mk(100 * MIN, None)).unwrap();
+        assert!(save_event(&c, mk(0, Some(-5))).is_err());
+        assert!(take_due_reminders(&c, 69 * MIN, MIN).unwrap().is_empty());
+        let due = take_due_reminders(&c, 70 * MIN, MIN).unwrap();
+        assert_eq!(due.len(), 1);
+        assert_eq!(due[0].remind_before, Some(30));
+        assert!(take_due_reminders(&c, 80 * MIN, MIN).unwrap().is_empty(), "nur einmal melden");
+        // Titel ändern: bleibt gemeldet; Beginn verschieben: wird neu gemeldet
+        save_event(&c, Event { title: "Neu".into(), ..ev.clone() }).unwrap();
+        assert!(take_due_reminders(&c, 80 * MIN, MIN).unwrap().is_empty());
+        save_event(&c, Event { start: 105 * MIN, ..ev.clone() }).unwrap();
+        assert_eq!(take_due_reminders(&c, 80 * MIN, MIN).unwrap().len(), 1);
+        // Längst vergangene Termine werden still als gemeldet markiert
+        save_event(&c, Event { start: 10 * MIN, ..ev }).unwrap();
+        assert!(take_due_reminders(&c, 80 * MIN, MIN).unwrap().is_empty());
+        assert!(take_due_reminders(&c, 80 * MIN, 1000 * MIN).unwrap().is_empty());
     }
 }

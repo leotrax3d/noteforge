@@ -34,6 +34,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/0001_init.sql"),
     include_str!("../../migrations/0002_onenote.sql"),
+    include_str!("../../migrations/0003_calendar.sql"),
 ];
 
 pub struct Db {

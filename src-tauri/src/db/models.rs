@@ -109,6 +109,9 @@ pub struct Event {
     pub end: Option<i64>,
     pub note: String,
     pub source: String,
+    /// Erinnerung in Minuten vor Beginn (None = keine).
+    #[serde(default)]
+    pub remind_before: Option<i64>,
 }
 
 // ---------- Phase 4 ----------

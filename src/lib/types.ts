@@ -71,3 +71,19 @@ export interface TaggedItem extends ElementTag {
 }
 export interface VersionMeta { id: string; pageId: string; createdAt: number; label: string; elementCount: number }
 export interface TemplateMeta { id: string; name: string; createdAt: number; mode: PageMode; background: PageBackground; elementCount: number }
+
+// ---------- Phase 5: Kalender (SPEC §3) ----------
+export type EventKind = "exam" | "test" | "deadline" | "other";
+export interface CalendarEvent {
+  id: string;
+  subjectId: string | null;
+  type: EventKind;
+  title: string;
+  /** ms seit Epoche */
+  start: number;
+  end: number | null;
+  note: string;
+  source: "manual" | "moodle";
+  /** Erinnerung in Minuten vor Beginn, null = keine. */
+  remindBefore: number | null;
+}

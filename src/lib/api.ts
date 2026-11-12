@@ -3,7 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   CanvasElement, ElementTag, Page, PagePatch, PageRef, SearchHit, Section, SectionPatch, Subject, SubjectPatch,
-  Tag, TaggedItem, TemplateMeta, TrashItem, VersionMeta,
+  Tag, TaggedItem, TemplateMeta, TrashItem, VersionMeta, CalendarEvent,
 } from "./types";
 import { MemoryBackend } from "./memory-backend";
 
@@ -57,6 +57,10 @@ export interface Backend {
   saveTemplate(pageId: string, name: string): Promise<TemplateMeta>;
   deleteTemplate(id: string): Promise<void>;
   createPageFromTemplate(sectionId: string, parentPageId: string | null, templateId: string, title: string): Promise<Page>;
+  // Kalender
+  listEvents(from: number, to: number): Promise<CalendarEvent[]>;
+  saveEvent(event: CalendarEvent): Promise<CalendarEvent>;
+  deleteEvent(id: string): Promise<void>;
 }
 
 const tauri: Backend = {
@@ -102,6 +106,9 @@ const tauri: Backend = {
   restoreVersion: (id) => invoke("restore_version", { id }),
   deleteVersion: (id) => invoke("delete_version", { id }),
   listTemplates: () => invoke("list_templates"),
+  listEvents: (from, to) => invoke("list_events", { from, to }),
+  saveEvent: (event) => invoke("save_event", { event }),
+  deleteEvent: (id) => invoke("delete_event", { id }),
   saveTemplate: (pageId, name) => invoke("save_template", { pageId, name }),
   deleteTemplate: (id) => invoke("delete_template", { id }),
   createPageFromTemplate: (sectionId, parentPageId, templateId, title) =>

@@ -5,7 +5,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { MoreVertical, PenLine, Pencil, Plus, Search, Tags, Trash2 } from "lucide-react";
+import { CalendarDays, MoreVertical, PenLine, Pencil, Plus, Search, Tags, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -19,6 +19,7 @@ import type { Subject } from "@/lib/types";
 import { mutate, useAsync } from "@/lib/use-async";
 import { useNav } from "@/store/nav";
 import { SubjectDialog } from "./SubjectDialog";
+import { UpcomingExams } from "./UpcomingExams";
 
 export function useDragSensors() {
   return useSensors(
@@ -52,6 +53,7 @@ export function HomePage() {
       <header className="flex items-center gap-2 border-b px-4 py-2">
         <h1 className="mr-auto text-xl font-semibold tracking-tight">Noteforge</h1>
         <Button variant="ghost" onClick={() => go({ view: "search" })} title="Suche (Strg+K)"><Search /> Suche</Button>
+        <Button variant="ghost" onClick={() => go({ view: "calendar" })}><CalendarDays /> Kalender</Button>
         <Button variant="ghost" onClick={() => go({ view: "tags" })}><Tags /> Tags</Button>
         <Button variant="ghost" onClick={() => go({ view: "pen-test" })}>
           <PenLine /> Stift-Test
@@ -60,6 +62,7 @@ export function HomePage() {
       </header>
 
       <main className="flex-1 overflow-auto p-6">
+        <UpcomingExams subjects={subjects ?? []} />
         <h2 className="mb-4 text-lg font-medium">Meine Fächer</h2>
         {error && <p className="mb-4 text-destructive">{error}</p>}
 
