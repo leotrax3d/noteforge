@@ -28,8 +28,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Noteforge ${{ github.ref_name }}"
+          tagName: v__VERSION__  # Tag legt die Action an (Version aus tauri.conf.json)
+          releaseName: "Noteforge v__VERSION__"
           releaseBody: |
             Windows-Installer zum Ausprobieren (noch nicht signiert – SmartScreen: „Weitere Informationen“ → „Trotzdem ausführen“).
             - `Noteforge_*_x64-setup.exe` (NSIS, Installation pro Benutzer, empfohlen)
