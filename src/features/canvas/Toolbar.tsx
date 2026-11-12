@@ -133,13 +133,14 @@ export const ITEM_INFO: Record<ToolItem, { label: string; key?: string }> = {
   shapes: { label: "Formen-Bibliothek", key: "S" }, heads: { label: "Pfeilspitzen" }, fill: { label: "Füllen", key: "F" },
   angle: { label: "Winkel messen", key: "W" }, zoomwrite: { label: "Zoom-Schreibfeld", key: "Z" },
   laser: { label: "Laserpointer", key: "P" }, vanish: { label: "Verschwindende Tinte", key: "V" },
+  molecule: { label: "Strukturformel" },
 };
 const ITEM_ICON: Record<ToolItem, ReactNode> = {
   fountain: <PenTool />, ballpoint: <Pen />, pencil: <Pencil />, highlighter: <Highlighter />, eraser: <Eraser />, lasso: <Lasso />,
   pan: <Hand />, text: <Type />, guides: <Ruler />, insert: <ImagePlus />, presets: <Palette />, undo: <Undo2 />, redo: <Redo2 />,
   zoom: <ZoomIn />, page: <Settings2 />, calc: <Calculator />, plot: <LineChart />, image: <ImagePlus />,
   shapes: <Shapes />, heads: <MoveRight />, fill: <PaintBucket />, angle: <Angle />, zoomwrite: <ScanSearch />,
-  laser: <Wand />, vanish: <Sparkles />,
+  laser: <Wand />, vanish: <Sparkles />, molecule: <MoleculeIcon />,
 };
 
 /** Werkzeuggruppen: zugeklappt nur ein Symbol, aufgeklappt die einzelnen Werkzeuge. */
@@ -147,7 +148,7 @@ const GROUP_OF: Record<ToolItem, string> = {
   fountain: "schreiben", ballpoint: "schreiben", pencil: "schreiben", highlighter: "schreiben", presets: "schreiben",
   eraser: "bearbeiten", lasso: "bearbeiten", pan: "bearbeiten", text: "bearbeiten",
   guides: "formen", shapes: "formen", heads: "formen", fill: "formen", angle: "formen",
-  insert: "einfuegen", image: "einfuegen", calc: "einfuegen", plot: "einfuegen",
+  insert: "einfuegen", molecule: "einfuegen", image: "einfuegen", calc: "einfuegen", plot: "einfuegen",
   laser: "zeigen", vanish: "zeigen", zoomwrite: "zeigen",
   undo: "verlauf", redo: "verlauf", zoom: "ansicht", page: "ansicht",
 };
@@ -343,6 +344,7 @@ export function Toolbar(p: ToolbarProps) {
           </Button>
         );
       case "shapes": return <ToolButton label={label} onClick={() => p.onInsert("shapes")}><Shapes /></ToolButton>;
+      case "molecule": return <ToolButton label={label} onClick={() => p.onInsert("molecule")}><MoleculeIcon /></ToolButton>;
       case "heads":
         return (
           <ToolButton label={label} active={open === "heads" || t.head0 !== "none" || t.head1 !== "none"} onClick={() => setOpen(open === "heads" ? null : "heads")}>

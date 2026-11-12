@@ -23,11 +23,11 @@ export type BarSize = "s" | "m" | "l";
 export const TOOL_ITEMS = [
   "fountain", "ballpoint", "pencil", "highlighter", "eraser", "lasso", "pan", "text", "guides", "insert",
   "presets", "undo", "redo", "zoom", "page", "calc", "plot", "image",
-  "shapes", "heads", "fill", "angle", "zoomwrite", "laser", "vanish",
+  "shapes", "heads", "fill", "angle", "zoomwrite", "laser", "vanish", "molecule",
 ] as const;
 export type ToolItem = (typeof TOOL_ITEMS)[number];
 export const DEFAULT_ITEMS: ToolItem[] = [
-  "fountain", "ballpoint", "pencil", "highlighter", "eraser", "lasso", "pan", "text", "guides", "insert",
+  "fountain", "ballpoint", "pencil", "highlighter", "eraser", "lasso", "pan", "text", "guides", "insert", "molecule",
   "shapes", "heads", "fill", "angle", "zoomwrite", "laser",
   "presets", "undo", "redo", "zoom", "page",
 ];
@@ -101,7 +101,13 @@ type Persisted = Pick<ToolsStore, "tool" | "pen" | "color" | "width" | "eraserMo
 
 function load(): Partial<Persisted> {
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<Persisted>;
+    const p = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<Persisted> & { seen?: string[] };
+    // Neue Leisten-Elemente einmalig in gespeicherte Leisten aufnehmen
+    if (p.items && !(p.seen ?? []).includes("molecule") && !p.items.includes("molecule")) {
+      const i = p.items.indexOf("insert");
+      p.items = [...p.items.slice(0, i + 1), "molecule", ...p.items.slice(i + 1)];
+    }
+    return p;
   } catch {
     return {};
   }
@@ -182,7 +188,7 @@ useTools.subscribe((s) => {
   try {
     // Laser/verschwindende Tinte nicht als Startwerkzeug merken
     const t = tool === "laser" || tool === "vanish" ? "pen" : tool;
-    localStorage.setItem(KEY, JSON.stringify({ tool: t, pen, color, width, eraserMode, eraserSize, fingerDraws, shapeMode, perPen, presets, customColors, dock, floatPos, orient, size, items, opacity, head0, head1, fillOpacity, fillHatch, vanishMs, zoomFactor }));
+    localStorage.setItem(KEY, JSON.stringify({ tool: t, pen, color, width, eraserMode, eraserSize, fingerDraws, shapeMode, perPen, presets, customColors, dock, floatPos, orient, size, items, opacity, head0, head1, fillOpacity, fillHatch, vanishMs, zoomFactor, seen: ["molecule"] }));
   } catch {
     /* ignorieren */
   }
