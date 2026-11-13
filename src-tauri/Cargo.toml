@@ -1,6 +1,6 @@
 [package]
 name = "noteforge"
-version = "0.2.15"
+version = "0.2.16"
 description = "Stiftoptimierte Schul-Notiz-App"
 authors = ["Noteforge"]
 edition = "2024"

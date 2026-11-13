@@ -58,8 +58,8 @@ jobs:
             - `Noteforge_*_x64_de-DE.msi` (MSI)
 
             Neu in dieser Version:
-            - „Greifen“ ist Standard (wie OneNote): Finger/Maus verschieben und wählen aus, der Stift springt beim Aufsetzen zum zuletzt gewählten Stift-Werkzeug
-            - Tippen = Klicken: Textfeld/Tabelle bearbeiten, Strich/Bild auswählen, leere Stelle → neues Textfeld
-            - Tippen ins Leere hebt eine Auswahl nur auf; gesperrte Elemente zeigen ihr Schloss statt eines neuen Textfelds
+            - WebUntis-Hausaufgaben: Fach als farbiges Label, Titel ohne Abschneiden mitten im Wort, ganzer Text aufklappbar, Ausgabedatum und Lehrkraft
+            - WebUntis-Fächer zuordnen: Vorschläge, neues Fach direkt anlegen, „Nicht zugeordnet“ überall mit direkter Verknüpfung
+            - „Bug melden“ auf der Startseite
           releaseDraft: false
           prerelease: false  # „latest“ muss auf das neueste Release zeigen (Update-Endpunkt)
