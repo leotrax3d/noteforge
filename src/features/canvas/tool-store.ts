@@ -37,6 +37,9 @@ export const DEFAULT_ITEMS: ToolItem[] = [
   "presets", "undo", "redo", "zoom", "fit", "fitpage", "page",
 ];
 
+/** Werkzeuge, zu denen der Stift aus „Greifen“ zurückspringt. */
+export const INK_TOOLS: Tool[] = ["pen", "eraser", "vanish", "laser", "lasso", "fill", "angle"];
+
 export const PALETTE = [
   "#111827", "#1e3a8a", "#2563eb", "#0891b2", "#16a34a", "#65a30d",
   "#ca8a04", "#ea580c", "#dc2626", "#db2777", "#9333ea", "#6b7280",
@@ -104,7 +107,7 @@ interface ToolsStore extends ToolState {
 const KEY = "noteforge-tools";
 const MAX_PRESETS = 8;
 
-type Persisted = Pick<ToolsStore, "tool" | "pen" | "color" | "width" | "eraserMode" | "eraserSize" | "fingerDraws" | "pointerGrab" | "gridSnap" | "shapeMode" | "perPen" | "presets" | "customColors" | "dock" | "floatPos" | "orient" | "size" | "items" | "opacity" | "head0" | "head1" | "fillOpacity" | "fillHatch" | "vanishMs" | "zoomFactor">;
+type Persisted = Pick<ToolsStore, "tool" | "penTool" | "pen" | "color" | "width" | "eraserMode" | "eraserSize" | "fingerDraws" | "pointerGrab" | "gridSnap" | "shapeMode" | "perPen" | "presets" | "customColors" | "dock" | "floatPos" | "orient" | "size" | "items" | "opacity" | "head0" | "head1" | "fillOpacity" | "fillHatch" | "vanishMs" | "zoomFactor">;
 
 function load(): Partial<Persisted> {
   try {
@@ -123,6 +126,9 @@ function load(): Partial<Persisted> {
       const i = p.items.indexOf("fit");
       p.items = i < 0 ? [...p.items, "fitpage"] : [...p.items.slice(0, i + 1), "fitpage", ...p.items.slice(i + 1)];
     }
+    // Wie OneNote: jedes Mal mit „Greifen“ starten; das gewählte Stift-Werkzeug merken
+    p.penTool = p.penTool ?? (p.tool && INK_TOOLS.includes(p.tool) ? p.tool : "pen");
+    p.tool = "pan";
     if (p.dock === "top" && !(p.seen ?? []).includes("island")) p.dock = "header";
     return p;
   } catch {
@@ -135,7 +141,8 @@ const perPenDefault = Object.fromEntries(
 ) as Record<PenKind, { color: string; width: number }>;
 
 export const useTools = create<ToolsStore>((set, get) => ({
-  tool: "pen",
+  tool: "pan",
+  penTool: "pen",
   pen: "fountain",
   color: "#1e3a8a",
   width: 2.5,
@@ -169,21 +176,21 @@ export const useTools = create<ToolsStore>((set, get) => ({
   setVanishMs: (vanishMs) => set({ vanishMs }),
   setZoom: (z) => set(z),
 
-  setTool: (tool) => set({ tool }),
+  setTool: (tool) => set(INK_TOOLS.includes(tool) ? { tool, penTool: tool } : { tool }),
   setPen: (pen) => {
     const pp = get().perPen[pen];
-    set({ tool: "pen", pen, color: pp.color, width: pp.width, opacity: null });
+    set({ tool: "pen", penTool: "pen", pen, color: pp.color, width: pp.width, opacity: null });
   },
   setColor: (color) => set((s) => ({ color, perPen: { ...s.perPen, [s.pen]: { ...s.perPen[s.pen], color } } })),
   setWidth: (width) => set((s) => ({ width, perPen: { ...s.perPen, [s.pen]: { ...s.perPen[s.pen], width } } })),
-  setEraser: (m) => set({ tool: "eraser", ...m }),
+  setEraser: (m) => set({ tool: "eraser", penTool: "eraser", ...m }),
   setFingerDraws: (fingerDraws) => set({ fingerDraws }),
   setPointerGrab: (pointerGrab) => set({ pointerGrab }),
   setShapeMode: (shapeMode) => set({ shapeMode }),
   setGridSnap: (gridSnap) => set({ gridSnap }),
   toggleGuide: (k) => set((s) => ({ guides: { ...s.guides, [k]: !s.guides[k] } })),
   applyPreset: (p) =>
-    set((s) => ({ tool: "pen", pen: p.pen, color: p.color, width: p.width, opacity: p.opacity ?? null, perPen: { ...s.perPen, [p.pen]: { color: p.color, width: p.width } } })),
+    set((s) => ({ tool: "pen", penTool: "pen", pen: p.pen, color: p.color, width: p.width, opacity: p.opacity ?? null, perPen: { ...s.perPen, [p.pen]: { color: p.color, width: p.width } } })),
   addPreset: () =>
     set((s) =>
       s.presets.length >= MAX_PRESETS ? s : { presets: [...s.presets, { id: crypto.randomUUID(), pen: s.pen, color: s.color, width: s.width, ...(s.opacity != null ? { opacity: s.opacity } : {}) }] },
@@ -210,7 +217,7 @@ useTools.subscribe((s) => {
   try {
     // Laser/verschwindende Tinte nicht als Startwerkzeug merken
     const t = tool === "laser" || tool === "vanish" ? "pen" : tool;
-    localStorage.setItem(KEY, JSON.stringify({ tool: t, pen, color, width, eraserMode, eraserSize, fingerDraws, pointerGrab, gridSnap, shapeMode, perPen, presets, customColors, dock, floatPos, orient, size, items, opacity, head0, head1, fillOpacity, fillHatch, vanishMs, zoomFactor, seen: ["molecule", "island", "fit", "fitpage"] }));
+    localStorage.setItem(KEY, JSON.stringify({ tool: t, penTool: s.penTool, pen, color, width, eraserMode, eraserSize, fingerDraws, pointerGrab, gridSnap, shapeMode, perPen, presets, customColors, dock, floatPos, orient, size, items, opacity, head0, head1, fillOpacity, fillHatch, vanishMs, zoomFactor, seen: ["molecule", "island", "fit", "fitpage"] }));
   } catch {
     /* ignorieren */
   }

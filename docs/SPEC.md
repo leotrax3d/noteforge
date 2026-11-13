@@ -148,6 +148,11 @@ Strokes: Punkte als `Float32Array` (x, y, pressure, tilt, t), Stift-ID, Farbe, B
 - Knopf „Seite an Bildschirm anpassen“ (neben Zoom, Strg+2): passt die Seite in Bildschirmmitte (DIN-A4-Seite oder importierte PDF-Seite) ganz ein; erneut drücken → Seitenbreite. Ohne Seiten wie „Alles anzeigen“. Animiert.
 - Start-Zoom beim Öffnen: erste Seite (A4/PDF) auf Bildschirmbreite (höchstens 160 %), oberer Seitenrand sichtbar. Endlos-Blätter ohne PDF bleiben bei 100 %.
 
+### 4.12 Greifen als Standard (wie OneNote)
+- Jedes geöffnete Blatt (und jeder App-Start) beginnt mit dem Werkzeug **Greifen** (Taste H): Finger und Maus verschieben die Ansicht.
+- Setzt der Stift auf, während Greifen aktiv ist, wird automatisch das zuletzt gewählte Stift-Werkzeug (`penTool`: Stift/Textmarker inkl. Stiftart, Radierer, Lasso, Füllen, Winkel, Laser, verschwindende Tinte) aktiv – auch in der Leiste. Stifttaste/Radierende behalten ihre eigene Funktion.
+- **Tippen = Klicken:** Finger-Tipp und Mausklick lösen dieselbe Aktion aus: Textfeld/Tabelle → bearbeiten an der Tippstelle, Strich/Bild → auswählen, leere Stelle → neues Textfeld. Auswahl-Griffe lassen sich mit Finger und Maus ziehen.
+
 ## 5. OneNote-Funktionen
 Unterseiten, Drag & Drop-Sortierung, Tags (To-Do, Wichtig, Frage, Lernen für KA, eigene) mit Tag-Übersicht, Seitenlinks `[[…]]`, Volltextsuche (Text + erkannte Handschrift + OCR), Seitenvorlagen, Seitenversionen, Papierkorb, Ink-Wiedergabe, PDF-Export (Blatt/Thema/Fach), Drucken.
 

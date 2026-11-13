@@ -138,7 +138,7 @@ export function ColorGrid({ value, onPick, highlight }: { value: string | null; 
 export const ITEM_INFO: Record<ToolItem, { label: string; key?: string }> = {
   fountain: { label: "Füller", key: "B" }, ballpoint: { label: "Kugelschreiber" }, pencil: { label: "Bleistift" },
   highlighter: { label: "Textmarker", key: "M" }, eraser: { label: "Radierer", key: "E" }, lasso: { label: "Lasso", key: "L" },
-  pan: { label: "Verschieben", key: "H" }, text: { label: "Text", key: "T" }, guides: { label: "Hilfsmittel", key: "R = Formmodus" },
+  pan: { label: "Greifen (Auswählen & Verschieben)", key: "H" }, text: { label: "Text", key: "T" }, guides: { label: "Hilfsmittel", key: "R = Formmodus" },
   insert: { label: "Einfügen" }, presets: { label: "Stift-Presets", key: "1–9" }, undo: { label: "Rückgängig", key: "Strg+Z" },
   redo: { label: "Wiederholen", key: "Strg+Y" }, zoom: { label: "Zoom", key: "Strg+0" }, fit: { label: "Alles anzeigen", key: "Strg+1" }, fitpage: { label: "Seite an Bildschirm anpassen", key: "Strg+2 · erneut: Seitenbreite" }, page: { label: "Blatteinstellungen" },
   calc: { label: "Taschenrechner", key: "Strg+Umschalt+R" }, plot: { label: "Funktionsgraph", key: "Strg+Umschalt+G" }, image: { label: "Bild einfügen", key: "Strg+V" },

@@ -274,6 +274,7 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
       onToast: (msg) => flash(msg),
       onAngle: setAngle,
       onHoverObj: (id) => setHoverId(id),
+      onAutoTool: (tool) => useTools.getState().setTool(tool),
       onObjTap: (id, x, y) => {
         setEditingId(id);
         // Nach dem Rendern (Feld jetzt bedienbar): Zelle/Text an der Tippstelle fokussieren
@@ -300,6 +301,8 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
         setEditingId(o.id);
       },
     };
+    // Wie OneNote: ein geöffnetes Blatt startet mit „Greifen“; der Stift springt beim Aufsetzen zum Stift-Werkzeug
+    if (useTools.getState().tool !== "pan") useTools.getState().setTool("pan");
     const t = useTools.getState();
     engine.setTool(t);
     const applyInput = (x: ReturnType<typeof useSetup.getState>) => engine.setInput({ gamma: x.pressureGamma, pmax: x.pressureMax, barrel: x.barrel });

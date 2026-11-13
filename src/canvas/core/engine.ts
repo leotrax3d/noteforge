@@ -47,6 +47,8 @@ export type EraserMode = "stroke" | "partial";
 
 export interface ToolState {
   tool: Tool;
+  /** Werkzeug, zu dem der Stift aus „Greifen“ zurückspringt (wie OneNote). */
+  penTool?: Tool;
   pen: PenKind;
   color: string;
   width: number;
@@ -105,6 +107,8 @@ export interface EngineEvents {
   onTextAt?: (w: Vec, free: boolean) => void;
   /** Textfeld/Tabelle mit dem Finger angetippt (Bildschirmkoordinaten) → dort bearbeiten. */
   onObjTap?: (id: string, clientX: number, clientY: number) => void;
+  /** Stift setzt bei „Greifen“ auf → Engine nutzt das zuletzt gewählte Stift-Werkzeug; Leiste soll umschalten. */
+  onAutoTool?: (tool: Tool) => void;
   /** Radialmenü öffnen (Bildschirmkoordinaten relativ zum Host). */
   onRadial?: (p: Vec) => void;
   /** Maus über einem Text-/Tabellenobjekt (zeigt dessen Greifbalken), sonst null. */
@@ -941,9 +945,17 @@ export class CanvasEngine {
     const barrelTool: Tool = this.input.barrel === "eraser" ? "eraser" : "lasso";
     let tool: Tool = penEraser ? "eraser" : penBarrel ? barrelTool : this.tool.tool;
     if (e.pointerType === "mouse" && e.button === 1) tool = "pan";
+    // OneNote: „Greifen“ ist Standard; setzt der Stift auf, springt er zum zuletzt gewählten Stift-Werkzeug zurück
+    if (e.pointerType === "pen" && !penEraser && !penBarrel && tool === "pan") {
+      tool = this.tool.penTool && this.tool.penTool !== "pan" ? this.tool.penTool : "pen";
+      this.tool = { ...this.tool, tool };
+      this.updateBlend();
+      this.events.onAutoTool?.(tool);
+    }
     const drawing = tool === "pen" || tool === "eraser" || tool === "laser" || tool === "vanish";
-    this.grabTap = this.tool.pointerGrab && drawing && !penEraser && !penBarrel
-      && (e.pointerType === "touch" || (e.pointerType === "mouse" && e.button === 0));
+    const fingerOrClick = e.pointerType === "touch" || (e.pointerType === "mouse" && e.button === 0);
+    // Tippen (Finger) und Klicken (Maus) verhalten sich gleich: bei Zeichenwerkzeugen (Option) und immer bei „Greifen“
+    this.grabTap = ((this.tool.pointerGrab && drawing) || tool === "pan") && !penEraser && !penBarrel && fingerOrClick;
     const fingerPans = this.grabTap || (e.pointerType === "touch" && !this.tool.fingerDraws && tool !== "pan");
     if (fingerPans) tool = "pan";
     this.barrel = penBarrel;
@@ -1419,8 +1431,15 @@ export class CanvasEngine {
       case "pan":
         this.settle();
         if (this.grabTap && this.maxFromDown < TAP_SLOP) {
-          // Kurz getippt (Finger/Maus) → Textfeld; das Zeichenwerkzeug bleibt gewählt
+          // Tippen = Klicken: Textfeld/Tabelle → bearbeiten, Strich/Bild → auswählen, leer → neues Textfeld
           const w = this.toWorld(this.downPos.x, this.downPos.y);
+          const o = this.topObjAt(w);
+          if (o && o.kind !== "image") {
+            const rc = this.rect ?? this.active.getBoundingClientRect();
+            this.events.onObjTap?.(o.id, rc.left + this.downPos.x, rc.top + this.downPos.y);
+            this.endPointer();
+            return;
+          }
           if (!this.pickAt(w)) this.events.onTextAt?.(w, e.altKey);
         } else if (this.activeType === "touch" && this.isTap()) {
           const o = this.topObjAt(this.toWorld(this.downPos.x, this.downPos.y));
