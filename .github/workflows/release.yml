@@ -55,9 +55,11 @@ jobs:
             - `Noteforge_*_x64_de-DE.msi` (MSI)
 
             Neu in dieser Version:
-            - Neue Kopfzeile im GoodNotes-Stil: farbig in der Fachfarbe, Werkzeuge mittig, Blatt-Aktionen rechts
-            - Schwebende Optionsleiste fürs aktive Werkzeug (Stiftart, Breite, Schnellfarben bzw. Radierer-Modus und -Größe)
-            - Rückgängig/Wiederholen sowie Zoom und „Alles anzeigen“ als schwebende Leisten am Rand
-            - Menüs, Popover, Dialoge und schwebende Leisten im Milchglas-Stil (frosted)
+            - Schreibschrift: geschwindigkeitsabhängige Glättung (kein Zittern, keine abgerundeten Schleifen), keine Überschwinger mehr
+            - Stift stillhalten löscht keinen Strich mehr (kein Radialmenü); Formerkennung erst nach längerem Halten
+            - Leichte Verbindungsstriche bleiben sichtbar (weniger Druck-Ausdünnung)
+            - Neuer Knopf „Seite an Bildschirm anpassen“ (Strg+2, erneut: Seitenbreite), auch für PDF-Seiten
+            - Beim Öffnen wird die erste Seite (A4/PDF) auf Bildschirmbreite gezoomt
+            - Zwei-Finger-Zoom funktioniert auch direkt nach dem Schreiben mit dem Stift (z. B. auf PDFs)
           releaseDraft: false
           prerelease: false  # „latest“ muss auf das neueste Release zeigen (Update-Endpunkt)
