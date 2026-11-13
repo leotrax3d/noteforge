@@ -55,11 +55,6 @@ jobs:
             - `Noteforge_*_x64_de-DE.msi` (MSI)
 
             Neu in dieser Version:
-            - Tabellen in beliebiger Größe (Raster oder Zeilen/Spalten eingeben)
-            - Spaltenbreiten durch Ziehen der Trennlinien einstellen (auch mit dem Finger), Doppelklick = optimale Breite
-            - Neues Rechtsklickmenü für Text und Tabellen: Formatierung, Farben, Absatz, Groß-/Kleinschreibung, Sonderzeichen, Zeilen/Spalten, Sortieren, Zellfarbe, Summe
-            - Tabellen und Textfelder lassen sich mit dem Finger antippen und bearbeiten
-            - Textfelder wachsen beim Tippen mit (wie in OneNote)
-            - Werkzeugleiste als Insel in der Kopfzeile
+            - WebUntis: Abgleich bricht nicht mehr mit „no allowed date (-7004)“ ab – gesperrte Zeiträume werden übersprungen
           releaseDraft: false
           prerelease: false  # „latest“ muss auf das neueste Release zeigen (Update-Endpunkt)
