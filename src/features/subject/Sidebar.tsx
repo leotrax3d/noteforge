@@ -7,6 +7,7 @@ import {
 import {
   ChevronDown, ChevronRight, CornerDownRight, FileText, FilePlus, FolderPlus, GripVertical,
   FileUp, GraduationCap, IndentDecrease, IndentIncrease, LayoutTemplate, MoreVertical, Palette, Pencil, Trash2, Wand2,
+  Bookmark, BookmarkMinus, LayoutGrid, List,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +38,7 @@ export interface SidebarActions {
   openTrash(): void;
   renamePage(id: string, title: string): void;
   restoreAutoTitle(id: string): void;
+  toggleBookmark(id: string): void;
 }
 
 interface Props {
@@ -127,6 +129,11 @@ export function Sidebar({ subjectColor, sections, pages, selectedPageId, actions
     }
   };
 
+  const [view, setViewState] = useState<SideView>(() => {
+    try { const v = localStorage.getItem(VIEW_KEY); return v === "grid" || v === "bookmarks" ? v : "list"; } catch { return "list"; }
+  });
+  const setView = (v: SideView) => { setViewState(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* egal */ } };
+
   const activeItem = drag && parse(drag.active);
   const activeLabel =
     activeItem?.kind === "s"
@@ -135,7 +142,19 @@ export function Sidebar({ subjectColor, sections, pages, selectedPageId, actions
 
   return (
     <nav aria-label="Themen und Blätter" className="flex h-full flex-col">
-      <div className="flex-1 overflow-y-auto overscroll-contain p-2">
+      {/* Ansicht wie in GoodNotes: Raster · Liste · Lesezeichen */}
+      <div role="tablist" aria-label="Ansicht der Seitenleiste" className="mx-2 mt-2 flex shrink-0 rounded-xl bg-muted p-1">
+        {([["grid", "Raster", <LayoutGrid key="g" />], ["list", "Liste", <List key="l" />], ["bookmarks", "Lesezeichen", <Bookmark key="b" />]] as const).map(([v, label, icon]) => (
+          <button key={v} type="button" role="tab" aria-selected={view === v} aria-label={label} title={label} onClick={() => setView(v)}
+            className={cn("flex h-11 flex-1 items-center justify-center rounded-lg text-muted-foreground transition-colors [&_svg]:size-5",
+              view === v ? "bg-background text-foreground shadow-sm" : "hover:text-foreground")}>
+            {icon}
+          </button>
+        ))}
+      </div>
+      {view === "grid" && <PageGrid sections={sections} pages={pages} selectedPageId={selectedPageId} actions={actions} />}
+      {view === "bookmarks" && <BookmarkList sections={sections} pages={pages} selectedPageId={selectedPageId} actions={actions} />}
+      <div className={cn("flex-1 overflow-y-auto overscroll-contain p-2", view !== "list" && "hidden")}>
         <DndContext
           sensors={sensors}
           collisionDetection={collision}
@@ -221,6 +240,80 @@ export function Sidebar({ subjectColor, sections, pages, selectedPageId, actions
         onConfirm={() => dialog?.kind === "delete-page" && actions.deletePage(dialog.page.id)}
       />
     </nav>
+  );
+}
+
+type SideView = "grid" | "list" | "bookmarks";
+const VIEW_KEY = "noteforge-sidebar-view";
+
+/** Miniatur eines Blatts: Papier in Blattfarbe mit angedeutetem Hintergrund (Karo/Linien/Punkte). */
+function PaperThumb({ page }: { page: Page }) {
+  const step = 8;
+  const bg = page.background === "grid"
+    ? `linear-gradient(#94a3b833 1px, transparent 1px) 0 0 / ${step}px ${step}px, linear-gradient(90deg, #94a3b833 1px, transparent 1px) 0 0 / ${step}px ${step}px`
+    : page.background === "lines" ? `linear-gradient(#94a3b844 1px, transparent 1px) 0 0 / 100% ${step}px`
+    : page.background === "dots" ? `radial-gradient(#94a3b877 0.8px, transparent 1px) 0 0 / ${step}px ${step}px` : "none";
+  const landscape = page.mode === "a4" && page.orientation === "landscape";
+  return (
+    <span className={cn("block w-full rounded-md border shadow-sm", landscape ? "aspect-[297/210]" : "aspect-[210/297]")}
+      style={{ background: `${bg === "none" ? "" : bg + ","} ${page.pageColor || "#ffffff"}` }} />
+  );
+}
+
+function PageGrid({ sections, pages, selectedPageId, actions }: { sections: Section[]; pages: Page[]; selectedPageId: string | null; actions: SidebarActions }) {
+  return (
+    <div className="flex-1 space-y-4 overflow-y-auto overscroll-contain p-3">
+      {sections.map((sec) => {
+        const list = pages.filter((p) => p.sectionId === sec.id).sort((a, b) => a.order - b.order);
+        return (
+          <section key={sec.id} aria-label={sec.name}>
+            <h3 className="mb-2 flex items-center gap-2 text-sm font-medium">
+              <span className="size-2.5 rounded-full" style={{ background: sec.color }} />{sec.name}
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              {list.map((p) => (
+                <button key={p.id} type="button" onClick={() => actions.selectPage(p.id)} aria-current={p.id === selectedPageId ? "page" : undefined}
+                  className={cn("group relative flex flex-col gap-1 rounded-lg p-1 text-left", p.id === selectedPageId ? "ring-2 ring-[var(--subject,var(--ring))]" : "hover:bg-accent")}>
+                  <PaperThumb page={p} />
+                  {p.bookmarked && <Bookmark className="absolute top-1.5 right-2.5 size-4 fill-red-500 text-red-500" aria-label="Lesezeichen" />}
+                  <span className={cn("truncate px-0.5 text-xs", p.titleSource === "auto" && "italic text-muted-foreground")}>{p.title || "Unbenannt"}</span>
+                </button>
+              ))}
+              {list.length === 0 && <span className="col-span-2 text-xs text-muted-foreground">Keine Blätter</span>}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function BookmarkList({ sections, pages, selectedPageId, actions }: { sections: Section[]; pages: Page[]; selectedPageId: string | null; actions: SidebarActions }) {
+  const marked = pages.filter((p) => p.bookmarked);
+  if (!marked.length) return (
+    <div className="flex-1 p-3">
+      <EmptyState compact icon={<Bookmark />} title="Keine Lesezeichen" text="Im Menü eines Blatts (⋮) „Lesezeichen setzen“ wählen." />
+    </div>
+  );
+  return (
+    <ul className="flex-1 space-y-1 overflow-y-auto overscroll-contain p-2">
+      {marked.map((p) => {
+        const sec = sections.find((s) => s.id === p.sectionId);
+        return (
+          <li key={p.id} className="flex items-center">
+            <button type="button" onClick={() => actions.selectPage(p.id)} aria-current={p.id === selectedPageId ? "page" : undefined}
+              className={cn("flex min-h-11 flex-1 items-center gap-2 rounded-lg px-2 text-left text-sm", p.id === selectedPageId ? "bg-accent font-medium" : "hover:bg-accent")}>
+              <Bookmark className="size-4 shrink-0 fill-red-500 text-red-500" />
+              <span className="min-w-0 flex-1 truncate">{p.title || "Unbenannt"}</span>
+              {sec && <span className="truncate text-xs text-muted-foreground">{sec.name}</span>}
+            </button>
+            <Button variant="ghost" size="icon" aria-label="Lesezeichen entfernen" title="Lesezeichen entfernen" onClick={() => actions.toggleBookmark(p.id)}>
+              <BookmarkMinus />
+            </Button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -412,6 +505,9 @@ function PageRow(props: {
             <DropdownMenuItem onSelect={() => actions.selectPage(page.id)}><FileText /> Öffnen</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => window.setTimeout(() => props.onRenaming(true), 0)}><Pencil /> Umbenennen<span className="ml-auto text-xs text-muted-foreground">F2</span></DropdownMenuItem>
             {!auto && <DropdownMenuItem onSelect={() => actions.restoreAutoTitle(page.id)}><Wand2 /> Automatischen Titel wiederherstellen</DropdownMenuItem>}
+            <DropdownMenuItem onSelect={() => actions.toggleBookmark(page.id)}>
+              {page.bookmarked ? <><BookmarkMinus /> Lesezeichen entfernen</> : <><Bookmark /> Lesezeichen setzen</>}
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => actions.createPage(page.sectionId, page.id)}><FilePlus /> Unterblatt hinzufügen</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => actions.createFromTemplate(page.sectionId, page.id)}><LayoutTemplate /> Unterblatt aus Vorlage …</DropdownMenuItem>
             <DropdownMenuItem disabled={!indent} onSelect={() => indent && actions.movePage(page.id, indent)}>

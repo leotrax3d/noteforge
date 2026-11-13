@@ -120,6 +120,11 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
       data.setData((d) => d && { ...d, pages: d.pages.map((x) => (x.id === id ? { ...x, title, titleSource: "manual" } : x)) });
       void mutate(() => api.updatePage(id, { title, titleSource: "manual" }), reload);
     },
+    toggleBookmark: (id) => {
+      const on = !pages.find((x) => x.id === id)?.bookmarked;
+      data.setData((d) => d && { ...d, pages: d.pages.map((x) => (x.id === id ? { ...x, bookmarked: on } : x)) });
+      void mutate(() => api.updatePage(id, { bookmarked: on }), reload);
+    },
     restoreAutoTitle: (id) => {
       // Titel wird beim nächsten Speichern des Blatts aus dem Inhalt gebildet
       void mutate(() => api.updatePage(id, { titleSource: "auto" }), async () => { reload(); if (id === pageId) setAutoRev((r) => r + 1); });

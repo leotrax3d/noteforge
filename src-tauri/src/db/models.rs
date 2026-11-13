@@ -54,6 +54,9 @@ pub struct Page {
     pub page_color: String,
     /// "auto" (aus dem Inhalt) oder "manual"
     pub title_source: String,
+    /// Lesezeichen (Seitenleiste)
+    #[serde(default)]
+    pub bookmarked: bool,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -68,6 +71,7 @@ pub struct PagePatch {
     pub bg_spacing_mm: Option<f64>,
     pub page_color: Option<String>,
     pub title_source: Option<String>,
+    pub bookmarked: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

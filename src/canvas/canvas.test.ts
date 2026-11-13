@@ -43,7 +43,19 @@ describe("PalmRejection", () => {
     expect(p.touchCount).toBe(2);
   });
   it("große Kontaktfläche gilt immer als Handballen", () => {
-    expect(new PalmRejection().onDown("touch", 2, 0, 60)).toBe("ignore");
+    const p = new PalmRejection();
+    p.onDown("pen", 1, 0); p.onUp("pen", 1, 10);
+    expect(p.onDown("touch", 2, 5000, 60)).toBe("ignore");
+    // ohne Stift gibt es keinen Handballen: große Fingerfläche zählt als Finger
+    expect(new PalmRejection().onDown("touch", 3, 0, 60)).toBe("draw");
+  });
+  it("erster Finger räumt hängengebliebene Kontakte ab (verpasstes pointerup)", () => {
+    const p = new PalmRejection();
+    p.onDown("pen", 1, 0); p.onUp("pen", 1, 10);
+    p.onDown("touch", 2, 20, 0, true); // als Handballen gemerkt, pointerup kommt nie an
+    p.onDown("pen", 1, 30); p.onUp("pen", 1, 40);
+    expect(p.onDown("touch", 3, 9000, 0, true)).toBe("draw");
+    expect(p.onDown("touch", 4, 9010)).toBe("gesture");
   });
   it("Stift übernimmt: laufende Finger werden zu Handballen", () => {
     const p = new PalmRejection();

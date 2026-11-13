@@ -227,7 +227,7 @@ pub fn reorder_sections(conn: &mut Connection, subject_id: &str, order: &[String
 pub const UNTITLED: &str = "Unbenannt";
 
 const PAGE_COLS: &str = "p.id, p.section_id, p.parent_page_id, p.title, p.sort_order, p.mode,
-    p.orientation, p.background, p.bg_spacing_mm, p.page_color, p.created_at, p.updated_at, p.title_source";
+    p.orientation, p.background, p.bg_spacing_mm, p.page_color, p.created_at, p.updated_at, p.title_source, p.bookmarked";
 
 fn page_row(r: &Row) -> rusqlite::Result<Page> {
     Ok(Page {
@@ -244,6 +244,7 @@ fn page_row(r: &Row) -> rusqlite::Result<Page> {
         created_at: r.get(10)?,
         updated_at: r.get(11)?,
         title_source: r.get(12)?,
+        bookmarked: r.get::<_, i64>(13)? != 0,
     })
 }
 
@@ -337,13 +338,16 @@ pub fn update_page(conn: &Connection, id: &str, p: PagePatch) -> Result<Page> {
     if let Some(v) = p.page_color {
         pg.page_color = v;
     }
+    if let Some(v) = p.bookmarked {
+        pg.bookmarked = v;
+    }
     pg.updated_at = now_ms();
     conn.execute(
         "UPDATE page SET title=?2, mode=?3, orientation=?4, background=?5, bg_spacing_mm=?6,
-           page_color=?7, updated_at=?8, title_source=?9 WHERE id=?1",
+           page_color=?7, updated_at=?8, title_source=?9, bookmarked=?10 WHERE id=?1",
         params![
             pg.id, pg.title, pg.mode, pg.orientation, pg.background, pg.bg_spacing_mm,
-            pg.page_color, pg.updated_at, pg.title_source
+            pg.page_color, pg.updated_at, pg.title_source, pg.bookmarked as i64
         ],
     )?;
     super::onenote::reindex_page(conn, &pg.id)?;

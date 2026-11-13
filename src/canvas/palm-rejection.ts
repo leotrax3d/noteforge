@@ -7,7 +7,10 @@
 export type InputDecision = "draw" | "ignore" | "gesture";
 
 /** Kontaktfläche (CSS-px), ab der ein Touch als Handballen gilt. */
-export const PALM_CONTACT_PX = 32;
+export const PALM_CONTACT_PX = 48;
+/** Große Kontaktfläche zählt nur als Handballen, wenn der Stift in dieser Zeit benutzt wurde
+ *  (manche Touchscreens melden auch für Finger große Flächen – ohne Stift gibt es keinen Handballen). */
+export const PALM_SIZE_WINDOW_MS = 15000;
 
 export class PalmRejection {
   /** Wie lange nach der letzten Stiftaktivität Touch noch ignoriert wird (ms). */
@@ -20,8 +23,8 @@ export class PalmRejection {
   private pending = new Set<number>();
   private promoted: number[] = [];
 
-  penActive(now: number): boolean {
-    return this.penDown || now - this.lastPenActivity < this.penGraceMs;
+  penActive(now: number, graceMs = this.penGraceMs): boolean {
+    return this.penDown || now - this.lastPenActivity < graceMs;
   }
 
   /** Bei jedem Pointer-Event (auch Hover) aufrufen. */
@@ -31,13 +34,16 @@ export class PalmRejection {
   }
 
   /** `size` = größere Kantenlänge der Kontaktfläche (PointerEvent.width/height). */
-  onDown(pointerType: string, pointerId: number, now: number, size = 0): InputDecision {
+  onDown(pointerType: string, pointerId: number, now: number, size = 0, isPrimary = false): InputDecision {
     if (pointerType === "pen") {
       this.notePen(now, true);
       return "draw";
     }
     if (pointerType === "touch") {
-      if (this.palms.has(pointerId) || this.penDown || size >= PALM_CONTACT_PX || this.palms.size > 0) {
+      // Erster Finger auf dem Bildschirm: alter Zustand ist veraltet (z. B. verpasstes pointerup außerhalb des Blatts)
+      if (isPrimary) { this.touches.clear(); this.palms.clear(); this.pending.clear(); }
+      const bigPalm = size >= PALM_CONTACT_PX && this.penActive(now, PALM_SIZE_WINDOW_MS);
+      if (this.palms.has(pointerId) || this.penDown || bigPalm || this.palms.size > 0) {
         this.palms.add(pointerId);
         return "ignore";
       }

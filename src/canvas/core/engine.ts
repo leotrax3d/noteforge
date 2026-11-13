@@ -1,4 +1,4 @@
-import { PALM_CONTACT_PX, PalmRejection } from "../palm-rejection";
+import { PALM_CONTACT_PX, PALM_SIZE_WINDOW_MS, PalmRejection } from "../palm-rejection";
 import { PALETTES, drawBackground, pageFill, type Palette } from "./background";
 import {
   apply,
@@ -895,7 +895,13 @@ export class CanvasEngine {
   private onDown = (e: PointerEvent) => {
     const now = performance.now();
     const p = this.local(e);
-    const decision = this.palm.onDown(e.pointerType, e.pointerId, now, Math.max(e.width || 0, e.height || 0));
+    if (e.pointerType === "touch" && e.isPrimary) {
+      // Kein anderer Finger liegt mehr auf: hängengebliebene Kontakte (pointerup außerhalb verpasst) verwerfen
+      this.touches.clear();
+      this.pendingTouch.clear();
+      if (this.mode === "gesture") this.mode = "idle";
+    }
+    const decision = this.palm.onDown(e.pointerType, e.pointerId, now, Math.max(e.width || 0, e.height || 0), e.pointerType === "touch" && e.isPrimary);
     if (e.pointerType === "touch") {
       if (decision === "ignore") {
         if (this.palm.isPending(e.pointerId)) this.pendingTouch.set(e.pointerId, p);
@@ -1481,7 +1487,7 @@ export class CanvasEngine {
   /** Touch auf DOM-Objekten (Textfelder) ebenfalls verwerfen, solange der Stift aktiv ist. */
   isPalmTouch(e: { pointerType: string; pointerId: number; width?: number; height?: number }): boolean {
     if (e.pointerType !== "touch") return false;
-    return this.palm.isPalm(e.pointerId) || this.palm.penActive(performance.now()) || Math.max(e.width ?? 0, e.height ?? 0) >= PALM_CONTACT_PX;
+    return this.palm.isPalm(e.pointerId) || this.palm.penActive(performance.now()) || (Math.max(e.width ?? 0, e.height ?? 0) >= PALM_CONTACT_PX && this.palm.penActive(performance.now(), PALM_SIZE_WINDOW_MS));
   }
 
   /** Laufende Ein-/Mehrfinger-Aktion verwerfen (Handballen lag vor dem Stift auf). */
