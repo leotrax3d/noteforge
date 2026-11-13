@@ -37,6 +37,8 @@ pub struct Period {
 pub struct Session {
     client: reqwest::Client,
     url: String,
+    /// `https://<server>/WebUntis` für die REST-Endpunkte (gleiche Sitzung per Cookie)
+    base: String,
     person: (i64, i64),
     klasse: i64,
 }
@@ -104,6 +106,136 @@ pub fn parse_timetable(v: &Value) -> Vec<Period> {
     out
 }
 
+/// Angekündigte Arbeit/Test.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Exam {
+    pub id: i64,
+    pub start: i64,
+    pub end: i64,
+    pub subject_id: Option<i64>,
+    pub subject: String,
+    /// „exam“ (Klassenarbeit/Klausur) oder „test“
+    pub kind: &'static str,
+    pub title: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct UntisHomework {
+    pub id: i64,
+    /// Fälligkeitstag 0:00 (Ortszeit)
+    pub due: i64,
+    pub subject: String,
+    pub text: String,
+    pub completed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Absence {
+    pub id: i64,
+    pub start: i64,
+    pub end: i64,
+}
+
+/// Prüfungsart → exam/test: „Test“, „Lernkontrolle“, „Kurzarbeit“, „Stegreif“ sind Tests.
+pub fn exam_kind(label: &str) -> &'static str {
+    let l = label.trim().to_lowercase();
+    let test = ["test", "lernkontrolle", "lzk", "kurzarbeit", "stegreif", "hü"].iter().any(|k| l.contains(k)) || l == "ex";
+    if test { "test" } else { "exam" }
+}
+
+fn i(v: &Value, k: &str) -> Option<i64> {
+    v.get(k).and_then(|x| x.as_i64().or_else(|| x.as_str().and_then(|s| s.parse().ok())))
+}
+fn st(v: &Value, k: &str) -> String {
+    v.get(k).and_then(Value::as_str).unwrap_or("").trim().to_string()
+}
+
+/// REST `/api/exams` → `{ exams: [{ id, examType, name, subject, examDate, startTime, endTime, text }] }`
+pub fn parse_exams_rest(v: &Value) -> Vec<Exam> {
+    let arr = v.get("exams").and_then(Value::as_array).cloned().unwrap_or_default();
+    arr.iter()
+        .filter_map(|e| {
+            let date = i(e, "examDate")?;
+            let ty = st(e, "examType");
+            let name = st(e, "name");
+            Some(Exam {
+                id: i(e, "id")?,
+                start: untis_time(date, i(e, "startTime").unwrap_or(0))?,
+                end: untis_time(date, i(e, "endTime").unwrap_or(0))?,
+                subject_id: None,
+                subject: st(e, "subject"),
+                kind: exam_kind(if ty.is_empty() { &name } else { &ty }),
+                title: if name.is_empty() { ty } else { name },
+                text: st(e, "text"),
+            })
+        })
+        .collect()
+}
+
+/// JSON-RPC `getExams` → `[{ id, subject (ID), date, startTime, endTime }]`
+pub fn parse_exams_rpc(v: &Value, type_label: &str) -> Vec<Exam> {
+    v.as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|e| {
+            let date = i(e, "date")?;
+            Some(Exam {
+                id: i(e, "id")?,
+                start: untis_time(date, i(e, "startTime")?)?,
+                end: untis_time(date, i(e, "endTime")?)?,
+                subject_id: i(e, "subject"),
+                subject: String::new(),
+                kind: exam_kind(type_label),
+                title: type_label.to_string(),
+                text: String::new(),
+            })
+        })
+        .collect()
+}
+
+/// REST `/api/homeworks/lessons` → `{ homeworks: [{ id, lessonId, dueDate, text, completed }], lessons: [{ id, subject }] }`
+pub fn parse_homeworks(v: &Value) -> Vec<UntisHomework> {
+    let lessons: std::collections::HashMap<i64, String> = v
+        .get("lessons")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|l| Some((i(l, "id")?, st(l, "subject"))))
+        .collect();
+    v.get("homeworks")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|h| {
+            let text = st(h, "text");
+            Some(UntisHomework {
+                id: i(h, "id")?,
+                due: untis_time(i(h, "dueDate")?, 0)?,
+                subject: i(h, "lessonId").and_then(|l| lessons.get(&l).cloned()).unwrap_or_default(),
+                completed: h.get("completed").and_then(Value::as_bool).unwrap_or(false),
+                text: if text.is_empty() { st(h, "remark") } else { text },
+            })
+        })
+        .collect()
+}
+
+/// REST `/api/classreg/absences/students` → `{ absences: [{ id, startDate, startTime, endDate, endTime }] }`
+pub fn parse_absences(v: &Value) -> Vec<Absence> {
+    v.get("absences")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|a| {
+            Some(Absence {
+                id: i(a, "id")?,
+                start: untis_time(i(a, "startDate")?, i(a, "startTime").unwrap_or(0))?,
+                end: untis_time(i(a, "endDate")?, i(a, "endTime").unwrap_or(2359))?,
+            })
+        })
+        .collect()
+}
+
 fn rpc_result(v: Value) -> Result<Value, IntErr> {
     if let Some(err) = v.get("error") {
         let code = err.get("code").and_then(Value::as_i64).unwrap_or(0);
@@ -126,12 +258,9 @@ impl Session {
             .user_agent("Noteforge")
             .timeout(std::time::Duration::from_secs(20))
             .build()?;
-        let url = format!(
-            "https://{}/WebUntis/jsonrpc.do?school={}",
-            normalize_server(&cfg.server),
-            urlencode(cfg.school.trim())
-        );
-        let mut s = Self { client, url, person: (0, 0), klasse: 0 };
+        let base = format!("https://{}/WebUntis", normalize_server(&cfg.server));
+        let url = format!("{base}/jsonrpc.do?school={}", urlencode(cfg.school.trim()));
+        let mut s = Self { client, url, base, person: (0, 0), klasse: 0 };
         let r = s
             .call("authenticate", json!({ "user": cfg.username.trim(), "password": password, "client": "Noteforge" }))
             .await?;
@@ -149,7 +278,9 @@ impl Session {
 
     async fn call(&self, method: &str, params: Value) -> Result<Value, IntErr> {
         let body = json!({ "id": "nf", "method": method, "params": params, "jsonrpc": "2.0" });
+        let t0 = crate::db::repo::now_ms();
         let resp = self.client.post(&self.url).json(&body).send().await?;
+        crate::clock::observe(t0, &resp);
         if !resp.status().is_success() {
             return Err(IntErr::Remote(format!("WebUntis antwortet mit HTTP {}", resp.status().as_u16())));
         }
@@ -181,6 +312,55 @@ impl Session {
             )
             .await?;
         Ok(parse_timetable(&r))
+    }
+
+    /// REST-Endpunkt (`/WebUntis/api/…`) mit derselben Sitzung; liefert `data`.
+    async fn rest(&self, path: &str) -> Result<Value, IntErr> {
+        let resp = self.client.get(format!("{}{path}", self.base)).send().await?;
+        match resp.status().as_u16() {
+            200 => {}
+            401 | 403 => return Err(IntErr::Remote("WebUntis: keine Berechtigung für diese Daten".into())),
+            c => return Err(IntErr::Remote(format!("WebUntis antwortet mit HTTP {c}"))),
+        }
+        let v = resp.json::<Value>().await?;
+        Ok(v.get("data").cloned().unwrap_or(v))
+    }
+
+    /// Angekündigte Prüfungen (REST, sonst JSON-RPC `getExams` je Prüfungsart).
+    pub async fn exams(&self, from: i64, to: i64) -> Result<Vec<Exam>, IntErr> {
+        let q = format!("/api/exams?startDate={from}&endDate={to}&studentId={}&klasseId={}", self.person.1, self.klasse);
+        match self.rest(&q).await {
+            Ok(v) => Ok(parse_exams_rest(&v)),
+            Err(rest_err) => {
+                let types = match self.call("getExamTypes", json!({})).await {
+                    Ok(t) => t,
+                    Err(_) => return Err(rest_err),
+                };
+                let mut out = Vec::new();
+                for t in types.as_array().into_iter().flatten() {
+                    let Some(tid) = t.get("id").and_then(Value::as_i64) else { continue };
+                    let label = t.get("longName").or_else(|| t.get("name")).and_then(Value::as_str).unwrap_or("");
+                    let r = self.call("getExams", json!({ "startDate": from, "endDate": to, "examTypeId": tid })).await?;
+                    out.extend(parse_exams_rpc(&r, label));
+                }
+                Ok(out)
+            }
+        }
+    }
+
+    pub async fn homeworks(&self, from: i64, to: i64) -> Result<Vec<UntisHomework>, IntErr> {
+        let v = self.rest(&format!("/api/homeworks/lessons?startDate={from}&endDate={to}")).await?;
+        Ok(parse_homeworks(&v))
+    }
+
+    pub async fn absences(&self, from: i64, to: i64) -> Result<Vec<Absence>, IntErr> {
+        let v = self
+            .rest(&format!(
+                "/api/classreg/absences/students?startDate={from}&endDate={to}&studentId={}&excuseStatusId=-1",
+                self.person.1
+            ))
+            .await?;
+        Ok(parse_absences(&v))
     }
 
     pub async fn logout(self) {
@@ -230,6 +410,35 @@ mod tests {
         assert_eq!(p[1].subject_long, "Mathematik");
         assert_eq!(p[0].end - p[0].start, 45 * 60_000);
         assert_eq!(p[1].start - p[0].start, 115 * 60_000);
+    }
+
+    #[test]
+    fn parses_exams_homework_absences() {
+        let ex = parse_exams_rest(&json!({ "exams": [
+            { "id": 5, "examType": "Klassenarbeit", "name": "KA 2", "subject": "M", "examDate": 20261120, "startTime": 800, "endTime": 930 },
+            { "id": 6, "examType": "Test", "name": "", "subject": "E", "examDate": 20261121, "startTime": 1000, "endTime": 1045 },
+            { "id": 7 }
+        ]}));
+        assert_eq!(ex.len(), 2);
+        assert_eq!((ex[0].kind, ex[0].title.as_str(), ex[0].subject.as_str()), ("exam", "KA 2", "M"));
+        assert_eq!(ex[0].end - ex[0].start, 90 * 60_000);
+        assert_eq!((ex[1].kind, ex[1].title.as_str()), ("test", "Test"));
+        let rpc = parse_exams_rpc(&json!([{ "id": 1, "subject": 7, "date": 20261120, "startTime": 800, "endTime": 845 }]), "Lernkontrolle");
+        assert_eq!((rpc[0].subject_id, rpc[0].kind), (Some(7), "test"));
+        assert_eq!(exam_kind("Klausur"), "exam");
+        assert_eq!(exam_kind("Vokabeltest"), "test");
+
+        let hw = parse_homeworks(&json!({
+            "homeworks": [{ "id": 3, "lessonId": 9, "date": 20261110, "dueDate": 20261117, "text": "S. 42 Nr. 3", "completed": false },
+                          { "id": 4, "lessonId": 1, "dueDate": 20261118, "text": "", "remark": "Lesen", "completed": true }],
+            "lessons": [{ "id": 9, "subject": "Mathematik" }]
+        }));
+        assert_eq!(hw.len(), 2);
+        assert_eq!((hw[0].subject.as_str(), hw[0].text.as_str(), hw[0].completed), ("Mathematik", "S. 42 Nr. 3", false));
+        assert_eq!((hw[1].subject.as_str(), hw[1].text.as_str(), hw[1].completed), ("", "Lesen", true));
+
+        let ab = parse_absences(&json!({ "absences": [{ "id": 1, "startDate": 20261112, "startTime": 745, "endDate": 20261112, "endTime": 1300 }] }));
+        assert_eq!(ab[0].end - ab[0].start, (13 * 60 - 7 * 60 - 45) * 60_000);
     }
 
     #[test]

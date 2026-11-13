@@ -1,4 +1,5 @@
 mod window_fx;
+mod clock;
 mod commands;
 mod integrations;
 mod journal;
@@ -75,6 +76,7 @@ pub fn run() {
                 let _ = app.deep_link().register_all();
             }
             app.manage(journal);
+            clock::spawn(app.handle().clone());
             reminders::spawn(app.handle().clone());
             sync::spawn(app.handle().clone());
             // Das Fenster startet unsichtbar und zeigt sich nach dem ersten fertigen Frame (Frontend).
@@ -89,7 +91,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            app_version, updater_enabled, window_fx::set_window_material, window_fx::system_transparency,
+            app_version, updater_enabled, clock::clock_state, window_fx::set_window_material, window_fx::system_transparency,
             journal::journal_write, journal::journal_commit, journal::journal_recovered,
             onboarding::data_location, onboarding::check_data_dir, onboarding::set_data_dir, onboarding::restart_app,
             onboarding::app_settings, onboarding::set_app_setting, onboarding::untis_search_schools,
@@ -121,7 +123,7 @@ pub fn run() {
             commands::set_subject_weight, commands::set_grade_scale,
             integrations::integration_status, integrations::untis_connect, integrations::untis_disconnect,
             integrations::moodle_connect, integrations::moodle_disconnect, integrations::integrations_sync,
-            integrations::list_lessons, integrations::list_untis_subjects, integrations::moodle_courses,
+            integrations::list_lessons, integrations::list_pending_grades, integrations::list_untis_subjects, integrations::moodle_courses,
             integrations::moodle_course_files, integrations::moodle_download,
             integrations::google::gcal_client, integrations::google::gcal_set_client, integrations::google::gcal_status,
             integrations::google::gcal_login, integrations::google::gcal_calendars, integrations::google::gcal_configure,

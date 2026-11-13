@@ -75,7 +75,7 @@ pub fn save_homework(conn: &Connection, mut h: Homework) -> Result<Homework> {
     let existing: Option<String> =
         conn.query_row("SELECT source FROM homework WHERE id=?1", [&h.id], |r| r.get(0)).optional()?;
     match existing.as_deref() {
-        Some("moodle") => {
+        Some("moodle" | "webuntis") => {
             conn.execute(
                 "UPDATE homework SET subject_id=?2, note=?3, done_at=?4, updated_at=?5 WHERE id=?1",
                 params![h.id, h.subject_id, h.note, h.done_at, now],
@@ -121,7 +121,7 @@ pub fn set_homework_done(conn: &Connection, id: &str, done: bool) -> Result<Home
 /// Eigene Aufgaben werden gelöscht, Moodle-Abgaben nur ausgeblendet (sonst kämen sie beim Abgleich zurück).
 pub fn delete_homework(conn: &Connection, id: &str) -> Result<()> {
     let n = conn.execute("DELETE FROM homework WHERE id=?1 AND source='manual'", [id])?
-        + conn.execute("UPDATE homework SET dismissed=1, updated_at=?2 WHERE id=?1 AND source='moodle'", params![id, now_ms()])?;
+        + conn.execute("UPDATE homework SET dismissed=1, updated_at=?2 WHERE id=?1 AND source IN ('moodle','webuntis')", params![id, now_ms()])?;
     if n == 0 {
         return Err(Error::NotFound(format!("Hausaufgabe {id}")));
     }
@@ -207,7 +207,7 @@ fn valid_value(scale: &str, v: f64) -> bool {
 
 pub fn list_grades(conn: &Connection) -> Result<Vec<Grade>> {
     let mut st = conn.prepare_cached(
-        "SELECT id, subject_id, kind, title, value, weight, date FROM grade ORDER BY date, created_at",
+        "SELECT id, subject_id, kind, title, value, weight, date FROM grade WHERE status='done' ORDER BY date, created_at",
     )?;
     let rows = st.query_map([], |r| {
         Ok(Grade {
@@ -243,20 +243,70 @@ pub fn save_grade(conn: &Connection, mut g: Grade) -> Result<Grade> {
         g.id = new_id();
     }
     conn.execute(
-        "INSERT INTO grade (id, subject_id, kind, title, value, weight, date, created_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8)
+        "INSERT INTO grade (id, subject_id, kind, title, value, weight, date, created_at, status)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'done')
          ON CONFLICT(id) DO UPDATE SET subject_id=excluded.subject_id, kind=excluded.kind, title=excluded.title,
-           value=excluded.value, weight=excluded.weight, date=excluded.date",
+           value=excluded.value, weight=excluded.weight, date=excluded.date, status='done'",
         params![g.id, g.subject_id, g.kind, g.title, g.value, g.weight, g.date, now_ms()],
     )?;
     Ok(g)
 }
 
+/// Löschen. Automatisch angelegte Einträge (Arbeit geschrieben) werden nur verworfen, damit sie nicht
+/// beim nächsten Abgleich wiederkommen.
 pub fn delete_grade(conn: &Connection, id: &str) -> Result<()> {
-    if conn.execute("DELETE FROM grade WHERE id=?1", [id])? == 0 {
+    let n = conn.execute("UPDATE grade SET status='skipped', value=NULL WHERE id=?1 AND exam_key IS NOT NULL", [id])?
+        + conn.execute("DELETE FROM grade WHERE id=?1 AND exam_key IS NULL", [id])?;
+    if n == 0 {
         return Err(Error::NotFound(format!("Note {id}")));
     }
     Ok(())
+}
+
+/// Geschriebene Arbeit, deren Note noch fehlt (Status „Ausstehend“).
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingGrade {
+    pub id: String,
+    pub subject_id: String,
+    pub kind: String,
+    pub title: String,
+    pub date: i64,
+}
+
+pub fn list_pending_grades(conn: &Connection) -> Result<Vec<PendingGrade>> {
+    let mut st = conn.prepare_cached(
+        "SELECT id, subject_id, kind, title, date FROM grade WHERE status='pending' ORDER BY date",
+    )?;
+    let rows = st.query_map([], |r| {
+        Ok(PendingGrade { id: r.get(0)?, subject_id: r.get(1)?, kind: r.get(2)?, title: r.get(3)?, date: r.get(4)? })
+    })?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+/// Für jede geschriebene Arbeit/Test (Ende vorbei, Fach zugeordnet, keine Abwesenheit) einen
+/// ausstehenden Noteneintrag anlegen. Deterministische ID → keine Dubletten über Geräte hinweg;
+/// verworfene oder schon benotete Einträge bleiben, wie sie sind. Nur Arbeiten ab `since`.
+pub fn ensure_pending_grades(conn: &Connection, now: i64, since: i64) -> Result<usize> {
+    let exams: Vec<(String, String, String, i64)> = {
+        let mut st = conn.prepare_cached(
+            r#"SELECT COALESCE(e.external_id, 'event:' || e.id), e.subject_id, e.title, e.start FROM event e
+               WHERE e.type IN ('exam','test') AND e.subject_id IS NOT NULL
+                 AND COALESCE(e."end", e.start + 2700000) <= ?1 AND e.start >= ?2
+                 AND NOT EXISTS (SELECT 1 FROM untis_absence a WHERE a.start < COALESCE(e."end", e.start + 2700000) AND a."end" > e.start)"#,
+        )?;
+        let rows = st.query_map([now, since], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
+        rows.collect::<rusqlite::Result<_>>()?
+    };
+    let mut n = 0;
+    for (key, subject, title, date) in exams {
+        n += conn.execute(
+            "INSERT INTO grade (id, subject_id, kind, title, value, weight, date, created_at, status, exam_key)
+             VALUES (?1, ?2, 'written', ?3, NULL, 1, ?4, ?5, 'pending', ?6) ON CONFLICT(id) DO NOTHING",
+            params![format!("pending:{key}"), subject, title, date, now, key],
+        )?;
+    }
+    Ok(n)
 }
 
 pub fn grade_config(conn: &Connection) -> Result<GradeConfig> {
@@ -389,6 +439,29 @@ mod tests {
         set_grade_scale(&mut c, "grades").unwrap();
         assert_eq!(list_grades(&c).unwrap().iter().find(|x| x.id == a.id).unwrap().value, 2.0);
         delete_grade(&c, &a.id).unwrap();
+        // Geschriebene Arbeit → „Ausstehend“, nicht bei Abwesenheit, nicht doppelt, verwerfen bleibt verworfen
+        let ev = |t: &str, start: i64| crate::db::models::Event {
+            id: String::new(), subject_id: Some(s.id.clone()), kind: "exam".into(), title: t.into(), start, end: Some(start + 10),
+            note: String::new(), source: "manual".into(), remind_before: None, page_id: None, updated_at: 0,
+        };
+        let ka = repo::save_event(&c, ev("KA 1", 100)).unwrap();
+        repo::save_event(&c, ev("KA krank", 300)).unwrap();
+        repo::save_event(&c, ev("KA Zukunft", 10_000)).unwrap();
+        repo::save_event(&c, ev("KA alt", 5)).unwrap();
+        c.execute("INSERT INTO untis_absence (id, start, \"end\") VALUES (1, 290, 400)", []).unwrap();
+        assert_eq!(ensure_pending_grades(&c, 1000, 50).unwrap(), 1);
+        assert_eq!(ensure_pending_grades(&c, 1000, 50).unwrap(), 0);
+        let p = list_pending_grades(&c).unwrap();
+        assert_eq!((p.len(), p[0].title.as_str(), p[0].id.clone()), (1, "KA 1", format!("pending:event:{}", ka.id)));
+        assert!(list_grades(&c).unwrap().iter().all(|g| g.id != p[0].id), "Ausstehende zählen nicht in den Schnitt");
+        // Note eintragen → normaler Eintrag
+        save_grade(&c, Grade { id: p[0].id.clone(), ..g(2.0) }).unwrap();
+        assert!(list_pending_grades(&c).unwrap().is_empty());
+        assert!(list_grades(&c).unwrap().iter().any(|x| x.id == p[0].id));
+        // Löschen eines automatischen Eintrags verwirft ihn dauerhaft
+        delete_grade(&c, &p[0].id).unwrap();
+        assert_eq!(ensure_pending_grades(&c, 1000, 50).unwrap(), 0);
+        assert!(list_grades(&c).unwrap().iter().all(|x| x.id != p[0].id));
         repo::delete_subject(&c, &s.id).unwrap();
         assert!(list_grades(&c).unwrap().is_empty());
         assert!(grade_config(&c).unwrap().written_pct.is_empty());

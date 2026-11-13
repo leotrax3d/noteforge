@@ -535,7 +535,7 @@ pub fn set_element_tag(conn: &Connection, element_id: &str, tag_id: &str, on: bo
 fn validate_event(e: &Event) -> Result<()> {
     non_empty(&e.title, "Titel")?;
     one_of(&e.kind, &["exam", "test", "deadline", "other"], "Termintyp")?;
-    one_of(&e.source, &["manual", "moodle"], "Quelle")?;
+    one_of(&e.source, &["manual", "moodle", "webuntis"], "Quelle")?;
     if matches!(e.remind_before, Some(m) if !(0..=60 * 24 * 30).contains(&m)) {
         return Err(Error::Invalid("Erinnerung muss zwischen 0 Minuten und 30 Tagen liegen".into()));
     }

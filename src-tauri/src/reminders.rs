@@ -3,7 +3,7 @@
 //! welche Ansicht gerade offen ist.
 
 use crate::db::{models::Event, repo, Db};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_notification::NotificationExt;
 
@@ -11,8 +11,9 @@ const INTERVAL: Duration = Duration::from_secs(20);
 /// Termine, die seit mehr als 6 h laufen, werden beim Start nicht mehr gemeldet.
 const GRACE_MS: i64 = 6 * 3600 * 1000;
 
+/// Netzzeit statt Gerätezeit (SPEC §8.1).
 fn now_ms() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
+    crate::clock::now_ms()
 }
 
 pub fn kind_label(kind: &str) -> &'static str {

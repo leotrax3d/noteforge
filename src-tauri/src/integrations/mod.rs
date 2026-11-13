@@ -48,8 +48,14 @@ fn yyyymmdd(d: NaiveDate) -> i64 {
     (d.year() as i64) * 10000 + (d.month() as i64) * 100 + d.day() as i64
 }
 
-fn now_ms() -> i64 {
-    Local::now().timestamp_millis()
+/// Netzzeit (SPEC §8.1).
+pub(crate) fn now_ms() -> i64 {
+    crate::clock::now_ms()
+}
+
+/// Heutiges Datum nach Netzzeit.
+fn today() -> NaiveDate {
+    Local.timestamp_millis_opt(now_ms()).single().map(|t| t.date_naive()).unwrap_or_else(|| Local::now().date_naive())
 }
 
 // ---------- Einstellungen ----------
@@ -154,6 +160,133 @@ pub fn untis_subjects_db(conn: &Connection) -> R<Vec<UntisSubject>> {
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
+// ---------- WebUntis: Prüfungen, Hausaufgaben, Abwesenheiten (offline im Cache) ----------
+
+/// Noteforge-Fach zu einer WebUntis-Fach-ID oder einem Fachnamen (Kurz- oder Langname aus dem Stundenplan).
+fn mapped_subject(conn: &Connection, untis_id: Option<i64>, name: &str) -> R<Option<String>> {
+    let id = match untis_id {
+        Some(i) => Some(i),
+        None if !name.is_empty() => conn
+            .query_row(
+                "SELECT untis_subject_id FROM lesson WHERE untis_subject_id IS NOT NULL
+                   AND (subject_name=?1 COLLATE NOCASE OR subject_long=?1 COLLATE NOCASE) LIMIT 1",
+                [name],
+                |r| r.get(0),
+            )
+            .optional()?,
+        None => None,
+    };
+    let Some(id) = id else { return Ok(None) };
+    Ok(conn
+        .query_row("SELECT id FROM subject WHERE webuntis_subject_id=?1 ORDER BY sort_order LIMIT 1", [id], |r| r.get(0))
+        .optional()?)
+}
+
+/// Prüfungen als Termine (Quelle „webuntis“, Erinnerung am Vortag). Eigene Notiz/Erinnerung bleibt;
+/// im Zeitraum nicht mehr gemeldete Prüfungen werden entfernt.
+pub fn store_exams(conn: &mut Connection, from: i64, to: i64, exams: &[webuntis::Exam]) -> R<usize> {
+    let tx = conn.transaction()?;
+    let mut keep = Vec::with_capacity(exams.len());
+    for e in exams.iter().filter(|e| e.start >= from && e.start < to) {
+        let ext = format!("untis-exam:{}", e.id);
+        let subject = mapped_subject(&tx, e.subject_id, &e.subject)?;
+        let title = if e.title.is_empty() { reminders_label(e.kind).to_string() } else { e.title.clone() };
+        tx.execute(
+            r#"INSERT INTO event (id, subject_id, type, title, start, "end", note, source, remind_before, external_id, updated_at)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'webuntis', 1440, ?8, ?9)
+               ON CONFLICT(external_id) WHERE external_id IS NOT NULL DO UPDATE SET
+                 type=excluded.type, title=excluded.title, "end"=excluded."end",
+                 subject_id=COALESCE(excluded.subject_id, event.subject_id),
+                 note=CASE WHEN event.note='' THEN excluded.note ELSE event.note END,
+                 notified = CASE WHEN event.start=excluded.start THEN event.notified ELSE 0 END,
+                 start=excluded.start"#,
+            params![new_id(), subject, e.kind, title, e.start, e.end, e.text, ext, now_ms()],
+        )?;
+        keep.push(ext);
+    }
+    let existing: Vec<String> = {
+        let mut st = tx.prepare(
+            "SELECT external_id FROM event WHERE source='webuntis' AND external_id IS NOT NULL AND start >= ?1 AND start < ?2",
+        )?;
+        let rows = st.query_map([from, to], |r| r.get(0))?;
+        rows.collect::<rusqlite::Result<_>>()?
+    };
+    for ext in existing.iter().filter(|x| !keep.contains(x)) {
+        tx.execute("DELETE FROM event WHERE external_id=?1", [ext])?;
+    }
+    tx.commit()?;
+    Ok(keep.len())
+}
+
+fn reminders_label(kind: &str) -> &'static str {
+    crate::reminders::kind_label(kind)
+}
+
+/// WebUntis-Hausaufgaben übernehmen (ID „untis:<id>“). Erledigt-Status, Notiz und eigenes Fach bleiben;
+/// in WebUntis als erledigt markierte werden auch hier erledigt.
+pub fn store_untis_homework(conn: &mut Connection, from: i64, to: i64, hws: &[webuntis::UntisHomework]) -> R<usize> {
+    let tx = conn.transaction()?;
+    let now = now_ms();
+    let mut keep = Vec::with_capacity(hws.len());
+    for h in hws {
+        let id = format!("untis:{}", h.id);
+        let subject = mapped_subject(&tx, None, &h.subject)?;
+        let first = h.text.lines().next().unwrap_or("").trim();
+        let title: String = if first.is_empty() { "Hausaufgabe".into() } else { first.chars().take(120).collect() };
+        let note = if h.text.trim() == title { String::new() } else { h.text.trim().to_string() };
+        tx.execute(
+            "INSERT INTO homework (id, subject_id, title, note, due, done_at, source, url, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'webuntis', '', ?7, ?7)
+             ON CONFLICT(id) DO UPDATE SET
+               title=excluded.title, due=excluded.due,
+               subject_id=COALESCE(homework.subject_id, excluded.subject_id),
+               note=CASE WHEN homework.note='' THEN excluded.note ELSE homework.note END,
+               done_at=COALESCE(homework.done_at, excluded.done_at),
+               updated_at=CASE WHEN homework.title IS excluded.title AND homework.due IS excluded.due
+                                THEN homework.updated_at ELSE excluded.updated_at END",
+            params![id, subject, title, note, h.due, h.completed.then_some(now), now],
+        )?;
+        keep.push(id);
+    }
+    let stale: Vec<String> = {
+        let mut st = tx.prepare(
+            "SELECT id FROM homework WHERE source='webuntis' AND done_at IS NULL AND dismissed=0 AND due >= ?1 AND due < ?2",
+        )?;
+        let rows = st.query_map([from.max(now - 86_400_000), to], |r| r.get(0))?;
+        rows.collect::<rusqlite::Result<_>>()?
+    };
+    for id in stale.iter().filter(|x| !keep.contains(x)) {
+        tx.execute("DELETE FROM homework WHERE id=?1", [id])?;
+    }
+    tx.commit()?;
+    Ok(keep.len())
+}
+
+pub fn store_absences(conn: &mut Connection, from: i64, to: i64, abs: &[webuntis::Absence]) -> R<()> {
+    let tx = conn.transaction()?;
+    tx.execute("DELETE FROM untis_absence WHERE start >= ?1 AND start < ?2", [from, to])?;
+    for a in abs {
+        tx.execute(r#"INSERT OR REPLACE INTO untis_absence (id, start, "end") VALUES (?1, ?2, ?3)"#, params![a.id, a.start, a.end])?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// Ausstehende Noten für geschriebene Arbeiten; gilt für Arbeiten ab dem ersten Aufruf (−14 Tage),
+/// damit ältere, längst benotete Arbeiten nicht nachträglich auftauchen.
+pub fn refresh_pending_grades(conn: &Connection) -> R<usize> {
+    let now = now_ms();
+    let since: i64 = match get_setting(conn, "grades.pending_since")? {
+        Some(t) => t,
+        None => {
+            let t = now - 14 * 86_400_000;
+            set_setting(conn, "grades.pending_since", &t)?;
+            t
+        }
+    };
+    Ok(crate::db::school::ensure_pending_grades(conn, now, since)?)
+}
+
 // ---------- Moodle-Abgaben → Termine ----------
 
 /// Gleicht Moodle-Abgaben mit der Termin-Tabelle ab. Eigene Änderungen an Notiz/Erinnerung bleiben erhalten;
@@ -245,7 +378,7 @@ pub fn integration_status(db: S) -> R<IntegrationStatus> {
 
 /// Zeitraum des Stundenplan-Abgleichs: Montag der Vorwoche bis +5 Wochen.
 fn untis_range() -> (NaiveDate, NaiveDate) {
-    let today = Local::now().date_naive();
+    let today = today();
     let monday = today - Duration::days(today.weekday().num_days_from_monday() as i64) - Duration::days(7);
     (monday, monday + Duration::days(7 * 6 - 1))
 }
@@ -256,7 +389,7 @@ fn day_start_ms(d: NaiveDate) -> i64 {
 
 /// Beginn des laufenden Schuljahres (1. August).
 fn schoolyear_start() -> NaiveDate {
-    let t = Local::now().date_naive();
+    let t = today();
     let y = if t.month() >= 8 { t.year() } else { t.year() - 1 };
     NaiveDate::from_ymd_opt(y, 8, 1).unwrap_or(t)
 }
@@ -284,6 +417,21 @@ async fn sync_untis(db: &Db, cfg: &UntisConfig, password: &str) -> R<usize> {
             Ok(ps) => n += store_lessons(&mut db.conn(), day_start_ms(*from), day_start_ms(*to + Duration::days(1)), &ps)?,
             Err(e) => { err = Some(e); break; }
         }
+    }
+    // Prüfungen, Hausaufgaben, Abwesenheiten: je nach Schule gesperrt → still überspringen, Cache bleibt.
+    if err.is_none() {
+        let (fa, tb) = (day_start_ms(a), day_start_ms(b + Duration::days(1)));
+        let (ya, yb) = (yyyymmdd(a), yyyymmdd(b));
+        if let Ok(ex) = s.exams(ya, yb).await {
+            store_exams(&mut db.conn(), fa, tb, &ex)?;
+        }
+        if let Ok(hw) = s.homeworks(ya, yb).await {
+            store_untis_homework(&mut db.conn(), fa, tb, &hw)?;
+        }
+        if let Ok(ab) = s.absences(ya, yb).await {
+            store_absences(&mut db.conn(), fa, tb, &ab)?;
+        }
+        refresh_pending_grades(&db.conn())?;
     }
     s.logout().await;
     if let Some(e) = err {
@@ -328,6 +476,8 @@ pub fn untis_disconnect(db: S) -> R<()> {
     del_setting(&c, "untis_last_sync")?;
     del_setting(&c, "untis_history")?;
     c.execute("DELETE FROM lesson", [])?;
+    c.execute("DELETE FROM event WHERE source='webuntis'", [])?;
+    c.execute("DELETE FROM untis_absence", [])?;
     Ok(())
 }
 
@@ -413,6 +563,14 @@ pub fn list_lessons(db: S, from: i64, to: i64) -> R<Vec<Lesson>> {
     list_lessons_db(&db.conn(), from, to)
 }
 
+/// Ausstehende Noten; legt dabei fehlende für inzwischen geschriebene Arbeiten an (auch offline).
+#[tauri::command]
+pub fn list_pending_grades(db: S) -> R<Vec<crate::db::school::PendingGrade>> {
+    let c = db.conn();
+    refresh_pending_grades(&c)?;
+    Ok(crate::db::school::list_pending_grades(&c)?)
+}
+
 #[tauri::command]
 pub fn list_untis_subjects(db: S) -> R<Vec<UntisSubject>> {
     untis_subjects_db(&db.conn())
@@ -463,6 +621,40 @@ mod tests {
         store_lessons(&mut c, 0, 1000, &[period(2, 200, Some(8))]).unwrap();
         assert_eq!(list_lessons_db(&c, 0, 1000).unwrap().len(), 1, "Abgleich ersetzt den Zeitraum");
         assert_eq!(untis_subjects_db(&c).unwrap(), vec![UntisSubject { id: 8, name: "M".into(), long_name: "Mathematik".into() }]);
+    }
+
+    #[test]
+    fn untis_exams_homework_and_pending_grades() {
+        let db = Db::open_in_memory().unwrap();
+        let mut c = db.conn();
+        let s = repo::create_subject(&c, "Mathe", "#f00", "calc").unwrap();
+        c.execute("UPDATE subject SET webuntis_subject_id=7 WHERE id=?1", [&s.id]).unwrap();
+        store_lessons(&mut c, 0, 1000, &[period(1, 100, Some(7))]).unwrap();
+        let ex = |id, start| webuntis::Exam {
+            id, start, end: start + 10, subject_id: None, subject: "m".into(), kind: "exam", title: format!("KA {id}"), text: String::new(),
+        };
+        assert_eq!(store_exams(&mut c, 0, 10_000, &[ex(1, 500), ex(2, 600)]).unwrap(), 2);
+        let evs = repo::list_events(&c, 0, i64::MAX).unwrap();
+        assert!(evs.iter().all(|e| e.source == "webuntis" && e.kind == "exam" && e.subject_id.as_deref() == Some(s.id.as_str())));
+        assert_eq!(evs[0].remind_before, Some(1440), "Hinweis am Vortag");
+        store_exams(&mut c, 0, 10_000, &[ex(1, 550)]).unwrap();
+        let evs = repo::list_events(&c, 0, i64::MAX).unwrap();
+        assert_eq!((evs.len(), evs[0].start), (1, 550));
+        // Ausstehende Note: Arbeit 1 liegt in der Vergangenheit (Netzzeit ≫ 560)
+        set_setting(&c, "grades.pending_since", &0i64).unwrap();
+        assert_eq!(refresh_pending_grades(&c).unwrap(), 1);
+        assert_eq!(crate::db::school::list_pending_grades(&c).unwrap()[0].id, "pending:untis-exam:1");
+
+        let hw = |id, done| webuntis::UntisHomework { id, due: now_ms() + 86_400_000, subject: "Mathematik".into(), text: "S. 3\nalle".into(), completed: done };
+        store_untis_homework(&mut c, 0, i64::MAX, &[hw(1, false), hw(2, true)]).unwrap();
+        let l = crate::db::school::list_homework(&c, 0).unwrap();
+        assert_eq!(l.len(), 2);
+        let h1 = l.iter().find(|h| h.id == "untis:1").unwrap();
+        assert_eq!((h1.title.as_str(), h1.note.as_str(), h1.source.as_str(), h1.subject_id.as_deref()), ("S. 3", "S. 3\nalle", "webuntis", Some(s.id.as_str())));
+        assert!(l.iter().find(|h| h.id == "untis:2").unwrap().done_at.is_some());
+        crate::db::school::set_homework_done(&c, "untis:1", true).unwrap();
+        store_untis_homework(&mut c, 0, i64::MAX, &[hw(1, false)]).unwrap();
+        assert!(crate::db::school::get_homework(&c, "untis:1").unwrap().done_at.is_some(), "eigener Erledigt-Status bleibt");
     }
 
     #[test]

@@ -82,6 +82,8 @@ impl Dav {
             // Date hat Sekundenauflösung (abgeschnitten) → +500 ms als Mitte.
             let rtt = t1 - t0;
             let off = d + 500 - (t0 + t1) / 2;
+            // Gemeinsame Netzzeit der App (aktive Stunde, Erinnerungen …)
+            crate::clock::record(t0, t1, d);
             let mut c = self.clock.lock().unwrap();
             if c.is_none_or(|(best, _)| rtt < best) {
                 *c = Some((rtt, off));
