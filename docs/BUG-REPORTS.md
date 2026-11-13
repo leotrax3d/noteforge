@@ -11,7 +11,7 @@
 3. **App:** Projekt-URL und Schlüssel stehen als Standard in `src-tauri/src/feedback.rs`. Für ein anderes Projekt in GitHub unter Settings → Secrets and variables → Actions → *Variables* `NOTEFORGE_SUPABASE_URL`
    und `NOTEFORGE_SUPABASE_ANON_KEY` (Project Settings → API → anon/publishable) anlegen. Der nächste Release
    enthält sie. Lokal: beide Variablen vor `pnpm tauri build` setzen.
-4. **Dashboard:** dieselben zwei Werte in `admin/config.js` eintragen und den Ordner `admin/` statisch hosten
+4. **Dashboard:** GitHub Pages (Settings → Pages → „Deploy from a branch“, `main`, `/ (root)`) → https://leotrax3d.github.io/noteforge/admin/
    (z. B. GitHub Pages, Netlify, oder lokal `python -m http.server` im Ordner). Unter Authentication → URL
    Configuration die Dashboard-Adresse eintragen.
 
