@@ -273,3 +273,11 @@ Datenordner (SQLite + Blobs) mit Nextcloud über WebDAV; Konflikte pro Blatt (ne
 
 ## 11. Phasen
 0 Gerüst + Stift-Latenztest · 1 Struktur/DB/Startseite · 2 Canvas-Kern · 3 Werkzeuge · 4 OneNote-Funktionen · 5 Kalender · 6 WebUntis + Moodle · 7 Erkennung (Handschrift, LaTeX, OCR) · 8 Sync, Export, Feinschliff
+
+## 15. Bug-Reports (v0.2.16)
+
+- **App:** Startseite → „Bug melden“ (immer beschriftet, auf schmalen Fenstern nur Symbol mit Screenreader-Text). Dialog mit Textfeld (10–5000 Zeichen, Zähler), „Absenden“, danach Erfolgs- oder deutsche Fehlermeldung (keine Verbindung, nicht eingerichtet, Server/Berechtigung). Mitgesendet werden nur App-Version und Betriebssystem/Architektur – keine Konto- oder Gerätedaten.
+- **Übertragung:** Tauri-Befehl `submit_bug_report` (Rust, `feedback.rs`) schickt per PostgREST `INSERT` mit `Prefer: return=minimal`. Projekt-URL und **anon**-Schlüssel kommen beim Bauen aus `NOTEFORGE_SUPABASE_URL` / `NOTEFORGE_SUPABASE_ANON_KEY` (GitHub-Repository-Variablen). Der anon-Schlüssel ist öffentlich; ein `service_role`-Schlüssel kommt nie in App oder Dashboard. Ohne Konfiguration meldet der Dialog „nicht eingerichtet“. Höchstens ein Bericht pro 30 s.
+- **Datenbank:** `supabase/migrations/20261113150000_bug_reports.sql` – Tabelle `bug_reports` (id, created_at, updated_at, description, status `open|in_progress|done`, app_version, platform), Tabelle `admins` (user_id → auth.users), Funktion `is_admin()`.
+- **RLS/Rechte:** anon und angemeldete Nutzer dürfen nur einfügen (Spaltenrechte nur auf description/app_version/platform, Status immer „open“) und nichts lesen, ändern oder löschen. Nur Nutzer in `admins` lesen alle Berichte, ändern ausschließlich `status` und löschen. Niemand kann sich selbst zum Admin machen. Tests: `supabase/tests/run.sh` (Wegwerf-Postgres mit Supabase-Stub).
+- **Admin-Dashboard:** `admin/index.html` (statische Seite, nicht Teil der App; Supabase-Auth mit E-Mail/Passwort, Werte in `admin/config.js`). Zähler-Kacheln als Statusfilter, Volltextsuche, Status je Bericht ändern, Löschen mit Rückfrage, Hell/Dunkel, ab 390 px nutzbar. Berichtstexte werden nur als Text eingesetzt (kein HTML). Einrichtung: `docs/BUG-REPORTS.md`.

@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Noteforge Bug-Reports</title>
+  <link rel="icon" href="logo.svg" />
+  <style>
+    :root {
+      --bg: oklch(0.985 0 0); --card: oklch(1 0 0); --fg: oklch(0.145 0 0); --muted: oklch(0.556 0 0);
+      --border: oklch(0.922 0 0); --primary: oklch(0.205 0 0); --primary-fg: oklch(0.985 0 0);
+      --accent: oklch(0.97 0 0); --danger: oklch(0.577 0.245 27.325);
+      --open: oklch(0.646 0.222 41.116); --progress: oklch(0.6 0.118 254); --done: oklch(0.6 0.13 155);
+      --radius: 0.625rem; color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: oklch(0.145 0 0); --card: oklch(0.205 0 0); --fg: oklch(0.985 0 0); --muted: oklch(0.708 0 0);
+        --border: oklch(1 0 0 / 12%); --primary: oklch(0.922 0 0); --primary-fg: oklch(0.205 0 0);
+        --accent: oklch(0.269 0 0); --danger: oklch(0.704 0.191 22.216); color-scheme: dark;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; }
+    [hidden] { display: none !important; }
+    button, input, select { font: inherit; color: inherit; }
+    .btn { min-height: 44px; padding: 0 16px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--card); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+    .btn:hover { background: var(--accent); }
+    .btn.primary { background: var(--primary); color: var(--primary-fg); border-color: transparent; }
+    .btn.primary:hover { opacity: .9; }
+    .btn.danger { color: var(--danger); }
+    .btn:disabled { opacity: .5; cursor: default; }
+    :focus-visible { outline: 3px solid color-mix(in oklch, var(--progress) 60%, transparent); outline-offset: 2px; }
+    header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--border);
+      background: color-mix(in oklch, var(--bg) 80%, transparent); backdrop-filter: blur(12px); }
+    header h1 { margin: 0 auto 0 0; font-size: 1.25rem; display: flex; align-items: center; gap: 10px; }
+    header .who { color: var(--muted); font-size: .875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 30vw; }
+    main { max-width: 1000px; margin: 0 auto; padding: 16px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); }
+    .center { min-height: 100dvh; display: grid; place-items: center; padding: 16px; }
+    .panel { width: min(400px, 100%); padding: 24px; display: grid; gap: 14px; }
+    .panel h2 { margin: 0; display: flex; align-items: center; gap: 10px; }
+    label { display: grid; gap: 4px; font-size: .875rem; font-weight: 500; }
+    input, select { min-height: 44px; padding: 0 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg); width: 100%; }
+    .err { color: var(--danger); font-size: .875rem; margin: 0; }
+    .muted { color: var(--muted); }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+    .stats button { min-height: 64px; text-align: left; padding: 10px 14px; border-radius: calc(var(--radius) + 4px); border: 1px solid var(--border); background: var(--card); cursor: pointer; display: grid; }
+    .stats button[aria-pressed="true"] { border-color: var(--fg); box-shadow: inset 0 0 0 1px var(--fg); }
+    .stats b { font-size: 1.5rem; font-variant-numeric: tabular-nums; line-height: 1.2; }
+    .stats span { font-size: .8125rem; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--muted); }
+    .dot.open { background: var(--open); } .dot.in_progress { background: var(--progress); } .dot.done { background: var(--done); }
+    .toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
+    .toolbar input { flex: 1; }
+    ul.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+    .report { padding: 14px 16px; display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; border-left: 4px solid var(--open); }
+    .report[data-status="in_progress"] { border-left-color: var(--progress); }
+    .report[data-status="done"] { border-left-color: var(--done); }
+    .report[data-status="done"] .desc { color: var(--muted); }
+    .report .head { font-size: .8125rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; }
+    .report .desc { grid-column: 1 / -1; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .report .actions { grid-row: 1; grid-column: 2; display: flex; gap: 6px; }
+    .report select { width: auto; }
+    .empty { padding: 40px 16px; text-align: center; color: var(--muted); }
+    #toast { position: fixed; bottom: 16px; left: 50%; translate: -50% 0; padding: 10px 16px; border-radius: var(--radius); background: var(--primary); color: var(--primary-fg); box-shadow: 0 8px 24px rgb(0 0 0 / .2); z-index: 5; }
+    #toast[data-bad="true"] { background: var(--danger); color: white; }
+    code { background: var(--accent); padding: 1px 5px; border-radius: 4px; font-size: .875em; }
+    @media (max-width: 640px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .report { grid-template-columns: 1fr; }
+      .report .actions { grid-row: auto; grid-column: 1; }
+      .report select { flex: 1; }
+      header .who { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <section id="setup" class="center" hidden>
+    <div class="card panel">
+      <h2><img src="logo.svg" width="28" height="28" alt="" /> Noch nicht eingerichtet</h2>
+      <p class="muted">Trage Projekt-URL und <b>anon</b>-Schlüssel deines Supabase-Projekts in <code>admin/config.js</code> ein (Project Settings → API). Den <code>service_role</code>-Schlüssel nie verwenden.</p>
+    </div>
+  </section>
+
+  <section id="login" class="center" hidden>
+    <form id="login-form" class="card panel" autocomplete="on">
+      <h2><img src="logo.svg" width="28" height="28" alt="" /> Bug-Reports</h2>
+      <p class="muted" style="margin:0">Anmeldung für Administratoren</p>
+      <label>E-Mail <input name="email" type="email" required autocomplete="username" /></label>
+      <label>Passwort <input name="password" type="password" required autocomplete="current-password" /></label>
+      <p id="login-error" class="err" role="alert" hidden></p>
+      <button id="login-btn" class="btn primary" type="submit">Anmelden</button>
+    </form>
+  </section>
+
+  <section id="denied" class="center" hidden>
+    <div class="card panel">
+      <h2>Kein Zugriff</h2>
+      <p class="muted"><span id="denied-who"></span> ist kein Administrator. Ein Admin muss die Nutzer-ID in <code>public.admins</code> eintragen.</p>
+      <button class="btn logout" type="button">Abmelden</button>
+    </div>
+  </section>
+
+  <div id="app" hidden>
+    <header>
+      <h1><img src="logo.svg" width="28" height="28" alt="" /> Bug-Reports</h1>
+      <span id="who" class="who"></span>
+      <button id="reload" class="btn" type="button" aria-label="Neu laden" title="Neu laden">↻</button>
+      <button class="btn logout" type="button">Abmelden</button>
+    </header>
+    <main>
+      <div class="stats" role="group" aria-label="Nach Status filtern">
+        <button type="button" data-filter="all" aria-pressed="true"><b data-count="all">0</b><span>Alle</span></button>
+        <button type="button" data-filter="open" aria-pressed="false"><b data-count="open">0</b><span><i class="dot open"></i>Offen</span></button>
+        <button type="button" data-filter="in_progress" aria-pressed="false"><b data-count="in_progress">0</b><span><i class="dot in_progress"></i>In Bearbeitung</span></button>
+        <button type="button" data-filter="done" aria-pressed="false"><b data-count="done">0</b><span><i class="dot done"></i>Erledigt</span></button>
+      </div>
+      <div class="toolbar">
+        <input id="search" type="search" placeholder="Suchen (Text, Version, System) …" aria-label="Suchen" />
+      </div>
+      <ul id="list" class="list" aria-live="polite"></ul>
+      <p id="empty" class="empty card" hidden>Keine Berichte für diesen Filter.</p>
+    </main>
+  </div>
+
+  <template id="tpl-report">
+    <li class="card report">
+      <div class="head"><time class="date"></time><span class="meta"></span></div>
+      <div class="actions">
+        <select>
+          <option value="open">Offen</option>
+          <option value="in_progress">In Bearbeitung</option>
+          <option value="done">Erledigt</option>
+        </select>
+        <button class="btn danger del" type="button" aria-label="Bericht löschen" title="Löschen">Löschen</button>
+      </div>
+      <p class="desc"></p>
+    </li>
+  </template>
+
+  <div id="toast" role="status" hidden></div>
+  <script type="module" src="admin.js"></script>
+</body>
+</html>

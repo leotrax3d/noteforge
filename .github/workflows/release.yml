@@ -43,6 +43,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Bug-Reports (SPEC §15): öffentliche Werte als Repository-Variablen, kein Secret nötig
+          NOTEFORGE_SUPABASE_URL: ${{ vars.NOTEFORGE_SUPABASE_URL }}
+          NOTEFORGE_SUPABASE_ANON_KEY: ${{ vars.NOTEFORGE_SUPABASE_ANON_KEY }}
         with:
           args: ${{ env.TAURI_ARGS }}
           includeUpdaterJson: true

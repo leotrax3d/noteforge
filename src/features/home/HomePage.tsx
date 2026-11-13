@@ -7,7 +7,7 @@ import {
 import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Logo } from "@/components/common/Logo";
-import { BookCheck, Command, CalendarDays, GraduationCap, KeyRound, MoreVertical, Pencil, Plus, RefreshCw, Search, Settings, Tags, Trash2 } from "lucide-react";
+import { BookCheck, Bug, Command, CalendarDays, GraduationCap, KeyRound, MoreVertical, Pencil, Plus, RefreshCw, Search, Settings, Tags, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -31,6 +31,7 @@ import { runningLesson } from "@/lib/timetable";
 import { SchoolWidgets } from "./SchoolWidgets";
 import { AccountsDialog } from "@/features/settings/AccountsDialog";
 import { useMappingDialog, useSyncRev } from "@/lib/integrations";
+import { BugReportDialog } from "@/features/feedback/BugReportDialog";
 
 export function useDragSensors() {
   return useSensors(
@@ -54,6 +55,7 @@ export function HomePage() {
   const cloudError = useCloudRev((s) => s.error);
   const setDialog = usePrefs((s) => s.setDialog);
   const syncRev = useSyncRev((s) => s.rev);
+  const [bugOpen, setBugOpen] = useState(false);
   const { data: subjects, setData, error, reload } = useAsync(() => api.listSubjects(), [cloudRev, syncRev]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Subject | null>(null);
@@ -103,6 +105,10 @@ export function HomePage() {
         <NavButton label="Noten" icon={<GraduationCap />} onClick={() => go({ view: "grades" })} />
         <NavButton label="Tags" icon={<Tags />} onClick={() => go({ view: "tags" })} />
         <NavButton label="Konten" icon={<KeyRound />} onClick={() => setAccounts(true)} />
+        <Button variant="outline" className="h-11 border-primary/40 text-primary hover:bg-primary/10" title="Fehler an die Entwickler melden"
+          onClick={() => setBugOpen(true)} data-testid="bug-report-button">
+          <Bug /> <span className="max-sm:sr-only">Bug melden</span>
+        </Button>
         <Button variant="ghost" size="icon" aria-label="Einstellungen" title={cloudError ? `Sync: ${cloudError}` : "Einstellungen (Strg+,)"}
           className="relative" onClick={() => setDialog("settings")}>
           {cloudRunning ? <RefreshCw className="animate-spin" /> : <Settings />}
@@ -156,6 +162,7 @@ export function HomePage() {
         initial={editing ?? undefined}
         onSubmit={(v) => editing && void mutate(() => api.updateSubject(editing.id, v), reload)}
       />
+      <BugReportDialog open={bugOpen} onOpenChange={setBugOpen} />
       <AccountsDialog open={accounts} onOpenChange={setAccounts} onMapping={() => { setAccounts(false); useMappingDialog.getState().show(); }} />
       <ConfirmDialog
         open={!!deleting}

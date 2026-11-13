@@ -1,0 +1,9 @@
+# Supabase-Projekt für Bug-Reports (SPEC §15). Lokal: `supabase start`, dann `supabase db reset`.
+project_id = "noteforge"
+
+[api]
+schemas = ["public"]
+
+[auth]
+# Admins legst du im Supabase-Dashboard an (Authentication → Users) und trägst sie in public.admins ein.
+enable_signup = false
