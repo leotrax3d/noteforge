@@ -55,11 +55,7 @@ jobs:
             - `Noteforge_*_x64_de-DE.msi` (MSI)
 
             Neu in dieser Version:
-            - WebUntis offline: Stundenplan, Arbeiten/Tests, Hausaufgaben und Abwesenheiten werden lokal gespeichert und bei Verbindung abgeglichen
-            - Laufende Stunde: Fach steht auf der Startseite an erster Stelle („Jetzt“); optional automatisch öffnen
-            - Pausen-Banner (5/10 min, große Pause, Mittagspause) und Stundenplan-Menü Heute/Morgen mit Punkten für Ausfälle, Freistunden und Vertretungen
-            - Hinweise: Hausaufgabe für die nächste Stunde noch offen, Stunde fällt aus, Arbeit morgen
-            - Geschriebene Arbeiten erscheinen im Notentab als „Ausstehend“, bis die Note eingetragen ist
-            - Uhrzeit wird über die eingerichteten Server abgeglichen (falsche Systemuhr stört nicht mehr)
+            - Moodle BW: Anmeldung über den Schul-Login (Schule@BW) in einem eigenen Fenster, wie in der Moodle-App – Noteforge sieht das Passwort nicht
+            - Die Anmeldeart der Moodle-Seite wird automatisch erkannt
           releaseDraft: false
           prerelease: false  # „latest“ muss auf das neueste Release zeigen (Update-Endpunkt)
