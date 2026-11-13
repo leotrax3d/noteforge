@@ -230,6 +230,8 @@ export class CanvasEngine {
   private activeType = "";
   private rect: DOMRect | null = null;
   private touches = new Map<number, Vec>();
+  /** Positionen von Fingern, die erst mit einem zweiten Finger zur Geste werden (Stift-Nachlaufzeit). */
+  private pendingTouch = new Map<number, Vec>();
   private hover: Vec | null = null;
   private hoverEraser = false;
 
@@ -832,8 +834,16 @@ export class CanvasEngine {
     const p = this.local(e);
     const decision = this.palm.onDown(e.pointerType, e.pointerId, now, Math.max(e.width || 0, e.height || 0));
     if (e.pointerType === "touch") {
-      if (decision === "ignore") return; // Handballen: weder zeichnen noch Geste
+      if (decision === "ignore") {
+        if (this.palm.isPending(e.pointerId)) this.pendingTouch.set(e.pointerId, p);
+        return; // Handballen: weder zeichnen noch Geste
+      }
       this.touches.set(e.pointerId, p);
+      for (const id of this.palm.takePromoted()) {
+        const q = this.pendingTouch.get(id);
+        if (q) this.touches.set(id, q);
+      }
+      this.pendingTouch.clear();
     }
     // Stift setzt auf, während ein Finger/Handballen gerade etwas tut → Finger-Aktion verwerfen, Stift gewinnt
     if (e.pointerType === "pen" && this.mode !== "idle" && this.activeType === "touch") this.abortTouch();
@@ -1175,6 +1185,7 @@ export class CanvasEngine {
 
   private onMove = (e: PointerEvent) => {
     this.perf?.input(e.timeStamp);
+    if (e.pointerType === "touch" && this.pendingTouch.has(e.pointerId)) this.pendingTouch.set(e.pointerId, this.local(e));
     if (e.pointerType === "touch" && this.touches.has(e.pointerId)) {
       this.touches.set(e.pointerId, this.local(e));
       if (this.mode === "gesture") return this.updateGesture();
@@ -1274,6 +1285,7 @@ export class CanvasEngine {
     this.palm.onUp(e.pointerType, e.pointerId, performance.now());
     if (e.pointerType === "touch") {
       this.touches.delete(e.pointerId);
+      this.pendingTouch.delete(e.pointerId);
       if (this.mode === "gesture") {
         if (this.touches.size === 0) this.endGesture();
         else this.g.ids = ""; // neu ausrichten
@@ -1354,6 +1366,7 @@ export class CanvasEngine {
   private onCancel = (e: PointerEvent) => {
     this.palm.onUp(e.pointerType, e.pointerId, performance.now());
     this.touches.delete(e.pointerId);
+    this.pendingTouch.delete(e.pointerId);
     if (this.mode === "gesture" && this.touches.size === 0) {
       this.mode = "idle";
       return;
@@ -1405,6 +1418,7 @@ export class CanvasEngine {
     if (this.mode === "pan") this.settle();
     this.palm.demoteTouches();
     this.touches.clear();
+    this.pendingTouch.clear();
     this.endPointer();
   }
 

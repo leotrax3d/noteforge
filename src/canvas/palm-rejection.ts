@@ -16,6 +16,9 @@ export class PalmRejection {
   private lastPenActivity = -Infinity;
   private touches = new Set<number>();
   private palms = new Set<number>();
+  /** Finger während der Stift-Nachlaufzeit: zeichnen nie, werden aber mit einem zweiten Finger zur Geste. */
+  private pending = new Set<number>();
+  private promoted: number[] = [];
 
   penActive(now: number): boolean {
     return this.penDown || now - this.lastPenActivity < this.penGraceMs;
@@ -34,9 +37,18 @@ export class PalmRejection {
       return "draw";
     }
     if (pointerType === "touch") {
-      if (this.palms.has(pointerId) || this.penActive(now) || size >= PALM_CONTACT_PX || this.palms.size > 0) {
+      if (this.palms.has(pointerId) || this.penDown || size >= PALM_CONTACT_PX || this.palms.size > 0) {
         this.palms.add(pointerId);
         return "ignore";
+      }
+      // Stift schwebt/war gerade aktiv: einzelner Finger zeichnet nicht, zwei Finger = Zoom/Verschieben
+      if (this.penActive(now) && this.touches.size === 0) {
+        this.pending.add(pointerId);
+        if (this.pending.size < 2) return "ignore";
+        for (const id of this.pending) this.touches.add(id);
+        this.promoted = [...this.pending].filter((id) => id !== pointerId);
+        this.pending.clear();
+        return "gesture";
       }
       this.touches.add(pointerId);
       if (this.touches.size >= 2) return "gesture";
@@ -50,13 +62,27 @@ export class PalmRejection {
     else if (pointerType === "touch") {
       this.touches.delete(pointerId);
       this.palms.delete(pointerId);
+      this.pending.delete(pointerId);
     }
   }
 
   /** Laufende Finger-Kontakte nachträglich zu Handballen erklären (Stift setzt auf). */
   demoteTouches() {
     for (const id of this.touches) this.palms.add(id);
+    for (const id of this.pending) this.palms.add(id);
     this.touches.clear();
+    this.pending.clear();
+  }
+
+  isPending(pointerId: number) {
+    return this.pending.has(pointerId);
+  }
+
+  /** Finger, die eben mit einem zweiten zur Geste wurden (einmalig abholen). */
+  takePromoted(): number[] {
+    const p = this.promoted;
+    this.promoted = [];
+    return p;
   }
 
   isPalm(pointerId: number) {

@@ -33,6 +33,15 @@ describe("PalmRejection", () => {
     expect(p.onDown("touch", 2, 10)).toBe("draw");
     expect(p.onDown("touch", 3, 20)).toBe("gesture");
   });
+  it("Zwei-Finger-Zoom kurz nach Stiftnutzung (Stift abgehoben/schwebend)", () => {
+    const p = new PalmRejection();
+    p.onDown("pen", 1, 0);
+    p.onUp("pen", 1, 100);
+    expect(p.onDown("touch", 2, 500)).toBe("ignore");
+    expect(p.onDown("touch", 3, 520)).toBe("gesture");
+    expect(p.takePromoted()).toEqual([2]);
+    expect(p.touchCount).toBe(2);
+  });
   it("große Kontaktfläche gilt immer als Handballen", () => {
     expect(new PalmRejection().onDown("touch", 2, 0, 60)).toBe("ignore");
   });
