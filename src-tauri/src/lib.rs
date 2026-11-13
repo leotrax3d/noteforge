@@ -123,7 +123,7 @@ pub fn run() {
             commands::set_subject_weight, commands::set_grade_scale,
             integrations::integration_status, integrations::untis_connect, integrations::untis_disconnect,
             integrations::moodle_connect, integrations::moodle_disconnect, integrations::integrations_sync,
-            integrations::list_lessons, integrations::list_pending_grades, integrations::list_untis_subjects, integrations::moodle_courses,
+            integrations::moodle_sso_connect, integrations::moodle_login_type, integrations::list_lessons, integrations::list_pending_grades, integrations::list_untis_subjects, integrations::moodle_courses,
             integrations::moodle_course_files, integrations::moodle_download,
             integrations::google::gcal_client, integrations::google::gcal_set_client, integrations::google::gcal_status,
             integrations::google::gcal_login, integrations::google::gcal_calendars, integrations::google::gcal_configure,

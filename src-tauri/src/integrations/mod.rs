@@ -502,6 +502,61 @@ pub async fn moodle_connect(db: S<'_>, url: String, username: String, password: 
     Ok(SyncReport { deadlines: Some(n), ..Default::default() })
 }
 
+/// Anmeldung über Schul-Login (Schule@BW/Keycloak): eigenes Fenster mit der Moodle-Anmeldeseite, wie die
+/// Moodle-App. Moodle leitet am Ende auf `moodlemobile://token=…` um; das fangen wir ab. Das Passwort
+/// sieht Noteforge nie, gespeichert wird nur das Token im Credential Manager.
+#[tauri::command]
+pub async fn moodle_sso_connect(app: tauri::AppHandle, db: S<'_>, url: String) -> R<SyncReport> {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    let site = moodle::normalize_url(&url);
+    let passport = new_id().replace('-', "");
+    let launch: tauri::Url = moodle::sso_launch_url(&site, &passport).parse().map_err(|_| IntErr::Other("Ungültige Moodle-Adresse".into()))?;
+    if let Some(w) = app.get_webview_window("moodle-login") {
+        let _ = w.close();
+    }
+    let (tx, rx) = std::sync::mpsc::channel::<Option<String>>();
+    let tx = std::sync::Arc::new(std::sync::Mutex::new(Some(tx)));
+    let (tx_nav, tx_close) = (tx.clone(), tx.clone());
+    let w = WebviewWindowBuilder::new(&app, "moodle-login", WebviewUrl::External(launch))
+        .title("Bei Moodle anmelden")
+        .inner_size(520.0, 720.0)
+        .on_navigation(move |u| {
+            if u.scheme() == "moodlemobile" {
+                if let Some(t) = tx_nav.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                    let _ = t.send(Some(u.to_string()));
+                }
+                return false;
+            }
+            true
+        })
+        .build()
+        .map_err(|e| IntErr::Other(format!("Anmeldefenster: {e}")))?;
+    w.on_window_event(move |ev| {
+        if let tauri::WindowEvent::Destroyed = ev
+            && let Some(t) = tx_close.lock().unwrap_or_else(|e| e.into_inner()).take()
+        {
+            let _ = t.send(None);
+        }
+    });
+    let got = tauri::async_runtime::spawn_blocking(move || rx.recv_timeout(std::time::Duration::from_secs(600)))
+        .await
+        .map_err(|e| IntErr::Other(e.to_string()))?;
+    let _ = w.close();
+    let cb = match got {
+        Ok(Some(u)) => u,
+        Ok(None) => return Err(IntErr::Other("Anmeldung abgebrochen".into())),
+        Err(_) => return Err(IntErr::Other("Anmeldung abgelaufen oder abgebrochen – bitte erneut versuchen".into())),
+    };
+    let token = moodle::parse_sso_token(&cb, &site, &passport).map_err(IntErr::Auth)?;
+    moodle_connect(db, site, String::new(), String::new(), Some(token)).await
+}
+
+/// 1 = Passwort-Anmeldung, 2/3 = Schul-Login im Browser (SSO), None = unbekannt/nicht erreichbar.
+#[tauri::command]
+pub async fn moodle_login_type(url: String) -> Option<i64> {
+    moodle::login_type(&moodle::normalize_url(&url)).await
+}
+
 #[tauri::command]
 pub fn moodle_disconnect(db: S) -> R<()> {
     secrets::delete(secrets::MOODLE).map_err(IntErr::Other)?;

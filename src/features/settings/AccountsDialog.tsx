@@ -48,6 +48,20 @@ export function AccountsDialog({ open, onOpenChange, onMapping }: { open: boolea
   const [u, setU] = useState({ server: "", school: "", username: "", password: "" });
   const [m, setM] = useState({ url: "", username: "", password: "", token: "" });
   const [useToken, setUseToken] = useState(false);
+  const [sso, setSso] = useState<boolean | null>(null);
+  // Anmeldeart der Moodle-Seite erkennen (Schul-Login wie Schule@BW → kein Passwortfeld)
+  useEffect(() => {
+    if (!m.url.trim()) { setSso(null); return; }
+    let stop = false;
+    const t = window.setTimeout(() => {
+      void integrations.moodleLoginType(m.url).then((k) => !stop && setSso(k == null ? null : k !== 1), () => !stop && setSso(null));
+    }, 500);
+    return () => { stop = true; window.clearTimeout(t); };
+  }, [m.url]);
+  const ssoLogin = () => void run("moodle", async () => {
+    const r = await integrations.moodleSsoConnect(m.url);
+    return `Moodle verbunden – ${r.deadlines ?? 0} anstehende Abgaben übernommen.`;
+  });
   const [manual, setManual] = useState(false);
   const [schoolName, setSchoolName] = useState("");
 
@@ -143,7 +157,12 @@ export function AccountsDialog({ open, onOpenChange, onMapping }: { open: boolea
             {st?.moodle && <span className="flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="size-4" /> verbunden · {when(st.moodleLastSync)}</span>}
           </div>
           <div className="grid gap-1.5"><Label htmlFor="m-url">Moodle-Adresse</Label>
-            <Input id="m-url" placeholder="https://…moodle.schule-bw.de" value={m.url} onChange={(e) => setM({ ...m, url: e.target.value })} /></div>
+            <Input id="m-url" placeholder="z. B. https://…moodle.bw.schule" value={m.url} onChange={(e) => setM({ ...m, url: e.target.value })} /></div>
+          <Button type="button" variant={sso ? "default" : "outline"} disabled={!!busy || !m.url.trim()} onClick={ssoLogin} data-testid="moodle-sso">
+            <Link2 /> {busy === "moodle" && sso ? "Anmeldefenster offen …" : "Mit Schul-Login anmelden (Schule@BW)"}
+          </Button>
+          {sso && <p className="text-sm text-muted-foreground">Diese Moodle-Seite meldet über den Schul-Login an. Es öffnet sich ein Fenster; dein Passwort sieht Noteforge nicht.</p>}
+          {!sso && <>
           <label className="flex min-h-11 items-center gap-2 text-sm">
             <input type="checkbox" className="size-5" checked={useToken} onChange={(e) => setUseToken(e.target.checked)} />
             Mit Token anmelden (für Konten mit Schul-Login/SSO)
@@ -159,8 +178,9 @@ export function AccountsDialog({ open, onOpenChange, onMapping }: { open: boolea
                 <Input id="m-pw" type="password" autoComplete="current-password" placeholder={st?.moodle ? "gespeichert" : ""} value={m.password} onChange={(e) => setM({ ...m, password: e.target.value })} /></div>
             </div>
           )}
+          </>}
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={!!busy}><Link2 /> {busy === "moodle" ? "Verbinde …" : st?.moodle ? "Neu verbinden" : "Verbinden"}</Button>
+            {!sso && <Button type="submit" disabled={!!busy}><Link2 /> {busy === "moodle" ? "Verbinde …" : st?.moodle ? "Neu verbinden" : "Verbinden"}</Button>}
             {st?.moodle && (
               <Button type="button" variant="outline" disabled={!!busy}
                 onClick={() => void run("moodle-off", async () => { await integrations.moodleDisconnect(); setM({ url: "", username: "", password: "", token: "" }); return "Moodle getrennt."; })}>

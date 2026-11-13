@@ -42,6 +42,45 @@ pub struct ActionEvent {
     pub url: String,
 }
 
+/// Anmeldeart laut `tool_mobile_get_public_config`: 1 = App (Passwort), 2/3 = Browser/eingebettet (SSO).
+pub async fn login_type(site: &str) -> Option<i64> {
+    let http = reqwest::Client::builder().user_agent("Noteforge").timeout(std::time::Duration::from_secs(15)).build().ok()?;
+    let v: serde_json::Value = http
+        .post(format!("{site}/lib/ajax/service-nologin.php?info=tool_mobile_get_public_config"))
+        .json(&serde_json::json!([{ "index": 0, "methodname": "tool_mobile_get_public_config", "args": {} }]))
+        .send().await.ok()?.json().await.ok()?;
+    v.get(0)?.get("data")?.get("typeoflogin")?.as_i64()
+}
+
+/// Startadresse der SSO-Anmeldung wie in der Moodle-App.
+pub fn sso_launch_url(site: &str, passport: &str) -> String {
+    format!("{site}/admin/tool/mobile/launch.php?service=moodle_mobile_app&passport={passport}&urlscheme=moodlemobile")
+}
+
+/// `moodlemobile://token=<base64(signatur:::token[:::privat])>` → Token, wenn die Signatur
+/// md5(wwwroot + passport) passt (schützt vor untergeschobenen Tokens).
+pub fn parse_sso_token(url: &str, site: &str, passport: &str) -> Result<String, String> {
+    use base64::Engine;
+    use md5::{Digest, Md5};
+    let raw = url.split("token=").nth(1).ok_or("Moodle hat kein Token geliefert")?;
+    let raw = raw.split(['&', '#']).next().unwrap_or("").trim_end_matches('/');
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(raw)
+        .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(raw))
+        .map_err(|_| "Moodle-Token unlesbar")?;
+    let txt = String::from_utf8(bytes).map_err(|_| "Moodle-Token unlesbar")?;
+    let mut parts = txt.split(":::");
+    let sig = parts.next().unwrap_or("");
+    let token = parts.next().unwrap_or("").to_string();
+    let ok = [site.to_string(), site.replacen("https://", "http://", 1)]
+        .iter()
+        .any(|w| format!("{:x}", Md5::digest(format!("{w}{passport}"))) == sig);
+    if !ok || token.is_empty() {
+        return Err("Moodle-Anmeldung: Antwort passt nicht zu dieser Anfrage".into());
+    }
+    Ok(token)
+}
+
 pub fn normalize_url(input: &str) -> String {
     let mut s = input.trim().trim_end_matches('/').to_string();
     for suffix in ["/login/index.php", "/my", "/login"] {
@@ -235,6 +274,19 @@ pub fn same_origin(base: &str, url: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sso_token_signature() {
+        use base64::Engine;
+        use md5::{Digest, Md5};
+        let site = "https://x.moodle.bw.schule";
+        let sig = format!("{:x}", Md5::digest(format!("{site}p123")));
+        let enc = base64::engine::general_purpose::STANDARD.encode(format!("{sig}:::tok42:::priv"));
+        assert_eq!(parse_sso_token(&format!("moodlemobile://token={enc}"), site, "p123").unwrap(), "tok42");
+        assert!(parse_sso_token(&format!("moodlemobile://token={enc}"), site, "anders").is_err());
+        assert!(parse_sso_token("moodlemobile://nix", site, "p").is_err());
+        assert_eq!(normalize_url("https://04105764160.moodle.bw.schule/my/"), "https://04105764160.moodle.bw.schule");
+    }
     use serde_json::json;
 
     #[test]

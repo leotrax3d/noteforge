@@ -31,6 +31,10 @@ export interface Integrations {
   untisDisconnect(): Promise<void>;
   moodleConnect(url: string, username: string, password: string, token: string | null): Promise<SyncReport>;
   moodleDisconnect(): Promise<void>;
+  /** Anmeldung über Schul-Login (eigenes Fenster, wie die Moodle-App). */
+  moodleSsoConnect(url: string): Promise<SyncReport>;
+  /** 1 = Passwort, 2/3 = Schul-Login im Browser, null = unbekannt. */
+  moodleLoginType(url: string): Promise<number | null>;
   sync(force: boolean): Promise<SyncReport>;
   listLessons(from: number, to: number): Promise<Lesson[]>;
   untisSubjects(): Promise<UntisSubject[]>;
@@ -45,6 +49,8 @@ const tauri: Integrations = {
   untisDisconnect: () => invoke("untis_disconnect"),
   moodleConnect: (url, username, password, token) => invoke("moodle_connect", { url, username, password, token }),
   moodleDisconnect: () => invoke("moodle_disconnect"),
+  moodleSsoConnect: (url) => invoke("moodle_sso_connect", { url }),
+  moodleLoginType: (url) => invoke("moodle_login_type", { url }),
   sync: (force) => invoke("integrations_sync", { force }),
   listLessons: (from, to) => invoke("list_lessons", { from, to }),
   untisSubjects: () => invoke("list_untis_subjects"),
@@ -80,6 +86,12 @@ export class DemoIntegrations implements Integrations {
     return this.sync(true);
   }
   async moodleDisconnect() { this.st.moodle = null; this.st.moodleLastSync = null; }
+  async moodleSsoConnect(url: string) {
+    if (!url.trim()) throw new Error("Bitte die Moodle-Adresse angeben");
+    this.st.moodle = { url: url.trim(), username: "" };
+    return this.sync(true);
+  }
+  async moodleLoginType(url: string) { return /bw\.schule/.test(url) ? 2 : 1; }
   async sync(_force = false): Promise<SyncReport> {
     void _force;
     const rep: SyncReport = { lessons: null, deadlines: null, errors: [], skipped: false };
