@@ -5,7 +5,7 @@ import {
   Grid3x3, Calculator, Check, LineChart, Palette, RotateCcw, SlidersHorizontal, X, ZoomIn,
   Crop, DraftingCompass, Eraser, GripVertical, Hand, Highlighter, ImagePlus, Lasso, Pen, PenTool, Pencil, Plus, Redo2, Ruler,
   Settings2, Shapes, Table, Trash2, TriangleRight, Type, Undo2, FileUp,
-  Angle, Fullscreen, Maximize, MoveRight, PaintBucket, ScanSearch, Sparkles, Wand,
+  Angle, ChevronDown, Fullscreen, Maximize, MoveRight, PaintBucket, ScanSearch, Sparkles, Wand,
 } from "lucide-react";
 import { MoleculeIcon } from "@/features/chem/MoleculeIcon";
 import { TablePicker } from "./objects/TablePicker";
@@ -590,6 +590,8 @@ export function Toolbar(p: ToolbarProps) {
               <ToolButton label={`Stift: ${PENS[lastPen.current].label}`} active={penActive}
                 onClick={() => (compact ? onPen(penActive ? t.pen : lastPen.current) : penActive ? setOpen(open === "pen" ? null : "pen") : t.setPen(lastPen.current))}>
                 <LastPenIcon />
+                {/* Aufklapp-Hinweis wie GoodNotes: aktives Stift-Symbol öffnet Stiftart, Farben und Breiten */}
+                {penActive && <ChevronDown className="absolute right-0.5 bottom-0.5 !size-3 opacity-80" aria-hidden />}
               </ToolButton>
             ) : render(item)}
           </div>
