@@ -127,7 +127,9 @@ function load(): Partial<Persisted> {
       p.items = i < 0 ? [...p.items, "fitpage"] : [...p.items.slice(0, i + 1), "fitpage", ...p.items.slice(i + 1)];
     }
     // Wie OneNote: jedes Mal mit „Greifen“ starten; das gewählte Stift-Werkzeug merken
-    p.penTool = p.penTool ?? (p.tool && INK_TOOLS.includes(p.tool) ? p.tool : "pen");
+    const pt = p.penTool ?? p.tool;
+    // Laser/verschwindende Tinte nicht als Rücksprung-Werkzeug merken
+    p.penTool = pt && INK_TOOLS.includes(pt) && pt !== "laser" && pt !== "vanish" ? pt : "pen";
     p.tool = "pan";
     if (p.dock === "top" && !(p.seen ?? []).includes("island")) p.dock = "header";
     return p;

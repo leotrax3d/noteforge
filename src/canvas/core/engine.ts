@@ -1442,7 +1442,14 @@ export class CanvasEngine {
             return;
           }
           // Tippen ins Leere hebt eine bestehende Auswahl nur auf, statt sofort ein Textfeld anzulegen
-          if (!this.pickAt(w) && !this.tapHadSel) this.events.onTextAt?.(w, e.altKey);
+          if (!this.pickAt(w)) {
+            const lk = this.lockedAt(w);
+            if (lk) {
+              // Gesperrtes Element: nur das Schloss zeigen, kein Textfeld darüber anlegen
+              this.lockHover = lk;
+              this.invalidate(false);
+            } else if (!this.tapHadSel) this.events.onTextAt?.(w, e.altKey);
+          }
         } else if (this.activeType === "touch" && this.isTap()) {
           const o = this.topObjAt(this.toWorld(this.downPos.x, this.downPos.y));
           if (o && o.kind !== "image") {
