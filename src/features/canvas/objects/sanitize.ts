@@ -1,8 +1,22 @@
 /** Rich-Text auf erlaubte Tags/Attribute beschränken (gespeichertes/synchronisiertes HTML). */
 const TAGS = new Set([
   "B", "STRONG", "I", "EM", "U", "S", "H1", "H2", "H3", "P", "DIV", "BR", "UL", "OL", "LI", "SPAN", "FONT",
-  "TABLE", "THEAD", "TBODY", "TR", "TD", "TH", "SUB", "SUP",
+  "TABLE", "THEAD", "TBODY", "TR", "TD", "TH", "SUB", "SUP", "STRIKE", "BLOCKQUOTE", "HR",
 ]);
+const ALIGN = /^(left|center|right|justify|start|end)$/i;
+
+/** Erlaubte CSS-Eigenschaften: Text-/Markerfarbe, Ausrichtung. */
+function cleanStyle(style: string): string {
+  const out: string[] = [];
+  for (const decl of style.split(";")) {
+    const i = decl.indexOf(":");
+    if (i < 0) continue;
+    const k = decl.slice(0, i).trim().toLowerCase(), v = decl.slice(i + 1).trim();
+    if ((k === "color" || k === "background-color") && COLOR.test(v)) out.push(`${k}: ${v}`);
+    else if (k === "text-align" && ALIGN.test(v)) out.push(`${k}: ${v}`);
+  }
+  return out.join("; ");
+}
 const COLOR = /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\)|[a-z]+)$/i;
 
 export function sanitizeHtml(html: string): string {
@@ -16,9 +30,16 @@ export function sanitizeHtml(html: string): string {
         continue;
       }
       for (const a of [...child.attributes]) {
+        if (a.name === "style") {
+          const st = cleanStyle(a.value);
+          if (st) child.setAttribute("style", st);
+          else child.removeAttribute("style");
+          continue;
+        }
         const keep =
           (a.name === "color" && COLOR.test(a.value)) ||
-          (a.name === "style" && /^\s*color\s*:\s*[^;]+;?\s*$/i.test(a.value) && COLOR.test(a.value.split(":")[1].replace(";", "").trim()));
+          (a.name === "size" && child.tagName === "FONT" && /^[1-7]$/.test(a.value)) ||
+          (a.name === "align" && ALIGN.test(a.value));
         if (!keep) child.removeAttribute(a.name);
       }
       walk(child);

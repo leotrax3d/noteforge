@@ -188,7 +188,7 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
         </span>
         <h1 className="ml-2 shrink truncate text-lg font-semibold">{subject?.name}</h1>
         {/* Werkzeugleiste kann hier andocken (Position „Kopfzeile“) */}
-        <div id={TOOLBAR_SLOT} className="flex min-h-11 min-w-0 flex-1 items-center justify-center self-stretch px-2" />
+        <div id={TOOLBAR_SLOT} className="flex min-h-11 min-w-0 flex-1 items-center justify-center self-stretch px-3 py-1" />
         {page && (
           <Button variant="ghost" size="icon" aria-label="Fokusmodus" title="Fokusmodus (F11)" onClick={() => toggleFocus(true)}><Maximize2 /></Button>
         )}

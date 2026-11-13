@@ -89,6 +89,41 @@ Strokes: Punkte als `Float32Array` (x, y, pressure, tilt, t), Stift-ID, Farbe, B
 - **Palm Rejection:** Touch wird ignoriert, solange der Stift aufliegt, in Reichweite schwebt oder vor weniger als 2,5 s benutzt wurde. Kontakte mit großer Fläche (≥ 32 px) gelten immer als Handballen. Ein einmal erkannter Handballen bleibt es bis zum Abheben und löst keine Zoom-/Pan-Geste aus. Setzt der Stift auf, während ein Handballen schon eine Aktion begonnen hat, wird diese verworfen und der Stift gewinnt. Auch Textfelder ignorieren den Handballen.
 - **Autosave ohne Ruckeln:** Speichern und Journal warten, bis kein Strich läuft (≥ 250 ms nach dem Absetzen). Die Schreib-Commands (`save_elements`, `journal_*`, `auto_version`) laufen asynchron im Thread-Pool statt auf dem Hauptthread, damit die Stifteingabe der WebView nie blockiert wird.
 
+### 4.8 Tabellen und Textbearbeitung (v0.2.9)
+- **Tabellengröße:** Einfügen → „Tabelle …“ öffnet eine Größenauswahl wie in LibreOffice/Word: ein 8 × 6-Raster (überfahren oder antippen) oder Zeilen/Spalten genau per Stepper (bis 100 × 20). Neue Tabellen werden 120 px je Spalte breit und die erste Zelle ist sofort aktiv.
+- **Spaltenbreite:** Die Trennlinien zwischen Spalten lassen sich mit Maus, Stift und Finger ziehen; die Griffzone ist breiter als die Linie (Touch 24 px). Ein Doppelklick auf den Trenner stellt die optimale Breite ein. Gespeichert werden die Breiten als Anteile (`TableData.cols`, Summe 1). Fehlt der Wert, sind die Spalten gleich breit.
+- **Touch:** Tippt ein Finger auf ein Textfeld oder eine Tabelle, wird es mit jedem Werkzeug bearbeitbar. Die Schreibmarke landet an der Tippstelle (Engine-Ereignis `onObjTap`). Die Palm Rejection gilt weiter.
+- **Kontextmenü (Rechtsklick / langes Drücken)** in Textfeldern und Zellen, im Stil der übrigen Noteforge-Menüs (shadcn/Glas, Einträge ≥ 44 px, Tastenkürzel rechts):
+  - Ausschneiden, Kopieren, Einfügen, Alles auswählen.
+  - **Zeichen:** fett, kursiv, unterstrichen, durchgestrichen, hoch- und tiefgestellt; Schrift größer/kleiner; Formatierung entfernen.
+  - **Farbe:** Textfarbe und Hervorheben (Textmarker).
+  - **Absatz:** links, zentriert, rechts, Blocksatz; Einzug; Überschrift 1/2; normaler Text; Aufzählung; Nummerierung.
+  - **Groß-/Kleinschreibung:** Satzanfang groß, klein, GROSS, Jedes Wort groß, umkehren. Ohne Markierung gilt das für das Wort an der Schreibmarke.
+  - **Einfügen:** Datum, Uhrzeit, Trennlinie und Sonderzeichen (→ ≈ ≠ ≤ ≥ ± ° ² π Δ € § …).
+  - **In Tabellen:**
+    - Zeile oberhalb/unterhalb bzw. Spalte links/rechts einfügen.
+    - Zeile, Spalte, Zeilen- oder Spalteninhalt oder die ganze Tabelle löschen.
+    - Zeile nach oben/unten verschieben.
+    - Spalten gleichmäßig verteilen oder optimale Breite.
+    - Kopfzeile hervorheben ein/aus (`TableData.header`).
+    - Nach der Spalte sortieren, auf- oder absteigend: Zahlen in deutscher Schreibweise numerisch, sonst alphabetisch. Die Kopfzeile bleibt oben, leere Zellen kommen ans Ende.
+    - Zellhintergrund für eine Zelle, Zeile oder Spalte (`TableData.bg`, im Dunkelmodus abgeschwächt).
+    - Summe der Zellen darüber (AutoSumme).
+    - Tabelle in ein Textfeld umwandeln.
+  - **In Textfeldern:** Breite automatisch anpassen ein/aus, in Tabelle umwandeln, Textfeld löschen.
+- **Tastenkürzel wie in LibreOffice Writer:**
+  - Strg+E / L / R / J: Ausrichtung.
+  - Strg+D: durchgestrichen.
+  - Strg+⇧+P / Strg+⇧+B: hoch- bzw. tiefgestellt.
+  - Strg+] / Strg+[: Schrift größer bzw. kleiner.
+  - Strg+M: Formatierung entfernen.
+  - Strg+1 / 2 / 0: Überschrift 1, Überschrift 2, normaler Text.
+  - In Tabellen: Tab / ⇧+Tab wechselt die Zelle; Tab in der letzten Zelle hängt eine neue Zeile an. Alt+↑/↓ verschiebt die Zeile.
+- **Einfügen tabellarischer Text:** Wird tab-getrennter Text (z. B. aus Calc oder Excel) in ein leeres Textfeld eingefügt, entsteht eine Tabelle. Tab im Textfeld wandelt es um; Tab- oder Semikolon-getrennte Zeilen werden dabei zu Spalten.
+- **Variable Textfelder wie in OneNote:** Neue Textfelder (`TextData.auto`) wachsen beim Tippen nach rechts (mindestens 120 px), ab 640 px bricht der Text um. Die Breite folgt dem Inhalt, auch nach Enter. Lange Wörter und URLs brechen um (`overflow-wrap: anywhere`) statt überzulaufen. Ändert man die Breite von Hand, ist sie fest; im Kontextmenü lässt sich das automatische Anpassen wieder einschalten. Bestehende Felder behalten ihre feste Breite.
+- **Sanitizer:** Erlaubt zusätzlich `text-align`, `background-color` (Marker), `<strike>`, `<blockquote>` (Einzug), `<hr>` und `<font size>`. Alle anderen Stile (z. B. `url(…)`, `position`) werden verworfen.
+- **Werkzeugleiste als Insel:** Außerhalb des Vollbilds sitzt die Werkzeugleiste standardmäßig als abgesetzte Pille („Dynamic Island“) mittig in der Kopfzeile: abgerundet, mit Rahmen und Schatten, getrennt von den übrigen Kopfzeilen-Elementen. Im Fokusmodus (Vollbild) wandert sie automatisch nach oben aufs Blatt. Gespeicherte Leisten mit Position „Oben“ werden einmalig auf „Kopfzeile“ umgestellt.
+
 ### 4.2 Blatt-Titel
 - Kein Titelbalken auf dem Blatt: der Canvas beginnt direkt oben. Speicherstatus, Versionen, Ink-Wiedergabe und Blatt-Aktionen (Export, Vorlage, Erstellt/Geändert) sitzen in einer kleinen Leiste oben rechts (Linkshänder: links).
 - **Umbenennen** nur in der Seitenleiste: Doppelklick/Doppeltipp auf den Namen → Inline-Eingabe (Enter oder Klick daneben speichert, Esc bricht ab), Kontextmenü „Umbenennen“, Taste **F2** für das offene Blatt.

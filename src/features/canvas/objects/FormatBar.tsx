@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import type { PageRef } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const COLORS = ["#111827", "#2563eb", "#16a34a", "#dc2626", "#9333ea", "#ca8a04"];
+export const COLORS = ["#111827", "#2563eb", "#16a34a", "#dc2626", "#9333ea", "#ca8a04"];
 
 function exec(cmd: string, value?: string) {
   document.execCommand(cmd, false, value);

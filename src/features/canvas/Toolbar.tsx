@@ -8,6 +8,7 @@ import {
   Angle, MoveRight, PaintBucket, ScanSearch, Sparkles, Wand,
 } from "lucide-react";
 import { MoleculeIcon } from "@/features/chem/MoleculeIcon";
+import { TablePicker } from "./objects/TablePicker";
 import { HsvPicker } from "@/components/common/HsvPicker";
 import { HEADS, HEAD_LABELS, type Head } from "@/canvas/vector/vec";
 import { Label } from "@/components/ui/label";
@@ -35,7 +36,7 @@ export interface ToolbarProps {
   onZoom: (factor: number | "reset") => void;
   page: Page;
   onPageChange: (patch: PagePatch) => void;
-  onInsert: (kind: InsertKind) => void;
+  onInsert: (kind: InsertKind, size?: { rows: number; cols: number }) => void;
 }
 
 export type InsertKind = "image" | "screenshot" | "table" | "text" | "pdf" | "plot" | "calc" | "shapes" | "molecule";
@@ -236,6 +237,7 @@ export function Toolbar(p: ToolbarProps) {
     window.addEventListener("pointerdown", onDown, true);
     return () => window.removeEventListener("pointerdown", onDown, true);
   }, []);
+  const [pickTable, setPickTable] = useState(false);
   const [open, setOpen] = useState<null | "pen" | "eraser" | "page" | "guides" | "insert" | "bar" | "preset" | "heads" | "fill" | "vanish">(null);
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
   const [editing, setEditing] = useState(false);
@@ -455,7 +457,8 @@ export function Toolbar(p: ToolbarProps) {
       data-size={t.size}
       className={cn(
         inHeader
-          ? "relative flex max-w-full min-w-0 flex-row items-center gap-1 overflow-x-auto"
+          // „Dynamic Island“: eigene Pille, vom Rest der Kopfzeile abgesetzt
+          ? "relative flex max-w-full min-w-0 flex-row items-center gap-0.5 overflow-x-auto rounded-full border bg-card/95 px-1.5 shadow-lg ring-1 ring-black/5 backdrop-blur [scrollbar-width:none] dark:ring-white/10"
           : "absolute z-20 flex items-center gap-1 rounded-2xl border bg-card/95 p-1.5 shadow-xl backdrop-blur",
         !inHeader && (vertical ? "max-h-[calc(100%-24px)] flex-col overflow-y-auto" : "w-max max-w-[calc(100%-24px)] flex-row flex-wrap justify-center"),
         !inHeader && (drag ? "pointer-events-auto opacity-80" : dockClass[t.dock]),
@@ -564,9 +567,12 @@ export function Toolbar(p: ToolbarProps) {
         </PopoverContent>
       </Popover>
 
-      <Popover open={open === "insert"} onOpenChange={(o) => setOpen(o ? "insert" : null)}>
+      <Popover open={open === "insert"} onOpenChange={(o) => { setOpen(o ? "insert" : null); setPickTable(false); }}>
         <PopoverAnchor asChild><span className="absolute inset-0 -z-10" aria-hidden /></PopoverAnchor>
-        <PopoverContent side={side} className="w-64 space-y-1">
+        <PopoverContent side={side} className={cn("space-y-1", pickTable ? "w-auto" : "w-64")}>
+          {pickTable ? (
+            <TablePicker onPick={(rows, cols) => { setOpen(null); setPickTable(false); p.onInsert("table", { rows, cols }); }} />
+          ) : (<>
           <p className="pb-1 text-sm font-medium">Einfügen</p>
           {([
             ["image", "Bild …", <ImagePlus key="i" />],
@@ -578,10 +584,15 @@ export function Toolbar(p: ToolbarProps) {
             ["calc", "Taschenrechner", <Calculator key="r" />],
             ["molecule", "Strukturformel …", <MoleculeIcon key="m" />],
           ] as [InsertKind, string, ReactNode][]).map(([k, label, icon]) => (
-            <Button key={k} variant="ghost" className="h-11 w-full justify-start" onClick={() => { setOpen(null); p.onInsert(k); }}>
-              {icon} {label}
+            <Button key={k} variant="ghost" className="h-11 w-full justify-start" onClick={() => {
+              if (k === "table") return setPickTable(true);
+              setOpen(null);
+              p.onInsert(k);
+            }}>
+              {icon} {label}{k === "table" && " …"}
             </Button>
           ))}
+          </>)}
         </PopoverContent>
       </Popover>
 

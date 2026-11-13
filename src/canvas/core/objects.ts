@@ -16,6 +16,9 @@ export interface TextData {
   size?: number;
   lh?: number;
   padX?: number;
+  /** Variable Breite wie in OneNote: wächst beim Tippen bis `AUTO_MAX_W`, dann Umbruch.
+   *  Fehlt bei älteren Feldern bzw. nach manuellem Ändern der Breite → feste Breite `w`. */
+  auto?: boolean;
 }
 export interface ImageData {
   src: string;
@@ -32,7 +35,15 @@ export interface ImageData {
   /** Strukturformel (SPEC §4.4): Molfile + Darstellung, `src` ist das gerenderte SVG. */
   mol?: MolData;
 }
-export interface TableData { cells: string[][] }
+export interface TableData {
+  cells: string[][];
+  /** Spaltenbreiten als Anteile (Summe 1); fehlt → gleichmäßig. */
+  cols?: number[];
+  /** Erste Zeile als Kopfzeile hervorheben (Standard: ja). */
+  header?: boolean;
+  /** Zellhintergrund je Zelle (null = keiner). */
+  bg?: (string | null)[][];
+}
 
 interface Base {
   id: string;

@@ -94,9 +94,15 @@
   .nf-rich ol { list-style: decimal; padding-left: 1.4em; }
   .nf-rich table { border-collapse: collapse; width: 100%; margin: 0.25em 0; }
   .nf-rich td, .nf-rich th { border: 1px solid color-mix(in oklab, currentColor 40%, transparent); padding: 0.2em 0.4em; min-width: 3em; }
+  .nf-rich blockquote { margin: 0 0 0 2em; }
+  .nf-rich hr { border: 0; border-top: 1px solid color-mix(in oklab, currentColor 40%, transparent); margin: 0.4em 0; }
+  .nf-rich strike, .nf-rich s { text-decoration: line-through; }
+  /* Variable Textfelder: lange Wörter/URLs umbrechen statt überzulaufen */
+  .nf-rich { overflow-wrap: anywhere; }
   .nf-link { pointer-events: auto; cursor: pointer; color: var(--subject, #2563eb); text-decoration: underline; text-underline-offset: 2px; }
   .nf-link .nf-br { display: none; }
   .nf-rich:empty::before { content: "Text eingeben …"; color: var(--muted-foreground); }
+  td.nf-rich:empty::before { content: none; }
 }
 
 /* Freistunden (WebUntis): eigene Farbe + Streifenmuster; Entfall stärker als reguläre Lücke */

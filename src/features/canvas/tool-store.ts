@@ -112,6 +112,8 @@ function load(): Partial<Persisted> {
       const i = p.items.indexOf("insert");
       p.items = [...p.items.slice(0, i + 1), "molecule", ...p.items.slice(i + 1)];
     }
+    // v0.2.9: Leiste wandert einmalig von „Oben“ als Insel in die Kopfzeile
+    if (p.dock === "top" && !(p.seen ?? []).includes("island")) p.dock = "header";
     return p;
   } catch {
     return {};
@@ -137,7 +139,8 @@ export const useTools = create<ToolsStore>((set, get) => ({
   perPen: perPenDefault,
   presets: DEFAULT_PRESETS,
   customColors: [],
-  dock: "top",
+  // Außerhalb des Vollbilds als „Insel“ in der Kopfzeile (im Fokusmodus automatisch oben)
+  dock: "header",
   floatPos: { x: 0.5, y: 0.2 },
   orient: "horizontal",
   size: "m",
@@ -187,7 +190,7 @@ export const useTools = create<ToolsStore>((set, get) => ({
   setSize: (size) => set({ size }),
   setItems: (items) => set({ items: items.filter((i, k) => TOOL_ITEMS.includes(i) && items.indexOf(i) === k) }),
   updatePreset: (id, patch) => set((s) => ({ presets: s.presets.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
-  resetBar: () => set({ items: DEFAULT_ITEMS, dock: "top", orient: "horizontal", size: "m", floatPos: { x: 0.5, y: 0.2 }, presets: DEFAULT_PRESETS }),
+  resetBar: () => set({ items: DEFAULT_ITEMS, dock: "header", orient: "horizontal", size: "m", floatPos: { x: 0.5, y: 0.2 }, presets: DEFAULT_PRESETS }),
 }));
 
 export const MAX_PRESET_COUNT = MAX_PRESETS;
@@ -197,7 +200,7 @@ useTools.subscribe((s) => {
   try {
     // Laser/verschwindende Tinte nicht als Startwerkzeug merken
     const t = tool === "laser" || tool === "vanish" ? "pen" : tool;
-    localStorage.setItem(KEY, JSON.stringify({ tool: t, pen, color, width, eraserMode, eraserSize, fingerDraws, pointerGrab, gridSnap, shapeMode, perPen, presets, customColors, dock, floatPos, orient, size, items, opacity, head0, head1, fillOpacity, fillHatch, vanishMs, zoomFactor, seen: ["molecule"] }));
+    localStorage.setItem(KEY, JSON.stringify({ tool: t, pen, color, width, eraserMode, eraserSize, fingerDraws, pointerGrab, gridSnap, shapeMode, perPen, presets, customColors, dock, floatPos, orient, size, items, opacity, head0, head1, fillOpacity, fillHatch, vanishMs, zoomFactor, seen: ["molecule", "island"] }));
   } catch {
     /* ignorieren */
   }

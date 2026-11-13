@@ -1,12 +1,19 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Check, GripHorizontal, MoveHorizontal, Minus, Plus, Trash2 } from "lucide-react";
 import type { CanvasEngine } from "@/canvas/core/engine";
-import { makeObj, type CanvasObj, type TableObj, type TextObj } from "@/canvas/core/objects";
+import { makeObj, type CanvasObj, type TableData, type TableObj, type TextObj } from "@/canvas/core/objects";
 import type { BBox, ElementTag } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { tagIcon, useTagStore } from "@/features/tags/tag-store";
 import { isBlankHtml, linkifyHtml, sanitizeHtml } from "./sanitize";
 import { MathView } from "@/features/recognition/Math";
+import * as T from "./table-ops";
+import { captureRange, focusCell, TextMenu, type MenuTarget } from "./TextMenu";
+
+/** Variable Textfelder (OneNote): kleinste und größte automatische Breite (Welt-px). */
+export const AUTO_MIN_W = 120;
+export const AUTO_MAX_W = 640;
 
 export interface TagAnchor { id: string; bbox: BBox; tags: ElementTag[] }
 
@@ -34,6 +41,8 @@ export interface ObjectLayerProps {
 
 /** DOM-Ebene für Textcontainer und Tabellen; Kamera-Transform setzt die Engine direkt. */
 export function ObjectLayer(p: ObjectLayerProps) {
+  const [menu, setMenu] = useState<MenuTarget | null>(null);
+  const q = { ...p, onMenu: setMenu };
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
       <div ref={p.layerRef} data-testid="object-layer" className="absolute top-0 left-0 origin-top-left" style={{ width: 0, height: 0 }}
@@ -48,19 +57,85 @@ export function ObjectLayer(p: ObjectLayerProps) {
         {p.anchors.map((a) => <TagBadges key={a.id} anchor={a} onDone={p.onTagDone} />)}
         {p.objects.map((o) =>
           o.kind === "text" && o.data.latex != null ? (
-            <MathBox key={o.id} obj={o} {...p} />
+            <MathBox key={o.id} obj={o} {...q} />
           ) : o.kind === "text" ? (
-            <TextBox key={o.id} obj={o} {...p} />
+            <TextBox key={o.id} obj={o} {...q} />
           ) : o.kind === "table" ? (
-            <TableBox key={o.id} obj={o} {...p} />
+            <TableBox key={o.id} obj={o} {...q} />
           ) : null,
         )}
       </div>
+      {createPortal(
+        <TextMenu target={menu} engine={p.engine} onClose={() => setMenu(null)} onEditing={p.onEditing}
+          onToTable={(id) => p.engine && textToTableObj(p.engine, id, p.onEditing)}
+          onToText={(id) => p.engine && tableToTextObj(p.engine, id, p.onEditing)} />,
+        document.body,
+      )}
     </div>
   );
 }
 
-type BoxProps<T> = ObjectLayerProps & { obj: T };
+type BoxProps<T> = ObjectLayerProps & { obj: T; onMenu: (t: MenuTarget) => void };
+
+/** Textfeld → Tabelle: Zeilen werden Tabellenzeilen; Tab/Semikolon trennt Spalten, sonst 2 Spalten. */
+function textToTableObj(engine: CanvasEngine, id: string, onEditing: (id: string | null) => void, el?: HTMLElement | null) {
+  const cur = engine.store.getObj(id);
+  if (cur?.kind !== "text") return;
+  const txt = el?.innerText ?? T.plain(cur.data.html);
+  const parsed = T.textToTable(txt);
+  const lines = txt.split("\n").map((l) => l.trim()).filter(Boolean);
+  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const cells = parsed?.cells ?? (lines.length ? lines.map((l) => [esc(l), ""]) : T.newTable(2, 2).cells);
+  const table = makeObj<TableObj>({ id: cur.id + "-t", kind: "table", z: cur.z, x: cur.x, y: cur.y, w: Math.max(cur.w, 320), h: 44 * cells.length, angle: cur.angle, data: { cells } });
+  engine.replaceObject(cur, table);
+  onEditing(table.id);
+  focusCell(table.id, 0, Math.min(1, cells[0].length - 1));
+}
+
+/** Tabelle → Textfeld (Zellen mit „; “ getrennt, lässt sich mit Tab zurückwandeln). */
+function tableToTextObj(engine: CanvasEngine, id: string, onEditing: (id: string | null) => void) {
+  const cur = engine.store.getObj(id);
+  if (cur?.kind !== "table") return;
+  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const html = cur.data.cells.map((row) => row.map((h) => esc(T.plain(h).replace(/\n/g, " "))).join("; ")).join("<br>");
+  const text = makeObj<TextObj>({ id: cur.id + "-x", kind: "text", z: cur.z, x: cur.x, y: cur.y, w: cur.w, h: cur.h, angle: cur.angle, data: { html, auto: true } });
+  engine.replaceObject(cur, text);
+  onEditing(text.id);
+}
+
+/** Tastenkürzel wie in LibreOffice Writer (zusätzlich zu Strg+B/I/U des Browsers). */
+function richKeys(e: React.KeyboardEvent): boolean {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
+  const k = e.key.toLowerCase();
+  const cmd: [string, string?] | null =
+    e.shiftKey ? (k === "p" ? ["superscript"] : k === "b" ? ["subscript"] : null)
+    : k === "e" ? ["justifyCenter"] : k === "l" ? ["justifyLeft"] : k === "r" ? ["justifyRight"] : k === "j" ? ["justifyFull"]
+    : k === "d" ? ["strikeThrough"] : k === "m" ? ["removeFormat"] : k === "]" ? ["increaseFontSize"] : k === "[" ? ["decreaseFontSize"]
+    : k === "1" ? ["formatBlock", "<h1>"] : k === "2" ? ["formatBlock", "<h2>"] : k === "0" ? ["formatBlock", "<p>"] : null;
+  if (!cmd) return false;
+  e.preventDefault();
+  document.execCommand(cmd[0], false, cmd[1]);
+  return true;
+}
+
+/** Rechtsklick / langes Drücken im Text → eigenes Kontextmenü. */
+function openMenu(e: React.MouseEvent, objId: string, onMenu: (t: MenuTarget) => void, cell?: { r: number; c: number }) {
+  const el = (e.target as HTMLElement).closest<HTMLElement>("[contenteditable=true]");
+  if (!el) return;
+  e.preventDefault();
+  e.stopPropagation();
+  // Rechtsklick ohne Markierung: Schreibmarke an die Klickstelle setzen
+  const s = window.getSelection();
+  if (s && (s.isCollapsed || !el.contains(s.anchorNode)) && document.caretRangeFromPoint) {
+    const r = document.caretRangeFromPoint(e.clientX, e.clientY);
+    if (r && el.contains(r.startContainer)) {
+      el.focus({ preventScroll: true });
+      s.removeAllRanges();
+      s.addRange(r);
+    }
+  }
+  onMenu({ x: e.clientX, y: e.clientY, objId, el, range: captureRange(el), cell });
+}
 
 /** Gemeinsamer Rahmen: Verschiebegriff, Breite ändern, Löschen. */
 function Frame({ obj, engine, interactive, editingId, hoverId, onEditing, children, label }: BoxProps<CanvasObj> & { children: ReactNode; label: string }) {
@@ -70,15 +145,17 @@ function Frame({ obj, engine, interactive, editingId, hoverId, onEditing, childr
   const hovered = hoverId === obj.id || held;
   const live = interactive || active || hovered;
 
-  // Höhe an den Inhalt anpassen (ohne Verlauf)
+  const auto = obj.kind === "text" && !!obj.data.auto && obj.data.latex == null;
+  // Höhe (und bei variablen Textfeldern die Breite) an den Inhalt anpassen (ohne Verlauf)
   useEffect(() => {
     const el = ref.current;
     if (!el || !engine) return;
     const ro = new ResizeObserver(() => {
       const cur = engine.store.getObj(obj.id);
       if (!cur) return;
-      const h = el.offsetHeight;
-      if (Math.abs(h - cur.h) > 1) engine.updateObjectLive(makeObj({ ...cur, h }));
+      const h = el.offsetHeight, w = el.offsetWidth;
+      const isAuto = cur.kind === "text" && !!cur.data.auto;
+      if (Math.abs(h - cur.h) > 1 || (isAuto && Math.abs(w - cur.w) > 1)) engine.updateObjectLive(makeObj({ ...cur, h, w: isAuto ? w : cur.w }));
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -98,7 +175,8 @@ function Frame({ obj, engine, interactive, editingId, hoverId, onEditing, childr
       const dx = (ev.clientX - x0) / scale, dy = (ev.clientY - y0) / scale;
       const next = kind === "move"
         ? makeObj({ ...before, x: before.x + dx, y: before.y + dy })
-        : makeObj({ ...before, w: Math.max(80, before.w + dx) });
+        // Breite von Hand ändern → feste Breite (kein automatisches Wachsen mehr)
+        : makeObj({ ...before, w: Math.max(80, before.w + dx), ...(before.kind === "text" ? { data: { ...before.data, auto: false } } : {}) });
       engine.updateObjectLive(next as CanvasObj);
     };
     const up = () => {
@@ -153,7 +231,11 @@ function Frame({ obj, engine, interactive, editingId, hoverId, onEditing, childr
         live ? "pointer-events-auto" : "pointer-events-none",
         active && "rounded-b-md ring-1 ring-border shadow-sm",
       )}
-      style={{ left: obj.x, top: obj.y, width: obj.w, transform: obj.angle ? `rotate(${obj.angle}rad)` : undefined }}
+      style={{
+        left: obj.x, top: obj.y, transform: obj.angle ? `rotate(${obj.angle}rad)` : undefined,
+        // OneNote: Feld wächst beim Tippen nach rechts, ab AUTO_MAX_W wird umbrochen
+        ...(auto ? { width: "max-content", minWidth: AUTO_MIN_W, maxWidth: AUTO_MAX_W } : { width: obj.w }),
+      }}
       onPointerEnter={() => hovered && setHeld(true)}
       onPointerLeave={(e) => e.pointerType === "mouse" && setHeld(false)}
       onPointerDown={(e) => {
@@ -353,25 +435,30 @@ function TextBox(p: BoxProps<TextObj>) {
           clearTimeout(timer.current);
           timer.current = window.setTimeout(pushLive, 300);
         }}
-        onPaste={pastePlain}
+        onPaste={(e) => {
+          // Tabellarischer Text (z. B. aus Excel/LibreOffice Calc) in ein leeres Feld → Tabelle
+          const txt = e.clipboardData.getData("text/plain");
+          if (engine && ed.current && isBlankHtml(ed.current.innerHTML) && txt.includes("\t") && T.textToTable(txt)) {
+            e.preventDefault();
+            e.stopPropagation();
+            before.current = null;
+            textToTableObj(engine, obj.id, onEditing, Object.assign(document.createElement("div"), { innerText: txt }));
+            return;
+          }
+          pastePlain(e);
+        }}
+        onContextMenu={(e) => openMenu(e, obj.id, p.onMenu)}
         onKeyDown={(e) => {
+          e.stopPropagation();
           if (e.key === "Escape") (e.currentTarget as HTMLElement).blur();
-          if (e.key === " " && autoList()) { e.preventDefault(); e.stopPropagation(); return; }
+          if (richKeys(e)) return;
+          if (e.key === " " && autoList()) { e.preventDefault(); return; }
           if (e.key === "Tab" && !e.shiftKey && engine) {
             // Tab macht aus dem Textfeld eine Tabelle (Zeilen → erste Spalte), weiter in Zelle 1/2
             e.preventDefault();
-            const cur = engine.store.getObj(obj.id);
-            if (cur?.kind !== "text") return;
-            const lines = (ed.current?.innerText ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
-            const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-            const cells = lines.length ? lines.map((l) => [esc(l), ""]) : [["", ""], ["", ""]];
-            const table = makeObj<TableObj>({ id: cur.id + "-t", kind: "table", z: cur.z, x: cur.x, y: cur.y, w: Math.max(cur.w, 320), h: 44 * cells.length, angle: cur.angle, data: { cells } });
             before.current = null;
-            engine.replaceObject(cur, table);
-            onEditing(table.id);
-            window.setTimeout(() => (document.querySelector(`[data-id="${table.id}"] td:nth-child(2)`) as HTMLElement | null)?.focus(), 50);
+            textToTableObj(engine, obj.id, onEditing, ed.current);
           }
-          e.stopPropagation();
         }}
         onBlur={(e) => {
           pushLive();
@@ -392,51 +479,96 @@ function TextBox(p: BoxProps<TextObj>) {
 }
 
 function TableBox(p: BoxProps<TableObj>) {
-  const { obj, engine, interactive, editingId } = p;
+  const { obj, engine, interactive, editingId, dark } = p;
   const live = interactive || editingId === obj.id;
   const editing = editingId === obj.id;
-  const cells = obj.data.cells;
-  const cols = cells[0]?.length ?? 1;
+  const data = obj.data;
+  const cells = data.cells;
+  const cols = T.colCount(data);
+  const widths = T.colWidths(data);
+  const header = T.hasHeader(data);
 
-  const commit = (next: string[][]) => {
+  const commit = (f: (d: TableData) => TableData, focus?: { r: number; c: number }) => {
     const cur = engine?.store.getObj(obj.id);
     if (!engine || !cur || cur.kind !== "table") return;
-    const after = makeObj({ ...cur, data: { cells: next } });
+    const next = f(cur.data);
+    if (next === cur.data) return;
+    const after = makeObj({ ...cur, data: next });
     engine.updateObjectLive(after);
     engine.recordObjectEdit(cur, after);
+    if (focus) focusCell(obj.id, focus.r, focus.c);
   };
-  const setCell = (r: number, c: number, html: string) => {
-    if (cells[r]?.[c] === html) return;
-    commit(cells.map((row, i) => (i === r ? row.map((v, j) => (j === c ? html : v)) : row)));
+
+  /** Spaltentrenner ziehen (Maus, Stift, Finger); Doppelklick = optimale Breite. */
+  const dragCol = (e: React.PointerEvent, i: number) => {
+    if (!engine) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+    const before = engine.store.getObj(obj.id);
+    if (before?.kind !== "table") return;
+    const x0 = e.clientX, scale = engine.zoom;
+    const move = (ev: PointerEvent) => {
+      const delta = (ev.clientX - x0) / scale / before.w;
+      engine.updateObjectLive(makeObj({ ...before, data: T.resizeCol(before.data, i, delta) }));
+    };
+    const up = () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+      const after = engine.store.getObj(obj.id);
+      if (after && after !== before) engine.recordObjectEdit(before, after);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
   };
+
+  let acc = 0;
+  const borders = widths.slice(0, -1).map((w) => (acc += w));
 
   return (
     <Frame {...p} label="Tabelle">
       <table className="w-full table-fixed border-collapse text-base text-foreground">
+        <colgroup>{widths.map((w, i) => <col key={i} style={{ width: `${w * 100}%` }} />)}</colgroup>
         <tbody>
           {cells.map((row, r) => (
             <tr key={r}>
               {row.map((html, c) => (
-                <Cell key={c} html={html} editable={live} header={r === 0} onCommit={(h) => setCell(r, c, h)} label={`Zelle ${r + 1}, ${c + 1}`}
+                <Cell key={c} html={html} editable={live} header={header && r === 0} bg={data.bg?.[r]?.[c] ?? null} dark={dark}
+                  onCommit={(h) => commit((d) => T.setCell(d, r, c, h))} label={`Zelle ${r + 1}, ${c + 1}`}
+                  onMenu={(e) => openMenu(e, obj.id, p.onMenu, { r, c })}
+                  onMoveRow={(dir) => commit((d) => T.moveRow(d, r, dir), { r: r + dir, c })}
                   onTab={(back) => {
-                    const all = [...document.querySelectorAll<HTMLElement>(`[data-id="${obj.id}"] td`)];
                     const i = r * cols + c + (back ? -1 : 1);
-                    if (i < all.length && i >= 0) return all[i].focus();
+                    if (i >= 0 && i < cells.length * cols) return focusCell(obj.id, Math.floor(i / cols), i % cols);
                     if (back) return;
-                    commit([...engine!.store.getObj(obj.id)!.kind === "table" ? (engine!.store.getObj(obj.id) as TableObj).data.cells : cells, Array(cols).fill("")]);
-                    window.setTimeout(() => document.querySelectorAll<HTMLElement>(`[data-id="${obj.id}"] td`)[i]?.focus(), 30);
+                    // Tab in der letzten Zelle → neue Zeile (wie in Writer/Word)
+                    commit((d) => T.insertRow(d, d.cells.length), { r: r + 1, c: 0 });
                   }} />
               ))}
             </tr>
           ))}
         </tbody>
       </table>
+      {live && borders.map((b, i) => (
+        // Spaltentrenner verschieben; breite unsichtbare Griffzone, damit es auch mit dem Finger geht
+        <div key={i} role="separator" aria-orientation="vertical" aria-label={`Breite zwischen Spalte ${i + 1} und ${i + 2} ändern`}
+          title="Ziehen: Spaltenbreite · Doppelklick: optimale Breite" data-testid="col-resize"
+          className="group absolute top-0 bottom-0 z-10 w-4 -translate-x-1/2 cursor-col-resize touch-none [@media(pointer:coarse)]:w-6"
+          style={{ left: `${b * 100}%` }}
+          onPointerDown={(e) => dragCol(e, i)}
+          onDoubleClick={() => commit(T.fitCols)}>
+          <span className="pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-primary opacity-0 transition-opacity group-hover:opacity-100 group-active:opacity-100" />
+        </div>
+      ))}
       {editing && (
         <div className="absolute -bottom-12 left-0 flex gap-1" data-format-bar>
-          <TBtn label="Zeile hinzufügen" onClick={() => commit([...cells, Array(cols).fill("")])}><Plus className="size-4" />Zeile</TBtn>
-          <TBtn label="Zeile entfernen" disabled={cells.length <= 1} onClick={() => commit(cells.slice(0, -1))}><Minus className="size-4" />Zeile</TBtn>
-          <TBtn label="Spalte hinzufügen" onClick={() => commit(cells.map((row) => [...row, ""]))}><Plus className="size-4" />Spalte</TBtn>
-          <TBtn label="Spalte entfernen" disabled={cols <= 1} onClick={() => commit(cells.map((row) => row.slice(0, -1)))}><Minus className="size-4" />Spalte</TBtn>
+          <TBtn label="Zeile hinzufügen" disabled={cells.length >= T.MAX_ROWS} onClick={() => commit((d) => T.insertRow(d, d.cells.length))}><Plus className="size-4" />Zeile</TBtn>
+          <TBtn label="Letzte Zeile entfernen" disabled={cells.length <= 1} onClick={() => commit((d) => T.deleteRow(d, d.cells.length - 1))}><Minus className="size-4" />Zeile</TBtn>
+          <TBtn label="Spalte hinzufügen" disabled={cols >= T.MAX_COLS} onClick={() => commit((d) => T.insertCol(d, T.colCount(d)))}><Plus className="size-4" />Spalte</TBtn>
+          <TBtn label="Letzte Spalte entfernen" disabled={cols <= 1} onClick={() => commit((d) => T.deleteCol(d, T.colCount(d) - 1))}><Minus className="size-4" />Spalte</TBtn>
         </div>
       )}
     </Frame>
@@ -453,8 +585,9 @@ function TBtn({ label, onClick, children, disabled }: { label: string; onClick: 
   );
 }
 
-function Cell({ html, editable, header, onCommit, label, onTab }: {
-  html: string; editable: boolean; header: boolean; onCommit: (h: string) => void; label: string; onTab: (back: boolean) => void;
+function Cell({ html, editable, header, bg, dark, onCommit, label, onTab, onMenu, onMoveRow }: {
+  html: string; editable: boolean; header: boolean; bg: string | null; dark: boolean; onCommit: (h: string) => void; label: string;
+  onTab: (back: boolean) => void; onMenu: (e: React.MouseEvent) => void; onMoveRow: (dir: -1 | 1) => void;
 }) {
   const ref = useRef<HTMLTableCellElement>(null);
   useHtml(ref, html);
@@ -465,12 +598,20 @@ function Cell({ html, editable, header, onCommit, label, onTab }: {
       contentEditable={editable}
       suppressContentEditableWarning
       lang="de"
-      className={cn("h-11 border border-foreground/40 px-2 py-1 align-top outline-none focus:bg-primary/5", header && "font-semibold bg-foreground/5")}
+      className={cn("nf-rich h-11 border border-foreground/40 px-2 py-1 align-top break-words outline-none focus:bg-primary/5", header && "font-semibold", header && !bg && "bg-foreground/5")}
+      style={bg ? { background: `color-mix(in oklab, ${bg} ${dark ? 35 : 80}%, transparent)` } : undefined}
       onPaste={pastePlain}
       onFocus={(e) => unlinkify(e.currentTarget)}
+      onContextMenu={onMenu}
       onKeyDown={(e) => {
         e.stopPropagation();
+        if (richKeys(e)) return;
         if (e.key === "Tab") { e.preventDefault(); onCommit(sanitizeHtml(e.currentTarget.innerHTML)); onTab(e.shiftKey); }
+        if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+          e.preventDefault();
+          onCommit(sanitizeHtml(e.currentTarget.innerHTML));
+          onMoveRow(e.key === "ArrowUp" ? -1 : 1);
+        }
       }}
       onBlur={(e) => {
         const h = sanitizeHtml(e.currentTarget.innerHTML);

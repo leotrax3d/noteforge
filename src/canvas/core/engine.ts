@@ -103,6 +103,8 @@ export interface EngineEvents {
   onObjects?: (objs: CanvasObj[]) => void;
   /** Textwerkzeug-Tipp oder Doppelklick/Doppeltipp auf freie Stelle (Weltkoordinaten). `free` = Alt gedrückt (kein Einrasten). */
   onTextAt?: (w: Vec, free: boolean) => void;
+  /** Textfeld/Tabelle mit dem Finger angetippt (Bildschirmkoordinaten) → dort bearbeiten. */
+  onObjTap?: (id: string, clientX: number, clientY: number) => void;
   /** Radialmenü öffnen (Bildschirmkoordinaten relativ zum Host). */
   onRadial?: (p: Vec) => void;
   /** Maus über einem Text-/Tabellenobjekt (zeigt dessen Greifbalken), sonst null. */
@@ -1286,6 +1288,13 @@ export class CanvasEngine {
           if (!this.pickAt(w)) this.events.onTextAt?.(w, e.altKey);
         } else if (this.activeType === "touch" && this.isTap()) {
           const o = this.topObjAt(this.toWorld(this.downPos.x, this.downPos.y));
+          if (o && o.kind !== "image") {
+            // Finger tippt in ein Textfeld/eine Tabelle → direkt bearbeiten (Schreibmarke an der Tippstelle)
+            const rc = this.rect ?? this.active.getBoundingClientRect();
+            this.events.onObjTap?.(o.id, rc.left + this.downPos.x, rc.top + this.downPos.y);
+            this.endPointer();
+            return;
+          }
           if (o?.kind === "image") this.hoverObj = o; // Antippen zeigt den Greifbalken
           else this.hoverObj = null;
           this.lockHover = o ? null : this.lockedAt(this.toWorld(this.downPos.x, this.downPos.y));

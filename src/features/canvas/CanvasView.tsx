@@ -24,6 +24,8 @@ import { Toolbar, type InsertKind } from "./Toolbar";
 import { SelectionMenu } from "./SelectionMenu";
 import { RadialMenu } from "./RadialMenu";
 import { ScreenshotCrop } from "./ScreenshotCrop";
+import { newTable } from "./objects/table-ops";
+import { focusCell } from "./objects/TextMenu";
 import { ObjectLayer } from "./objects/ObjectLayer";
 import { FormatBar } from "./objects/FormatBar";
 import { captureScreen, encodeImage, fileToImage, type LoadedImage } from "./objects/images";
@@ -271,11 +273,27 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
       onToast: (msg) => flash(msg),
       onAngle: setAngle,
       onHoverObj: (id) => setHoverId(id),
+      onObjTap: (id, x, y) => {
+        setEditingId(id);
+        // Nach dem Rendern (Feld jetzt bedienbar): Zelle/Text an der Tippstelle fokussieren
+        window.setTimeout(() => {
+          const hit = document.elementFromPoint(x, y)?.closest<HTMLElement>("[contenteditable=true]")
+            ?? document.querySelector<HTMLElement>(`[data-id="${id}"] [contenteditable=true]`);
+          if (!hit) return;
+          hit.focus({ preventScroll: true });
+          const r = document.caretRangeFromPoint?.(x, y);
+          if (r && hit.contains(r.startContainer)) {
+            const s = window.getSelection();
+            s?.removeAllRanges();
+            s?.addRange(r);
+          }
+        }, 40);
+      },
       onTextAt: (w, free) => {
         const pl = placeText(engine.pageSetup(), w, free, textMetrics());
         const o = makeObj<TextObj>({
           id: uid(), kind: "text", z: engine.nextZ(), x: pl.x, y: pl.y, w: 320, h: pl.lineHeight ?? 44, angle: 0,
-          data: pl.lineHeight ? { html: "", size: pl.size, lh: pl.lineHeight, padX: pl.padX } : { html: "" },
+          data: pl.lineHeight ? { html: "", size: pl.size, lh: pl.lineHeight, padX: pl.padX, auto: true } : { html: "", auto: true },
         });
         engine.addObject(o);
         setEditingId(o.id);
@@ -652,7 +670,7 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
     return () => window.removeEventListener("nf-shapes", open);
   }, []);
 
-  const onInsert = async (kind: InsertKind) => {
+  const onInsert = async (kind: InsertKind, size?: { rows: number; cols: number }) => {
     const engine = engineRef.current;
     if (!engine) return;
     if (kind === "shapes") return setShapes({ edit: null });
@@ -672,12 +690,16 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
       }
     } else if (kind === "table") {
       const c = engine.viewCenter();
-      const cells = Array.from({ length: 3 }, () => Array<string>(3).fill(""));
-      engine.addObject(makeObj<TableObj>({ id: uid(), kind: "table", z: engine.nextZ(), x: c.x - 180, y: c.y - 66, w: 360, h: 132, angle: 0, data: { cells } }));
+      const data = newTable(size?.rows ?? 3, size?.cols ?? 3);
+      const n = data.cells[0].length, w = Math.min(960, Math.max(240, n * 120)), h = 44 * data.cells.length;
+      const t = makeObj<TableObj>({ id: uid(), kind: "table", z: engine.nextZ(), x: c.x - w / 2, y: c.y - Math.min(h, 300) / 2, w, h, angle: 0, data });
+      engine.addObject(t);
       useTools.getState().setTool("text");
+      setEditingId(t.id);
+      focusCell(t.id, 0, 0);
     } else {
       const c = engine.viewCenter();
-      const o = makeObj<TextObj>({ id: uid(), kind: "text", z: engine.nextZ(), x: c.x - 160, y: c.y - 22, w: 320, h: 44, angle: 0, data: { html: "" } });
+      const o = makeObj<TextObj>({ id: uid(), kind: "text", z: engine.nextZ(), x: c.x - 160, y: c.y - 22, w: 320, h: 44, angle: 0, data: { html: "", auto: true } });
       engine.addObject(o);
       useTools.getState().setTool("text");
       setEditingId(o.id);
@@ -809,7 +831,7 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
           onZoom={(f) => (f === "reset" ? e()?.resetView() : e()?.zoomBy(f))}
           page={page}
           onPageChange={onPageChange}
-          onInsert={(k) => void onInsert(k)}
+          onInsert={(k, sz) => void onInsert(k, sz)}
         />
         {editingText && <FormatBar onDone={() => { (document.activeElement as HTMLElement | null)?.blur?.(); setEditingId(null); }} />}
         {radial && (
