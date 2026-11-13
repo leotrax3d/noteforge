@@ -996,6 +996,7 @@ export class CanvasEngine {
     }
 
     // Auswahl-Griffe haben Vorrang (Lasso-Auswahl lässt sich mit jedem Werkzeug direkt ziehen)
+    this.tapHadSel = !!this.sel;
     if (this.sel && (tool !== "pan" || this.grabTap)) {
       const h = this.hitHandle(q);
       if (h) return this.beginTransform(h, q);
@@ -1440,7 +1441,8 @@ export class CanvasEngine {
             this.endPointer();
             return;
           }
-          if (!this.pickAt(w)) this.events.onTextAt?.(w, e.altKey);
+          // Tippen ins Leere hebt eine bestehende Auswahl nur auf, statt sofort ein Textfeld anzulegen
+          if (!this.pickAt(w) && !this.tapHadSel) this.events.onTextAt?.(w, e.altKey);
         } else if (this.activeType === "touch" && this.isTap()) {
           const o = this.topObjAt(this.toWorld(this.downPos.x, this.downPos.y));
           if (o && o.kind !== "image") {
@@ -1660,6 +1662,7 @@ export class CanvasEngine {
 
   /** Aktueller Zeiger: Finger/Maus mit Zeichenwerkzeug (→ verschieben bzw. Text). */
   private grabTap = false;
+  private tapHadSel = false;
 
   private isTap() {
     return this.maxFromDown < TAP_SLOP && performance.now() - this.downT < TAP_MS;
