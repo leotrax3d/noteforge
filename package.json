@@ -29,6 +29,7 @@
     "katex": "0.16.22",
     "lucide-react": "^1.72.0",
     "mathjs": "^14.9.1",
+    "modern-screenshot": "4.6.0",
     "openchemlib": "^9.26.0",
     "pdfjs-dist": "^6.5.438",
     "perfect-freehand": "^1.2.3",

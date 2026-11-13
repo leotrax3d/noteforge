@@ -1,3 +1,4 @@
+import { GlobalBugReportDialog } from "@/features/feedback/BugReportDialog";
 import { GlobalMappingDialog } from "@/features/settings/MappingDialog";
 import { lazy, Suspense, useEffect } from "react";
 import { StartupNotices } from "@/features/update/StartupNotices";
@@ -100,6 +101,7 @@ export default function App() {
       <ShortcutsDialog open={dialog === "shortcuts"} onOpenChange={(o) => setDialog(o ? "shortcuts" : null)} />
       <StartupNotices />
       <GlobalMappingDialog />
+      <GlobalBugReportDialog />
       <CommandPalette open={dialog === "palette"} onOpenChange={(o) => setDialog(o ? "palette" : null)} />
       {!setupDone && <Suspense fallback={null}><Onboarding onDone={() => go({ view: "home" })} /></Suspense>}
     </ThemeProvider>

@@ -556,7 +556,19 @@ pub async fn moodle_connect(db: S<'_>, url: String, username: String, password: 
             if cfg.username.is_empty() || password.is_empty() {
                 return Err(IntErr::Other("Bitte Benutzername und Passwort (oder ein Token) angeben".into()));
             }
-            moodle::fetch_token(&cfg.url, &cfg.username, &password).await?
+            if let Some(h) = moodle::portal_hint(&cfg.url) {
+                return Err(IntErr::Other(h.into()));
+            }
+            match moodle::fetch_token(&cfg.url, &cfg.username, &password).await {
+                Ok(t) => t,
+                // Schulen mit Schule@BW-Login lehnen Passwörter ab → auf den Schul-Login hinweisen
+                Err(e) if matches!(moodle::login_type(&cfg.url).await, Some(2 | 3)) => {
+                    return Err(IntErr::Auth(format!(
+                        "Deine Schule meldet bei Moodle nur über den Schul-Login (Schule@BW) an – bitte „Mit Schul-Login anmelden“ wählen. ({e})"
+                    )));
+                }
+                Err(e) => return Err(e),
+            }
         }
     };
     moodle::Client::new(&cfg.url, &token)?.user_id().await?;
@@ -574,6 +586,9 @@ pub async fn moodle_connect(db: S<'_>, url: String, username: String, password: 
 pub async fn moodle_sso_connect(app: tauri::AppHandle, db: S<'_>, url: String) -> R<SyncReport> {
     use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
     let site = moodle::normalize_url(&url);
+    if let Some(h) = moodle::portal_hint(&site) {
+        return Err(IntErr::Other(h.into()));
+    }
     let passport = new_id().replace('-', "");
     let launch: tauri::Url = moodle::sso_launch_url(&site, &passport).parse().map_err(|_| IntErr::Other("Ungültige Moodle-Adresse".into()))?;
     if let Some(w) = app.get_webview_window("moodle-login") {

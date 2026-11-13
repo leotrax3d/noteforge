@@ -55,4 +55,41 @@ do $$ declare n int; begin
 end $$;
 select pg_temp.expect_fail($q$update public.bug_reports set description = 'Text nachträglich ändern'$q$, 'Admin ändert Text');
 reset role;
+
+-- 4) Screenshots und Spam-Schutz
+set role anon;
+insert into storage.objects (bucket_id, name) values ('bug-screenshots', '0123456789abcdef0123456789abcdef.jpg');
+insert into public.bug_reports (description, screenshot_path) values ('Mit Bildschirmfoto gemeldet', '0123456789abcdef0123456789abcdef.jpg');
+select pg_temp.expect_fail($q$insert into storage.objects (bucket_id, name) values ('bug-screenshots', '../böse.html')$q$, 'unsicherer Dateiname');
+select pg_temp.expect_fail($q$insert into public.bug_reports (description, screenshot_path) values ('Pfad mit Verzeichnis', 'a/../b.png')$q$, 'unsicherer Pfad');
+do $$ begin
+  if exists (select 1 from storage.objects) then raise exception 'FEHLER: anon sieht Screenshots'; end if;
+  raise notice 'ok: anon sieht keine Screenshots';
+end $$;
+set request.headers = '{"x-forwarded-for": "203.0.113.7, 10.0.0.1"}';
+do $$ declare i int; begin
+  for i in 1..5 loop insert into public.bug_reports (description) values ('Spam-Test Nummer ' || i); end loop;
+  begin
+    insert into public.bug_reports (description) values ('Spam-Test Nummer 6');
+    raise exception 'FEHLER: 6. Bericht pro Stunde erlaubt';
+  exception when sqlstate 'PT429' then raise notice 'ok: Grenze je Absender greift';
+  end;
+end $$;
+set request.headers = '{"x-forwarded-for": "198.51.100.9"}';
+insert into public.bug_reports (description) values ('Anderer Absender darf weiter');
+reset request.headers;
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+do $$ begin
+  if (select count(*) from storage.objects where bucket_id = 'bug-screenshots') <> 1 then raise exception 'FEHLER: Admin sieht Screenshot nicht'; end if;
+  if (select screenshot_path from public.bug_reports where description like 'Mit Bildschirmfoto%') is null then raise exception 'FEHLER: Pfad fehlt'; end if;
+  raise notice 'ok: Admin sieht Screenshot';
+end $$;
+select pg_temp.expect_fail($q$select client_key from public.bug_reports$q$, 'Admin liest Absender-Hash');
+reset role;
+do $$ begin
+  if (select count(distinct client_key) from public.bug_reports where client_key <> '') <> 2 then raise exception 'FEHLER: client_key'; end if;
+  if exists (select 1 from public.bug_reports where client_key like '%203.0.113%') then raise exception 'FEHLER: Klartext-IP'; end if;
+end $$;
 \echo 'Alle RLS-Tests bestanden.'

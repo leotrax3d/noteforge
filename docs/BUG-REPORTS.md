@@ -17,4 +17,6 @@
 
 Nie den `service_role`-Schlüssel verwenden – er umgeht RLS.
 
+Neue Migrationen (z. B. `…_limits_screenshots.sql`) ebenso im SQL-Editor ausführen.
+
 RLS-Tests lokal (Postgres 16 nötig): `supabase/tests/run.sh`.

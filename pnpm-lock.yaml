@@ -62,6 +62,9 @@ importers:
       mathjs:
         specifier: ^14.9.1
         version: 14.9.1
+      modern-screenshot:
+        specifier: 4.6.0
+        version: 4.6.0
       openchemlib:
         specifier: ^9.26.0
         version: 9.26.0
@@ -1531,6 +1534,9 @@ packages:
     resolution: {integrity: sha512-xhqv8Xjf+caWG3WlaPekg4v8QFOR3D5+8ycfcjMcPcnCNDgAONQLaLfyGgrggJrcHx2yUGCpACRpiD4GmXwX+Q==}
     engines: {node: '>= 18'}
     hasBin: true
+
+  modern-screenshot@4.6.0:
+    resolution: {integrity: sha512-L7osQAWpJiWY1ST1elhLRSGD5i7og5uoICqiXs38whAjWtIayp3cBMJmyML4iyJcBhRfHOyciq1g1Ft5G0QvSg==}
 
   nanoid@3.3.20:
     resolution: {integrity: sha512-uKdg2G3GNCKQn9byYOpxbGqrT2fGO5KRt5J/8b3pok8rT6qxGWF6hxMyJiEYtAf+FVyYuD9hRaDqX5uPFYJ4ZQ==}
@@ -3181,6 +3187,8 @@ snapshots:
       seedrandom: 3.0.5
       tiny-emitter: 2.1.0
       typed-function: 4.2.2
+
+  modern-screenshot@4.6.0: {}
 
   nanoid@3.3.20: {}
 

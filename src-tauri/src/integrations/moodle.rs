@@ -82,8 +82,15 @@ pub fn parse_sso_token(url: &str, site: &str, passport: &str) -> Result<String, 
 }
 
 pub fn normalize_url(input: &str) -> String {
-    let mut s = input.trim().trim_end_matches('/').to_string();
-    for suffix in ["/login/index.php", "/my", "/login"] {
+    let mut s = input.trim().split(['?', '#']).next().unwrap_or("").trim_end_matches('/').to_string();
+    // Moodle BW: Schul-Moodle liegt immer direkt auf <nummer>.moodle.bw.schule – Pfad wie /my/ oder /course/… abschneiden
+    if let Some(rest) = s.split("://").last()
+        && let Some((host, _)) = rest.split_once('/')
+        && host.ends_with(".moodle.bw.schule")
+    {
+        s = format!("https://{host}");
+    }
+    for suffix in ["/login/index.php", "/my/index.php", "/my", "/login"] {
         if let Some(x) = s.strip_suffix(suffix) {
             s = x.trim_end_matches('/').to_string();
         }
@@ -92,6 +99,13 @@ pub fn normalize_url(input: &str) -> String {
         s = format!("https://{s}");
     }
     s
+}
+
+/// Häufige Verwechslung: das Schule@BW-Portal statt der Moodle-Adresse der Schule.
+pub fn portal_hint(site: &str) -> Option<&'static str> {
+    let host = site.split("://").last()?.split('/').next()?;
+    (host == "bw.schule" || host == "www.bw.schule" || host == "moodle.bw.schule")
+        .then_some("Das ist das Schule@BW-Portal. Bitte die Moodle-Adresse deiner Schule eintragen, z. B. https://04105764160.moodle.bw.schule (steht nach der Anmeldung oben im Browser).")
 }
 
 fn ws_error(v: &Value) -> Option<IntErr> {
@@ -274,6 +288,15 @@ pub fn same_origin(base: &str, url: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn normalizes_moodle_bw_urls() {
+        assert_eq!(normalize_url("https://04105764160.moodle.bw.schule/my/"), "https://04105764160.moodle.bw.schule");
+        assert_eq!(normalize_url("04105764160.moodle.bw.schule/course/view.php?id=3"), "https://04105764160.moodle.bw.schule");
+        assert_eq!(normalize_url("https://moodle.example.de/schule/login/index.php"), "https://moodle.example.de/schule");
+        assert!(portal_hint(&normalize_url("https://bw.schule/login")).is_some());
+        assert!(portal_hint("https://04105764160.moodle.bw.schule").is_none());
+    }
 
     #[test]
     fn sso_token_signature() {

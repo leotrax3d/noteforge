@@ -1,7 +1,8 @@
 // Befehlspalette (Strg+K): Navigation, Fächer, Werkzeuge und Aktionen per Tastatur oder Stift.
+import { useBugReport } from "@/features/feedback/bug-report";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  BookCheck, BookOpen, Calculator, CalendarDays, Eraser, Focus, GraduationCap, Hand, Highlighter, Home, Keyboard, Lasso,
+  Bug, BookCheck, BookOpen, Calculator, CalendarDays, Eraser, Focus, GraduationCap, Hand, Highlighter, Home, Keyboard, Lasso,
   LineChart, Monitor, Moon, PenTool, RefreshCw, Search, Settings, Sun, Tags, Type, Wand2,
 } from "lucide-react";
 import { MoleculeIcon } from "@/features/chem/MoleculeIcon";
@@ -65,6 +66,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     const tool = (id: string, label: string, icon: ReactNode, keys: string | undefined, fn: () => void): Command =>
       ({ id: `tool:${id}`, label, group: "Werkzeug", icon, keys, run: fn, words: "stift werkzeug" });
     return [
+      { id: "app:bug", label: "Bug melden", group: "App", icon: <Bug />, run: () => void useBugReport.getState().show(), words: "fehler problem melden feedback" },
       { id: "nav:home", label: "Startseite", group: "Gehe zu", icon: <Home />, keys: "Alt+Pos1", run: () => go({ view: "home" }) },
       { id: "nav:calendar", label: "Kalender", group: "Gehe zu", icon: <CalendarDays />, run: () => go({ view: "calendar" }), words: "termine stundenplan woche" },
       { id: "nav:homework", label: "Hausaufgaben", group: "Gehe zu", icon: <BookCheck />, keys: "Alt+H", run: () => go({ view: "homework" }) },

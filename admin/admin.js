@@ -6,6 +6,8 @@ const $ = (s) => document.querySelector(s);
 const views = { setup: $("#setup"), login: $("#login"), denied: $("#denied"), app: $("#app") };
 const show = (v) => { for (const [k, el] of Object.entries(views)) el.hidden = k !== v; };
 let reports = [];
+const COLS = "id, created_at, updated_at, description, status, app_version, platform, screenshot_path";
+const BUCKET = "bug-screenshots";
 let filter = { status: "all", query: "" };
 
 function toast(msg, bad = false) {
@@ -35,7 +37,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 
   async function load() {
     $("#list").setAttribute("aria-busy", "true");
-    const { data, error } = await sb.from("bug_reports").select("*").order("created_at", { ascending: false });
+    const { data, error } = await sb.from("bug_reports").select(COLS).order("created_at", { ascending: false });
     $("#list").removeAttribute("aria-busy");
     if (error) return toast(errorText(error), true);
     reports = data;
@@ -62,6 +64,11 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       sel.setAttribute("aria-label", `Status des Berichts vom ${fmtDate(r.created_at)}`);
       sel.addEventListener("change", () => void setStatus(r, sel.value, sel));
       li.querySelector(".del").addEventListener("click", () => void remove(r));
+      if (r.screenshot_path) {
+        const a = li.querySelector(".shot");
+        a.hidden = false;
+        a.addEventListener("click", () => void openShot(r));
+      }
       list.append(li);
     }
   }
@@ -75,10 +82,21 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     toast(`Status: ${STATUS[status]}`);
   }
 
+  async function openShot(r) {
+    const w = window.open("", "_blank"); // sofort öffnen, sonst blockt der Popup-Blocker
+    const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(r.screenshot_path, 300);
+    if (error) { w?.close(); return toast(errorText(error), true); }
+    if (w) w.location.href = data.signedUrl; else location.href = data.signedUrl;
+  }
+
   async function remove(r) {
     if (!confirm("Diesen Bericht endgültig löschen?")) return;
     const { error, count } = await sb.from("bug_reports").delete({ count: "exact" }).eq("id", r.id);
     if (error || count === 0) return toast(error ? errorText(error) : "Keine Berechtigung.", true);
+    if (r.screenshot_path) {
+      const { error: e2 } = await sb.storage.from(BUCKET).remove([r.screenshot_path]);
+      if (e2) { reports = reports.filter((x) => x.id !== r.id); render(); return toast(`Bericht gelöscht, Bildschirmfoto nicht: ${errorText(e2)}`, true); }
+    }
     reports = reports.filter((x) => x.id !== r.id);
     render();
     toast("Bericht gelöscht");

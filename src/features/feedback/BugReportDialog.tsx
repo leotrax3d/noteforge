@@ -4,16 +4,23 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { BUG_MAX, submitBugReport, validateBugReport } from "./bug-report";
+import { BUG_MAX, submitBugReport, useBugReport, validateBugReport } from "./bug-report";
 
 type State = { kind: "idle" } | { kind: "sending" } | { kind: "ok"; msg: string } | { kind: "error"; msg: string };
 
-/** „Bug melden“: Beschreibung eingeben, absenden, Erfolg/Fehler anzeigen. */
-export function BugReportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+/** Global eingehängt; öffnen über `useBugReport.getState().show()` (fotografiert vorher die Ansicht). */
+export function GlobalBugReportDialog() {
+  const { open, shot, close } = useBugReport();
+  return <BugReportDialog open={open} shot={shot} onOpenChange={(o) => { if (!o) close(); }} />;
+}
+
+/** „Bug melden“: Beschreibung eingeben, optional Bildschirmfoto anhängen, absenden, Erfolg/Fehler anzeigen. */
+export function BugReportDialog({ open, onOpenChange, shot = null }: { open: boolean; onOpenChange: (o: boolean) => void; shot?: string | null }) {
+  const [attach, setAttach] = useState(false);
   const [text, setText] = useState("");
   const [state, setState] = useState<State>({ kind: "idle" });
   const [touched, setTouched] = useState(false);
-  useEffect(() => { if (open) { setState((s) => (s.kind === "ok" ? { kind: "idle" } : s)); setTouched(false); } }, [open]);
+  useEffect(() => { if (open) { setAttach(false); setState((s) => (s.kind === "ok" ? { kind: "idle" } : s)); setTouched(false); } }, [open]);
 
   const invalid = validateBugReport(text);
   const sending = state.kind === "sending";
@@ -25,7 +32,7 @@ export function BugReportDialog({ open, onOpenChange }: { open: boolean; onOpenC
     if (invalid || sending) return;
     setState({ kind: "sending" });
     try {
-      const msg = await submitBugReport(text);
+      const msg = await submitBugReport(text, attach ? shot : null);
       setState({ kind: "ok", msg });
       setText("");
     } catch (err) {
@@ -57,6 +64,13 @@ export function BugReportDialog({ open, onOpenChange }: { open: boolean; onOpenC
               <span className={cn(touched && invalid && "text-destructive")}>{touched && invalid ? invalid : "Keine Passwörter oder persönlichen Daten eintragen."}</span>
               <span className={cn("tabular-nums", len > BUG_MAX && "text-destructive")}>{len}/{BUG_MAX}</span>
             </div>
+            {shot && (
+              <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border p-2 text-sm">
+                <input type="checkbox" className="size-5 shrink-0" checked={attach} disabled={sending} onChange={(e) => setAttach(e.target.checked)} data-testid="bug-attach" />
+                <span className="flex-1">Bildschirmfoto anhängen<span className="block text-xs text-muted-foreground">Zeigt die Ansicht vor dem Öffnen dieses Fensters – prüfe, ob private Notizen zu sehen sind.</span></span>
+                <img src={shot} alt="Vorschau des Bildschirmfotos" className="h-16 w-24 shrink-0 rounded border object-cover object-top" />
+              </label>
+            )}
             {state.kind === "error" && <p role="alert" data-testid="bug-error" className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">{state.msg}</p>}
           </form>
         )}
