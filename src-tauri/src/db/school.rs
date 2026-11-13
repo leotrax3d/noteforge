@@ -25,6 +25,13 @@ pub struct Homework {
     pub created_at: i64,
     #[serde(default)]
     pub updated_at: i64,
+    /// WebUntis: Originalfach (Kurz- oder Langname), Ausgabedatum, Lehrkraft – nur lesend.
+    #[serde(default)]
+    pub untis_subject: String,
+    #[serde(default)]
+    pub assigned_at: Option<i64>,
+    #[serde(default)]
+    pub teacher: String,
 }
 
 fn manual() -> String {
@@ -32,6 +39,7 @@ fn manual() -> String {
 }
 
 const HW_COLS: &str = "id, subject_id, title, note, due, done_at, source, url, created_at, updated_at";
+const HW_SELECT: &str = "id, subject_id, title, note, due, done_at, source, url, created_at, updated_at, untis_subject, assigned_at, teacher";
 
 fn hw_row(r: &Row) -> rusqlite::Result<Homework> {
     Ok(Homework {
@@ -45,13 +53,16 @@ fn hw_row(r: &Row) -> rusqlite::Result<Homework> {
         url: r.get(7)?,
         created_at: r.get(8)?,
         updated_at: r.get(9)?,
+        untis_subject: r.get(10)?,
+        assigned_at: r.get(11)?,
+        teacher: r.get(12)?,
     })
 }
 
 /// Offene Aufgaben (nach Fälligkeit, ohne Termin zuletzt) plus erledigte seit `done_since`.
 pub fn list_homework(conn: &Connection, done_since: i64) -> Result<Vec<Homework>> {
     let mut st = conn.prepare_cached(&format!(
-        "SELECT {HW_COLS} FROM homework WHERE dismissed=0 AND (done_at IS NULL OR done_at >= ?1)
+        "SELECT {HW_SELECT} FROM homework WHERE dismissed=0 AND (done_at IS NULL OR done_at >= ?1)
          ORDER BY done_at IS NOT NULL, due IS NULL, due, created_at"
     ))?;
     let rows = st.query_map([done_since], hw_row)?;
@@ -101,7 +112,7 @@ pub fn save_homework(conn: &Connection, mut h: Homework) -> Result<Homework> {
 }
 
 pub fn get_homework(conn: &Connection, id: &str) -> Result<Homework> {
-    conn.query_row(&format!("SELECT {HW_COLS} FROM homework WHERE id=?1"), [id], hw_row)
+    conn.query_row(&format!("SELECT {HW_SELECT} FROM homework WHERE id=?1"), [id], hw_row)
         .optional()?
         .ok_or_else(|| Error::NotFound(format!("Hausaufgabe {id}")))
 }
@@ -358,6 +369,7 @@ mod tests {
         Homework {
             id: String::new(), subject_id: None, title: title.into(), note: String::new(), due, done_at: None,
             source: "manual".into(), url: String::new(), created_at: 0, updated_at: 0,
+            untis_subject: String::new(), assigned_at: None, teacher: String::new(),
         }
     }
 

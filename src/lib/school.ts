@@ -15,6 +15,10 @@ export interface Homework {
   url: string;
   createdAt: number;
   updatedAt: number;
+  /** WebUntis: Originalfach (Kurz-/Langname), Ausgabedatum (ms), Lehrkraft. */
+  untisSubject?: string;
+  assignedAt?: number | null;
+  teacher?: string;
 }
 export type GradeKind = "written" | "oral";
 export type GradeScale = "grades" | "points";
@@ -256,3 +260,22 @@ export const school: SchoolBackend = inTauri ? tauri : new MemorySchool();
 export const emptyHomework = (subjectId: string | null = null): Homework => ({
   id: "", subjectId, title: "", note: "", due: null, doneAt: null, source: "manual", url: "", createdAt: 0, updatedAt: 0,
 });
+
+
+/**
+ * Anzeigetext einer Hausaufgabe ohne Dopplungen: Der Titel ist oft die (gekürzte) erste Zeile der Beschreibung.
+ * `rest` = was die Beschreibung über den Titel hinaus enthält, `full` = vollständiger Text zum Aufklappen
+ * (inkl. erster Zeile, falls der Titel gekürzt ist), `truncated` = Titel ist gekürzt.
+ */
+export function homeworkText(h: Pick<Homework, "title" | "note">): { title: string; rest: string; full: string; truncated: boolean } {
+  const title = h.title.trim();
+  const note = h.note.trim();
+  const base = title.replace(/(…|\.\.\.)$/, "").trim();
+  if (!note || note === title) return { title, rest: "", full: "", truncated: false };
+  const nl = note.indexOf("\n");
+  const first = (nl < 0 ? note : note.slice(0, nl)).trim();
+  const after = nl < 0 ? "" : note.slice(nl + 1).trim();
+  if (first === title) return { title, rest: after, full: after, truncated: false };
+  if (base && first.startsWith(base)) return { title, rest: after, full: note, truncated: true };
+  return { title, rest: note, full: note, truncated: false };
+}

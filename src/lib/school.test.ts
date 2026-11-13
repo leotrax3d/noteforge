@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  MemorySchool, dueLabel, emptyHomework, fmtGrade, gradeLabel, neededGrade, overallAverage, parseGrade, subjectAverage,
+  MemorySchool, dueLabel, homeworkText, emptyHomework, fmtGrade, gradeLabel, neededGrade, overallAverage, parseGrade, subjectAverage,
   type Grade,
 } from "./school";
 
@@ -82,5 +82,20 @@ describe("Hausaufgaben", () => {
     await expect(s.saveGrade(g("written", 0))).rejects.toThrow();
     await s.setGradeScale("points");
     expect((await s.listGrades())[0].value).toBe(11);
+  });
+});
+
+describe("homeworkText", () => {
+  it("doppelt den Titel nicht in der Beschreibung", () => {
+    expect(homeworkText({ title: "S. 3", note: "S. 3" })).toEqual({ title: "S. 3", rest: "", full: "", truncated: false });
+    expect(homeworkText({ title: "S. 3", note: "S. 3\nalle Aufgaben" })).toMatchObject({ rest: "alle Aufgaben", full: "alle Aufgaben", truncated: false });
+  });
+  it("erkennt gekürzte Titel (neu mit „…“ und alt mitten im Wort)", () => {
+    const note = "Lies das Kapitel über die Weimarer Republik\nFragen 1–5";
+    expect(homeworkText({ title: "Lies das Kapitel über…", note })).toMatchObject({ rest: "Fragen 1–5", full: note, truncated: true });
+    expect(homeworkText({ title: "Lies das Kapitel über die Wei", note })).toMatchObject({ truncated: true, full: note });
+  });
+  it("lässt eigene Notizen unverändert", () => {
+    expect(homeworkText({ title: "Referat", note: "Folien mitbringen" })).toMatchObject({ rest: "Folien mitbringen", truncated: false });
   });
 });

@@ -30,7 +30,7 @@ import { useNow } from "@/lib/clock";
 import { runningLesson } from "@/lib/timetable";
 import { SchoolWidgets } from "./SchoolWidgets";
 import { AccountsDialog } from "@/features/settings/AccountsDialog";
-import { MappingDialog } from "@/features/settings/MappingDialog";
+import { useMappingDialog, useSyncRev } from "@/lib/integrations";
 
 export function useDragSensors() {
   return useSensors(
@@ -53,12 +53,12 @@ export function HomePage() {
   const cloudRunning = useCloudRev((s) => s.running);
   const cloudError = useCloudRev((s) => s.error);
   const setDialog = usePrefs((s) => s.setDialog);
-  const { data: subjects, setData, error, reload } = useAsync(() => api.listSubjects(), [cloudRev]);
+  const syncRev = useSyncRev((s) => s.rev);
+  const { data: subjects, setData, error, reload } = useAsync(() => api.listSubjects(), [cloudRev, syncRev]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Subject | null>(null);
   const [deleting, setDeleting] = useState<Subject | null>(null);
   const [accounts, setAccounts] = useState(false);
-  const [mapping, setMapping] = useState(false);
   const sensors = useDragSensors();
   const now = useNow();
   useAutoSync();
@@ -156,8 +156,7 @@ export function HomePage() {
         initial={editing ?? undefined}
         onSubmit={(v) => editing && void mutate(() => api.updateSubject(editing.id, v), reload)}
       />
-      <AccountsDialog open={accounts} onOpenChange={setAccounts} onMapping={() => { setAccounts(false); setMapping(true); }} />
-      <MappingDialog open={mapping} onOpenChange={(o) => { setMapping(o); if (!o) void reload(); }} />
+      <AccountsDialog open={accounts} onOpenChange={setAccounts} onMapping={() => { setAccounts(false); useMappingDialog.getState().show(); }} />
       <ConfirmDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, BellRing, CalendarClock, CalendarX, ExternalLink, MoreVertical, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowLeft, BellRing, CalendarClock, CalendarX, ChevronDown, ExternalLink, UserRound, MoreVertical, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { api, inTauri } from "@/lib/api";
-import { dueLabel, emptyHomework, school, type Homework } from "@/lib/school";
+import { dueLabel, emptyHomework, homeworkText, school, type Homework } from "@/lib/school";
 import { integrations, syncNow, useSyncRev } from "@/lib/integrations";
 import { homeworkHint, type HomeworkHint } from "@/lib/timetable";
 import { useNow } from "@/lib/clock";
@@ -18,7 +18,7 @@ import { useAsync } from "@/lib/use-async";
 import { cn } from "@/lib/utils";
 import { useNav } from "@/store/nav";
 import { DAY, fromInputs, toDateInput } from "@/features/calendar/dates";
-import { DoneToggle, SubjectSelect } from "./common";
+import { DoneToggle, SubjectBadge, SubjectSelect } from "./common";
 
 const SHOW_DONE_DAYS = 14;
 
@@ -54,7 +54,8 @@ export function openLink(url: string) {
 /** Hausaufgaben-Liste: eigene Aufgaben plus übernommene Moodle-Abgaben. */
 export function HomeworkPage({ subjectId }: { subjectId?: string }) {
   const go = useNav((s) => s.go);
-  const { data: subjects } = useAsync(() => api.listSubjects(), []);
+  const rev = useSyncRev((s) => s.rev);
+  const { data: subjects } = useAsync(() => api.listSubjects(), [rev]);
   const { data, setData, reload, error } = useHomework();
   const [filter, setFilter] = useState<string | null>(subjectId ?? null);
   const [showDone, setShowDone] = useState(true);
@@ -171,24 +172,39 @@ export function HomeworkPage({ subjectId }: { subjectId?: string }) {
   );
 }
 
+const fmtDay = (t: number) => new Date(t).toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "numeric" });
+
 export function HomeworkRow({ h, subject, now, hint, onToggle, onEdit, onDelete, compact }: {
   h: Homework; subject?: Subject; now: number; hint?: HomeworkHint; onToggle: (done: boolean) => void;
   onEdit?: () => void; onDelete?: () => void; compact?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const due = dueLabel(h.due, now);
   const done = h.doneAt != null;
+  const text = homeworkText(h);
+  const canExpand = !compact && (text.truncated || text.full.length > 0);
+  const descId = `hw-text-${h.id}`;
   return (
-    <li className="flex items-center gap-1 px-1 py-0.5" data-testid="homework">
+    <li className="flex items-start gap-1 px-1 py-0.5" data-testid="homework">
       <DoneToggle done={done} onChange={onToggle} label={`${h.title} erledigt`} color={subject?.color} />
-      <button type="button" disabled={!onEdit} onClick={onEdit} className="min-h-11 min-w-0 flex-1 rounded-md px-1 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
-        <div className={cn("truncate", done && "text-muted-foreground line-through")}>{h.title}</div>
-        <div className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
-          {subject && <span className="flex items-center gap-1"><span className="size-2 rounded-full" style={{ background: subject.color }} />{subject.name}</span>}
-          {!done && (
-            <span className={cn("flex items-center gap-1", due.tone === "overdue" && "font-medium text-destructive", due.tone === "soon" && "text-amber-700 dark:text-amber-400")}>
-              <CalendarClock className="size-3.5" />{due.text}
+      <div className="min-w-0 flex-1 py-1">
+        <button type="button" disabled={!onEdit} onClick={onEdit} className="block min-h-9 w-full rounded-md px-1 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+          <span className={cn("block break-words", compact ? "line-clamp-1" : "line-clamp-2", done && "text-muted-foreground line-through")} title={text.truncated ? undefined : h.title}>{h.title}</span>
+          {!compact && !expanded && text.rest && <span className="line-clamp-1 break-words text-sm text-muted-foreground">{text.rest}</span>}
+        </button>
+        {expanded && (
+          <p id={descId} data-testid="hw-fulltext" className="mx-1 mt-1 whitespace-pre-wrap break-words rounded-md bg-muted/50 p-2 text-sm">{text.full}</p>
+        )}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-sm text-muted-foreground">
+          <SubjectBadge subject={subject} untis={h.source === "webuntis" ? h.untisSubject || null : null} />
+          {!done && h.due != null && (
+            <span className={cn("flex items-center gap-1", due.tone === "overdue" && "font-medium text-destructive", due.tone === "soon" && "text-amber-700 dark:text-amber-400")}
+              title={`Fällig: ${fmtDay(h.due)}`}>
+              <CalendarClock className="size-3.5" aria-hidden />{due.text}
             </span>
           )}
+          {!compact && h.assignedAt != null && <span data-testid="hw-assigned">Aufgegeben {fmtDay(h.assignedAt)}</span>}
+          {!compact && h.teacher && <span data-testid="hw-teacher" className="flex items-center gap-1"><UserRound className="size-3.5" aria-hidden />{h.teacher}</span>}
           {hint?.dueNext && (
             <span data-testid="hw-due-next" className="flex items-center gap-1 rounded bg-amber-100 px-1.5 text-xs font-medium text-amber-900 dark:bg-amber-900/50 dark:text-amber-100">
               <BellRing className="size-3" aria-hidden /> Fällig in der nächsten Stunde
@@ -201,9 +217,15 @@ export function HomeworkRow({ h, subject, now, hint, onToggle, onEdit, onDelete,
           )}
           {h.source === "moodle" && <span className="rounded bg-muted px-1.5 text-xs">Moodle</span>}
           {h.source === "webuntis" && <span className="rounded bg-muted px-1.5 text-xs">WebUntis</span>}
-          {!compact && h.note && <span className="truncate">{h.note.split("\n")[0]}</span>}
         </div>
-      </button>
+      </div>
+      {canExpand && (
+        <Button variant="ghost" size="icon" aria-expanded={expanded} aria-controls={expanded ? descId : undefined}
+          aria-label={expanded ? "Text einklappen" : "Ganzen Text zeigen"} title={expanded ? "Text einklappen" : "Ganzen Text zeigen"}
+          onClick={() => setExpanded(!expanded)}>
+          <ChevronDown className={cn("transition-transform", expanded && "rotate-180")} />
+        </Button>
+      )}
       {!compact && h.url && (
         <Button variant="ghost" size="icon" aria-label="In Moodle öffnen" title="In Moodle öffnen" onClick={() => openLink(h.url)}><ExternalLink /></Button>
       )}
@@ -249,7 +271,13 @@ function HomeworkDialog({ item, subjects, onClose, onSave }: {
               <div className="grid gap-1"><Label htmlFor="hwd-due">Bis</Label>
                 <Input id="hwd-due" type="date" className="h-11" disabled={moodle} value={date} onChange={(e) => setDate(e.target.value)} /></div>
             </div>
-            <div className="grid gap-1"><Label htmlFor="hwd-note">Notiz</Label>
+            {f.source === "webuntis" && (f.untisSubject || f.teacher || f.assignedAt != null) && (
+              <p className="text-sm text-muted-foreground">
+                {[f.untisSubject && `WebUntis-Fach: ${f.untisSubject}`, f.teacher && `Lehrkraft: ${f.teacher}`,
+                  f.assignedAt != null && `aufgegeben ${fmtDay(f.assignedAt)}`].filter(Boolean).join(" · ")}
+              </p>
+            )}
+            <div className="grid gap-1"><Label htmlFor="hwd-note">{moodle ? "Beschreibung / Notiz" : "Notiz"}</Label>
               <textarea id="hwd-note" rows={4} className="rounded-md border bg-background p-2 text-base outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></div>
             {err && <p role="alert" className="text-sm text-destructive">{err}</p>}

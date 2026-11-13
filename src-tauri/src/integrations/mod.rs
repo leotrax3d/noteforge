@@ -182,6 +182,70 @@ fn mapped_subject(conn: &Connection, untis_id: Option<i64>, name: &str) -> R<Opt
         .optional()?)
 }
 
+/// Fachname für eine Prüfung: gemeldeter Name oder Kurzname aus dem Stundenplan.
+fn untis_label(conn: &Connection, untis_id: Option<i64>, name: &str) -> R<String> {
+    if !name.is_empty() {
+        return Ok(name.to_string());
+    }
+    let Some(id) = untis_id else { return Ok(String::new()) };
+    Ok(conn
+        .query_row("SELECT subject_name FROM lesson WHERE untis_subject_id=?1 LIMIT 1", [id], |r| r.get(0))
+        .optional()?
+        .unwrap_or_default())
+}
+
+/// Ordnet einem WebUntis-Fach ein Noteforge-Fach zu (oder hebt die Zuordnung auf, `subject_id = None`).
+/// Ein Noteforge-Fach hat höchstens ein WebUntis-Fach; bestehende Hausaufgaben und Prüfungen dieses
+/// WebUntis-Fachs ohne Fach oder mit dem bisher automatisch zugeordneten Fach werden umgehängt –
+/// von Hand gewählte andere Fächer bleiben.
+pub fn set_untis_mapping_db(conn: &mut Connection, untis_id: i64, subject_id: Option<&str>) -> R<usize> {
+    let tx = conn.transaction()?;
+    let old: Vec<String> = {
+        let mut st = tx.prepare("SELECT id FROM subject WHERE webuntis_subject_id=?1")?;
+        let rows = st.query_map([untis_id], |r| r.get(0))?;
+        rows.collect::<rusqlite::Result<_>>()?
+    };
+    tx.execute("UPDATE subject SET webuntis_subject_id=NULL WHERE webuntis_subject_id=?1", [untis_id])?;
+    if let Some(sid) = subject_id
+        && tx.execute("UPDATE subject SET webuntis_subject_id=?2 WHERE id=?1", params![sid, untis_id])? == 0
+    {
+        return Err(crate::db::Error::NotFound(format!("Fach {sid}")).into());
+    }
+    let names: Vec<String> = {
+        let mut st = tx.prepare(
+            "SELECT DISTINCT n FROM (SELECT subject_name AS n FROM lesson WHERE untis_subject_id=?1
+               UNION SELECT subject_long FROM lesson WHERE untis_subject_id=?1) WHERE n <> ''",
+        )?;
+        let rows = st.query_map([untis_id], |r| r.get(0))?;
+        rows.collect::<rusqlite::Result<_>>()?
+    };
+    let old_json = serde_json::to_string(&old).unwrap_or_else(|_| "[]".into());
+    let now = now_ms();
+    let mut n = 0;
+    for name in &names {
+        n += tx.execute(
+            "UPDATE homework SET subject_id=?1, updated_at=?4 WHERE source='webuntis' AND untis_subject=?2 COLLATE NOCASE
+               AND (subject_id IS NULL OR subject_id IN (SELECT value FROM json_each(?3)))
+               AND subject_id IS NOT ?1",
+            params![subject_id, name, old_json, now],
+        )?;
+        n += tx.execute(
+            "UPDATE event SET subject_id=?1 WHERE source='webuntis' AND untis_subject=?2 COLLATE NOCASE
+               AND (subject_id IS NULL OR subject_id IN (SELECT value FROM json_each(?3)))
+               AND subject_id IS NOT ?1",
+            params![subject_id, name, old_json],
+        )?;
+    }
+    tx.commit()?;
+    refresh_pending_grades(conn)?;
+    Ok(n)
+}
+
+#[tauri::command]
+pub fn set_untis_mapping(db: S<'_>, untis_id: i64, subject_id: Option<String>) -> R<usize> {
+    set_untis_mapping_db(&mut db.conn(), untis_id, subject_id.as_deref())
+}
+
 /// Prüfungen als Termine (Quelle „webuntis“, Erinnerung am Vortag). Eigene Notiz/Erinnerung bleibt;
 /// im Zeitraum nicht mehr gemeldete Prüfungen werden entfernt.
 pub fn store_exams(conn: &mut Connection, from: i64, to: i64, exams: &[webuntis::Exam]) -> R<usize> {
@@ -192,15 +256,15 @@ pub fn store_exams(conn: &mut Connection, from: i64, to: i64, exams: &[webuntis:
         let subject = mapped_subject(&tx, e.subject_id, &e.subject)?;
         let title = if e.title.is_empty() { reminders_label(e.kind).to_string() } else { e.title.clone() };
         tx.execute(
-            r#"INSERT INTO event (id, subject_id, type, title, start, "end", note, source, remind_before, external_id, updated_at)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'webuntis', 1440, ?8, ?9)
+            r#"INSERT INTO event (id, subject_id, type, title, start, "end", note, source, remind_before, external_id, updated_at, untis_subject)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'webuntis', 1440, ?8, ?9, ?10)
                ON CONFLICT(external_id) WHERE external_id IS NOT NULL DO UPDATE SET
-                 type=excluded.type, title=excluded.title, "end"=excluded."end",
+                 type=excluded.type, title=excluded.title, "end"=excluded."end", untis_subject=excluded.untis_subject,
                  subject_id=COALESCE(excluded.subject_id, event.subject_id),
                  note=CASE WHEN event.note='' THEN excluded.note ELSE event.note END,
                  notified = CASE WHEN event.start=excluded.start THEN event.notified ELSE 0 END,
                  start=excluded.start"#,
-            params![new_id(), subject, e.kind, title, e.start, e.end, e.text, ext, now_ms()],
+            params![new_id(), subject, e.kind, title, e.start, e.end, e.text, ext, now_ms(), untis_label(&tx, e.subject_id, &e.subject)?],
         )?;
         keep.push(ext);
     }
@@ -231,20 +295,21 @@ pub fn store_untis_homework(conn: &mut Connection, from: i64, to: i64, hws: &[we
     for h in hws {
         let id = format!("untis:{}", h.id);
         let subject = mapped_subject(&tx, None, &h.subject)?;
-        let first = h.text.lines().next().unwrap_or("").trim();
-        let title: String = if first.is_empty() { "Hausaufgabe".into() } else { first.chars().take(120).collect() };
+        let title = webuntis::homework_title(&h.text);
         let note = if h.text.trim() == title { String::new() } else { h.text.trim().to_string() };
         tx.execute(
-            "INSERT INTO homework (id, subject_id, title, note, due, done_at, source, url, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'webuntis', '', ?7, ?7)
+            "INSERT INTO homework (id, subject_id, title, note, due, done_at, source, url, created_at, updated_at,
+                                   untis_subject, assigned_at, teacher)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'webuntis', '', ?7, ?7, ?8, ?9, ?10)
              ON CONFLICT(id) DO UPDATE SET
                title=excluded.title, due=excluded.due,
                subject_id=COALESCE(homework.subject_id, excluded.subject_id),
-               note=CASE WHEN homework.note='' THEN excluded.note ELSE homework.note END,
+               note=CASE WHEN homework.note='' OR homework.note=homework.title THEN excluded.note ELSE homework.note END,
                done_at=COALESCE(homework.done_at, excluded.done_at),
+               untis_subject=excluded.untis_subject, assigned_at=excluded.assigned_at, teacher=excluded.teacher,
                updated_at=CASE WHEN homework.title IS excluded.title AND homework.due IS excluded.due
                                 THEN homework.updated_at ELSE excluded.updated_at END",
-            params![id, subject, title, note, h.due, h.completed.then_some(now), now],
+            params![id, subject, title, note, h.due, h.completed.then_some(now), now, h.subject, h.assigned, h.teacher],
         )?;
         keep.push(id);
     }
@@ -700,7 +765,7 @@ mod tests {
         assert_eq!(refresh_pending_grades(&c).unwrap(), 1);
         assert_eq!(crate::db::school::list_pending_grades(&c).unwrap()[0].id, "pending:untis-exam:1");
 
-        let hw = |id, done| webuntis::UntisHomework { id, due: now_ms() + 86_400_000, subject: "Mathematik".into(), text: "S. 3\nalle".into(), completed: done };
+        let hw = |id, done| webuntis::UntisHomework { id, due: now_ms() + 86_400_000, assigned: Some(0), subject: "Mathematik".into(), teacher: "Mül".into(), text: "S. 3\nalle".into(), completed: done };
         store_untis_homework(&mut c, 0, i64::MAX, &[hw(1, false), hw(2, true)]).unwrap();
         let l = crate::db::school::list_homework(&c, 0).unwrap();
         assert_eq!(l.len(), 2);
@@ -710,6 +775,44 @@ mod tests {
         crate::db::school::set_homework_done(&c, "untis:1", true).unwrap();
         store_untis_homework(&mut c, 0, i64::MAX, &[hw(1, false)]).unwrap();
         assert!(crate::db::school::get_homework(&c, "untis:1").unwrap().done_at.is_some(), "eigener Erledigt-Status bleibt");
+        let h1 = crate::db::school::get_homework(&c, "untis:1").unwrap();
+        assert_eq!((h1.untis_subject.as_str(), h1.teacher.as_str(), h1.assigned_at), ("Mathematik", "Mül", Some(0)));
+    }
+
+    #[test]
+    fn untis_mapping_relinks_existing_items() {
+        let db = Db::open_in_memory().unwrap();
+        let mut c = db.conn();
+        let m = repo::create_subject(&c, "Mathe", "#f00", "calc").unwrap();
+        let other = repo::create_subject(&c, "Physik", "#00f", "atom").unwrap();
+        store_lessons(&mut c, 0, 1000, &[period(1, 100, Some(7))]).unwrap();
+        let hw = |id| webuntis::UntisHomework {
+            id, due: now_ms() + 86_400_000, assigned: None, subject: "M".into(), teacher: String::new(), text: "AB".into(), completed: false,
+        };
+        store_untis_homework(&mut c, 0, i64::MAX, &[hw(1), hw(2)]).unwrap();
+        let ex = webuntis::Exam { id: 9, start: 500, end: 510, subject_id: Some(7), subject: String::new(), kind: "test", title: "Test".into(), text: String::new() };
+        store_exams(&mut c, 0, 10_000, &[ex]).unwrap();
+        let h1 = crate::db::school::get_homework(&c, "untis:1").unwrap();
+        assert_eq!((h1.subject_id, h1.untis_subject.as_str()), (None, "M"), "ohne Zuordnung: nicht zugeordnet");
+        // Nutzer legt Aufgabe 2 von Hand auf Physik
+        c.execute("UPDATE homework SET subject_id=?1 WHERE id='untis:2'", [&other.id]).unwrap();
+
+        set_untis_mapping_db(&mut c, 7, Some(&m.id)).unwrap();
+        let sub = |c: &Connection, id: &str| crate::db::school::get_homework(c, id).unwrap().subject_id;
+        assert_eq!(sub(&c, "untis:1").as_deref(), Some(m.id.as_str()));
+        assert_eq!(sub(&c, "untis:2").as_deref(), Some(other.id.as_str()), "Handauswahl bleibt");
+        assert_eq!(repo::list_events(&c, 0, i64::MAX).unwrap()[0].subject_id.as_deref(), Some(m.id.as_str()));
+        assert_eq!(list_lessons_db(&c, 0, 1000).unwrap()[0].subject_id.as_deref(), Some(m.id.as_str()));
+
+        // Umhängen auf ein neues Fach zieht automatisch zugeordnete Einträge mit, alte Zuordnung fällt weg
+        let neu = repo::create_subject(&c, "Mathematik LK", "#0f0", "calc").unwrap();
+        set_untis_mapping_db(&mut c, 7, Some(&neu.id)).unwrap();
+        assert_eq!(sub(&c, "untis:1").as_deref(), Some(neu.id.as_str()));
+        assert_eq!(repo::get_subject(&c, &m.id).unwrap().webuntis_subject_id, None);
+        // Aufheben: Einträge werden wieder „nicht zugeordnet“
+        set_untis_mapping_db(&mut c, 7, None).unwrap();
+        assert_eq!(sub(&c, "untis:1"), None);
+        assert!(set_untis_mapping_db(&mut c, 7, Some("gibts-nicht")).is_err());
     }
 
     #[test]

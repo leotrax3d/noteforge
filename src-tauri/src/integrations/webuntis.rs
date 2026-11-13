@@ -125,7 +125,11 @@ pub struct UntisHomework {
     pub id: i64,
     /// Fälligkeitstag 0:00 (Ortszeit)
     pub due: i64,
+    /// Ausgabetag 0:00 (Ortszeit), falls gemeldet
+    pub assigned: Option<i64>,
     pub subject: String,
+    /// Lehrkraft (Kürzel/Name), falls gemeldet
+    pub teacher: String,
     pub text: String,
     pub completed: bool,
 }
@@ -194,14 +198,25 @@ pub fn parse_exams_rpc(v: &Value, type_label: &str) -> Vec<Exam> {
         .collect()
 }
 
-/// REST `/api/homeworks/lessons` → `{ homeworks: [{ id, lessonId, dueDate, text, completed }], lessons: [{ id, subject }] }`
+/// REST `/api/homeworks/lessons` → `{ homeworks: [{ id, lessonId, date, dueDate, text, remark, completed }],
+/// lessons: [{ id, subject }], records: [{ homeworkId, teacherId }], teachers: [{ id, name }] }`
 pub fn parse_homeworks(v: &Value) -> Vec<UntisHomework> {
-    let lessons: std::collections::HashMap<i64, String> = v
-        .get("lessons")
+    let table = |key: &str, val: &str| -> std::collections::HashMap<i64, String> {
+        v.get(key)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|l| Some((i(l, "id")?, st(l, val))))
+            .collect()
+    };
+    let lessons = table("lessons", "subject");
+    let teachers = table("teachers", "name");
+    let hw_teacher: std::collections::HashMap<i64, String> = v
+        .get("records")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .filter_map(|l| Some((i(l, "id")?, st(l, "subject"))))
+        .filter_map(|r| Some((i(r, "homeworkId")?, teachers.get(&i(r, "teacherId")?)?.clone())))
         .collect();
     v.get("homeworks")
         .and_then(Value::as_array)
@@ -209,15 +224,38 @@ pub fn parse_homeworks(v: &Value) -> Vec<UntisHomework> {
         .flatten()
         .filter_map(|h| {
             let text = st(h, "text");
+            let remark = st(h, "remark");
+            let id = i(h, "id")?;
             Some(UntisHomework {
-                id: i(h, "id")?,
+                id,
                 due: untis_time(i(h, "dueDate")?, 0)?,
+                assigned: i(h, "date").and_then(|d| untis_time(d, 0)),
                 subject: i(h, "lessonId").and_then(|l| lessons.get(&l).cloned()).unwrap_or_default(),
+                teacher: hw_teacher.get(&id).cloned().unwrap_or_default(),
                 completed: h.get("completed").and_then(Value::as_bool).unwrap_or(false),
-                text: if text.is_empty() { st(h, "remark") } else { text },
+                text: match (text.is_empty(), remark.is_empty() || remark == text) {
+                    (true, _) => remark,
+                    (false, true) => text,
+                    (false, false) => format!("{text}\n\n{remark}"),
+                },
             })
         })
         .collect()
+}
+
+/// Kurztitel aus dem Hausaufgabentext: erste Zeile, bei Überlänge am Wortende gekürzt („…“).
+pub fn homework_title(text: &str) -> String {
+    const MAX: usize = 90;
+    let first = text.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
+    if first.is_empty() {
+        return "Hausaufgabe".into();
+    }
+    if first.chars().count() <= MAX {
+        return first.to_string();
+    }
+    let cut: String = first.chars().take(MAX).collect();
+    let at = cut.rfind(char::is_whitespace).filter(|&p| p >= MAX / 2).unwrap_or(cut.len());
+    format!("{}…", cut[..at].trim_end_matches(|c: char| c.is_whitespace() || ",;:-–".contains(c)))
 }
 
 /// REST `/api/classreg/absences/students` → `{ absences: [{ id, startDate, startTime, endDate, endTime }] }`
@@ -481,9 +519,27 @@ mod tests {
         assert_eq!(hw.len(), 2);
         assert_eq!((hw[0].subject.as_str(), hw[0].text.as_str(), hw[0].completed), ("Mathematik", "S. 42 Nr. 3", false));
         assert_eq!((hw[1].subject.as_str(), hw[1].text.as_str(), hw[1].completed), ("", "Lesen", true));
+        assert_eq!(hw[0].assigned, untis_time(20261110, 0));
+        assert_eq!((hw[1].assigned, hw[0].teacher.as_str()), (None, ""));
+        let hw = parse_homeworks(&json!({
+            "homeworks": [{ "id": 5, "lessonId": 9, "dueDate": 20261117, "text": "AB", "remark": "bis Seite 3" }],
+            "lessons": [{ "id": 9, "subject": "D" }], "records": [{ "homeworkId": 5, "teacherId": 2 }], "teachers": [{ "id": 2, "name": "Mül" }]
+        }));
+        assert_eq!((hw[0].teacher.as_str(), hw[0].text.as_str()), ("Mül", "AB\n\nbis Seite 3"));
 
         let ab = parse_absences(&json!({ "absences": [{ "id": 1, "startDate": 20261112, "startTime": 745, "endDate": 20261112, "endTime": 1300 }] }));
         assert_eq!(ab[0].end - ab[0].start, (13 * 60 - 7 * 60 - 45) * 60_000);
+    }
+
+    #[test]
+    fn homework_titles_cut_at_word_end() {
+        assert_eq!(homework_title(""), "Hausaufgabe");
+        assert_eq!(homework_title("\n  S. 42 Nr. 3\nalle"), "S. 42 Nr. 3");
+        let long = "Lies das Kapitel über die Weimarer Republik und beantworte die Fragen eins bis fünf schriftlich im Heft";
+        let t = homework_title(long);
+        assert!(t.ends_with('…') && t.chars().count() <= 91, "{t}");
+        assert!(long.starts_with(t.trim_end_matches('…')), "nur am Wortende gekürzt: {t}");
+        assert!(long[t.trim_end_matches('…').len()..].starts_with(' '));
     }
 
     #[test]

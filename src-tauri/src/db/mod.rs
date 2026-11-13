@@ -46,6 +46,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/0011_google.sql"),
     include_str!("../../migrations/0012_webuntis.sql"),
     include_str!("../../migrations/0013_bookmark.sql"),
+    include_str!("../../migrations/0014_untis_mapping.sql"),
 ];
 
 pub struct Db {

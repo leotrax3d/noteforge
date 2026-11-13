@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScheduleDots, dotsLabel } from "@/components/school/ScheduleDots";
 import { api } from "@/lib/api";
-import { currentLesson, daySlots, type Lesson } from "@/lib/integrations";
+import { currentLesson, daySlots, useMappingDialog, type Lesson } from "@/lib/integrations";
 import { BREAK_LABEL, currentBreak, dotCounts } from "@/lib/timetable";
 import type { Subject } from "@/lib/types";
 import { useNav } from "@/store/nav";
@@ -93,15 +93,17 @@ function LessonCard({ l, s, now, onOpen }: { l: Lesson; s?: Subject; now: number
   const cancelled = l.state === "cancelled";
   return (
     <li className="shrink-0">
-      <button type="button" disabled={!s} onClick={() => s && onOpen(s.id)}
-        aria-label={`${fmtTime(l.start)} ${l.subjectLong || l.subjectName}${cancelled ? " (entfällt)" : l.state === "irregular" ? " (Vertretung)" : ""}${running ? " (läuft gerade)" : ""}`}
+      <button type="button" disabled={!s && l.untisSubjectId == null}
+        onClick={() => (s ? onOpen(s.id) : useMappingDialog.getState().show(l.untisSubjectId))}
+        title={s ? undefined : "Nicht zugeordnet – tippen, um ein Noteforge-Fach zu verknüpfen"}
+        aria-label={`${fmtTime(l.start)} ${l.subjectLong || l.subjectName}${cancelled ? " (entfällt)" : l.state === "irregular" ? " (Vertretung)" : ""}${running ? " (läuft gerade)" : ""}${!s && l.untisSubjectId != null ? " – nicht zugeordnet, Fach verknüpfen" : ""}`}
         data-glass="tile" data-state={l.state}
         className={`flex min-h-16 w-36 flex-col items-start rounded-lg border-l-4 bg-card p-2 text-left text-sm shadow-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 enabled:hover:bg-accent ${running ? "ring-2 ring-primary" : ""} ${l.end < now ? "opacity-60" : ""}`}
         style={{ borderLeftColor: s?.color ?? "var(--border)" }}>
         <span className="text-xs tabular-nums text-muted-foreground">{fmtTime(l.start)} – {fmtTime(l.end)}</span>
         <span className={`w-full truncate font-medium ${cancelled ? "line-through" : ""}`}>{s?.name ?? (l.subjectLong || l.subjectName || "Stunde")}</span>
         <span className={`w-full truncate text-xs ${cancelled ? "font-medium text-destructive" : l.state === "irregular" ? "font-medium text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>
-          {cancelled ? "entfällt" : l.state === "irregular" ? `Vertretung${l.info ? `: ${l.info}` : ""}` : [l.rooms, l.teachers].filter(Boolean).join(" · ")}
+          {!s && l.untisSubjectId != null && !cancelled ? <span className="font-medium text-amber-700 dark:text-amber-400">Nicht zugeordnet</span> : cancelled ? "entfällt" : l.state === "irregular" ? `Vertretung${l.info ? `: ${l.info}` : ""}` : [l.rooms, l.teachers].filter(Boolean).join(" · ")}
         </span>
       </button>
     </li>

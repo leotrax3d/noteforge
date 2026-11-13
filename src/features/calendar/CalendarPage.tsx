@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import type { CalendarEvent, Subject } from "@/lib/types";
 import { mutate, useAsync } from "@/lib/use-async";
 import { useNav } from "@/store/nav";
-import { daySlots, integrations, useSyncRev, type Lesson } from "@/lib/integrations";
+import { daySlots, integrations, useMappingDialog, useSyncRev, type Lesson } from "@/lib/integrations";
 import { openLessonSubject } from "@/features/home/TodayTimetable";
 import {
   MONTHS, WEEKDAYS, addDays, eventsOn, fmtDate, fmtTime, isAllDay, isoWeek, monthGrid, sameDay, startOfDay, startOfWeek,
@@ -213,12 +213,12 @@ function WeekView({ days, today, events, subj, onCreate, onOpen, lessons, onLess
                 const label = sub?.name ?? (l.subjectLong || l.subjectName);
                 return (
                   <button key={`${l.id}:${l.start}`} type="button" data-testid="lesson"
-                    aria-label={`Stunde ${fmtTime(l.start)} ${label}${cancelled ? " entfällt" : ""}${sub ? " – Fach öffnen" : ""}`}
-                    onClick={() => (sub ? onLesson(sub.id) : onCreate(d, s.getHours()))}
+                    aria-label={`Stunde ${fmtTime(l.start)} ${label}${cancelled ? " entfällt" : ""}${sub ? " – Fach öffnen" : l.untisSubjectId != null ? " – nicht zugeordnet, Fach verknüpfen" : ""}`}
+                    onClick={() => (sub ? onLesson(sub.id) : l.untisSubjectId != null ? useMappingDialog.getState().show(l.untisSubjectId) : onCreate(d, s.getHours()))}
                     className={`absolute left-0.5 w-[calc(50%-2px)] overflow-hidden rounded border-l-4 bg-muted px-1 text-left text-[11px] leading-tight text-muted-foreground outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 ${cancelled ? "line-through opacity-60" : ""} ${l.state === "irregular" ? "text-destructive" : ""}`}
                     style={{ top: (Math.max(FIRST_HOUR, a) - FIRST_HOUR) * HOUR_PX, height: Math.max(44, (Math.min(LAST_HOUR, b) - Math.max(FIRST_HOUR, a)) * HOUR_PX - 1), borderLeftColor: sub?.color ?? "var(--border)" }}>
                     <span className="block truncate font-medium text-foreground">{label}</span>
-                    <span className="block truncate">{cancelled ? "entfällt" : l.rooms}</span>
+                    <span className="block truncate">{cancelled ? "entfällt" : !sub && l.untisSubjectId != null ? <span className="font-medium text-amber-700 dark:text-amber-400">Nicht zugeordnet</span> : l.rooms}</span>
                   </button>
                 );
               })}

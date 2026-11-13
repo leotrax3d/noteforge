@@ -8,6 +8,7 @@ import { useNav } from "@/store/nav";
 import { useSyncRev } from "@/lib/integrations";
 import { DAY, KIND_LABEL, countdown, fmtDate, fmtTime, isAllDay } from "@/features/calendar/dates";
 import { examsTomorrow } from "@/lib/timetable";
+import { SubjectBadge } from "@/features/school/common";
 
 const HORIZON = 120 * DAY;
 
@@ -50,7 +51,7 @@ export function UpcomingExams({ subjects, now }: { subjects: Subject[]; now: num
             const cd = countdown(e.start, now);
             const urgent = cd.days <= 3;
             return (
-              <li key={e.id}>
+              <li key={e.id} className="relative">
                 <button type="button" data-glass="tile" onClick={() => go({ view: "calendar", date: e.start })}
                   className="flex min-h-11 w-full items-center gap-3 rounded-xl border p-3 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
                   style={{ borderLeft: `6px solid ${s?.color ?? "var(--border)"}` }}>
@@ -71,6 +72,7 @@ export function UpcomingExams({ subjects, now }: { subjects: Subject[]; now: num
                   </div>
                   <GraduationCap className="ml-auto size-5 shrink-0 text-muted-foreground" aria-hidden />
                 </button>
+                {!s && e.source === "webuntis" && <SubjectBadge untis="WebUntis-Fach" className="absolute right-3 bottom-2 bg-card" />}
               </li>
             );
           })}

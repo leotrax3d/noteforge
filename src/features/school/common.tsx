@@ -1,4 +1,5 @@
-import { Check } from "lucide-react";
+import { Check, Link2 } from "lucide-react";
+import { useMappingDialog } from "@/lib/integrations";
 import type { Subject } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -34,3 +35,31 @@ export const toneCls = {
   mid: "text-amber-700 dark:text-amber-400",
   bad: "text-destructive",
 } as const;
+
+/**
+ * Farbiges Fach-Label. Ohne Noteforge-Fach, aber mit WebUntis-Fach: „Nicht zugeordnet“ mit direktem
+ * Sprung in den Zuordnungsdialog.
+ */
+export function SubjectBadge({ subject, untis, className }: { subject?: Subject; untis?: string | number | null; className?: string }) {
+  const show = useMappingDialog((s) => s.show);
+  if (subject) {
+    return (
+      <span data-testid="subject-badge" className={cn("inline-flex max-w-48 items-center gap-1 rounded-full px-2 text-xs font-medium leading-5", className)}
+        style={{ background: `color-mix(in srgb, ${subject.color} 18%, transparent)`, color: "inherit", boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${subject.color} 45%, transparent)` }}>
+        <span className="size-2 shrink-0 rounded-full" style={{ background: subject.color }} />
+        <span className="truncate">{subject.name}</span>
+      </span>
+    );
+  }
+  if (untis == null || untis === "") return null;
+  const label = typeof untis === "string" ? untis : "WebUntis-Fach";
+  return (
+    <button type="button" data-testid="subject-unmapped" onClick={(e) => { e.stopPropagation(); show(untis); }}
+      title="WebUntis-Fach einem Noteforge-Fach zuordnen"
+      className={cn("relative inline-flex max-w-56 items-center gap-1 rounded-full border border-dashed border-amber-600/60 px-2 text-xs font-medium leading-5 text-amber-800 outline-none",
+        "after:absolute after:-inset-y-3 after:inset-x-0 after:content-[''] focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:text-amber-300", className)}>
+      <Link2 className="size-3 shrink-0" aria-hidden />
+      <span className="truncate">{label} · Nicht zugeordnet</span>
+    </button>
+  );
+}

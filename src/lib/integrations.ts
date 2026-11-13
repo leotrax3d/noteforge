@@ -252,3 +252,40 @@ export function suggestMatch<T>(subjectName: string, candidates: T[], names: (c:
   }
   return null;
 }
+
+/**
+ * Ordnet einem WebUntis-Fach ein Noteforge-Fach zu (null = Zuordnung aufheben). Ein Noteforge-Fach hat
+ * höchstens ein WebUntis-Fach. In Tauri hängt das Backend bestehende Hausaufgaben/Prüfungen gleich mit um.
+ */
+export async function linkUntisSubject(untisId: number, subjectId: string | null): Promise<void> {
+  if (inTauri) {
+    await invoke("set_untis_mapping", { untisId, subjectId });
+  } else {
+    for (const s of await api.listSubjects()) {
+      if (s.webuntisSubjectId === untisId && s.id !== subjectId) await api.updateSubject(s.id, { webuntisSubjectId: null });
+    }
+    if (subjectId) await api.updateSubject(subjectId, { webuntisSubjectId: untisId });
+  }
+}
+
+/** Vorschlag für ein WebUntis-Fach: passendes Noteforge-Fach über Lang- oder Kurznamen. */
+export function suggestSubjectFor<S extends { name: string }>(u: UntisSubject, subjects: S[]): S | null {
+  for (const n of [u.longName, u.name]) {
+    const hit = n ? suggestMatch(n, subjects, (s) => [s.name]) : null;
+    if (hit) return hit;
+  }
+  // Kürzel wie „M“, „D“, „PH“: Fachname beginnt mit dem Kürzel (nur eindeutig)
+  const short = norm(u.name);
+  if (short && short.length <= 3) {
+    const hits = subjects.filter((s) => norm(s.name).startsWith(short));
+    if (hits.length === 1) return hits[0];
+  }
+  return null;
+}
+
+/** Zuordnungsdialog global öffnen, optional mit Fokus auf ein WebUntis-Fach (ID oder Name aus Hausaufgaben). */
+export const useMappingDialog = create<{ open: boolean; focus: number | string | null; show: (focus?: number | string | null) => void; close: () => void }>((set) => ({
+  open: false, focus: null,
+  show: (focus = null) => set({ open: true, focus }),
+  close: () => set({ open: false, focus: null }),
+}));

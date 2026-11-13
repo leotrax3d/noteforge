@@ -1,3 +1,4 @@
+import { integrations, useMappingDialog, useSyncRev } from "@/lib/integrations";
 import { useMemo, useState } from "react";
 import { ArrowLeft, Calculator, Hourglass, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,17 +21,25 @@ export const KIND_TEXT: Record<GradeKind, string> = { written: "schriftlich", or
 
 export function useGrades() {
   const cloud = useCloudRev((s) => s.rev);
+  const syncRev = useSyncRev((s) => s.rev);
   return useAsync(async () => {
     const [grades, cfg, pending] = await Promise.all([school.listGrades(), school.gradeConfig(), school.listPendingGrades().catch(() => [])]);
     return { grades, cfg, pending };
-  }, [cloud]);
+  }, [cloud, syncRev]);
 }
 
 /** Notenrechner: Noten je Fach, Gewichtung schriftlich/mündlich, Schnitte und „Was brauche ich?“. */
 export function GradesPage({ subjectId }: { subjectId?: string }) {
   const go = useNav((s) => s.go);
-  const { data: subjects } = useAsync(() => api.listSubjects(), []);
+  const rev = useSyncRev((s) => s.rev);
+  const { data: subjects } = useAsync(() => api.listSubjects(), [rev]);
   const { data, reload, error } = useGrades();
+  const { data: unmapped } = useAsync(async () => {
+    const st = await integrations.status();
+    if (!st.untis) return [];
+    const [us, ss] = await Promise.all([integrations.untisSubjects(), api.listSubjects()]);
+    return us.filter((u) => !ss.some((s) => s.webuntisSubjectId === u.id));
+  }, [rev]);
   const [msg, setMsg] = useState<string | null>(null);
   const cfg = data?.cfg ?? { scale: "grades" as GradeScale, writtenPct: {} };
   const by = useMemo(() => groupBySubject(data?.grades ?? []), [data]);
@@ -75,6 +84,16 @@ export function GradesPage({ subjectId }: { subjectId?: string }) {
             {by.size} {by.size === 1 ? "Fach" : "Fächer"} mit Noten · jedes Fach zählt gleich
           </span>
         </div>
+        {!!unmapped?.length && (
+          <div data-testid="grades-unmapped" className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-amber-600/60 p-3 text-sm">
+            <span className="mr-auto">
+              {unmapped.length === 1 ? "1 WebUntis-Fach ist" : `${unmapped.length} WebUntis-Fächer sind`} nicht zugeordnet
+              ({unmapped.slice(0, 4).map((u) => u.longName || u.name).join(", ")}{unmapped.length > 4 ? " …" : ""}) –
+              angekündigte Arbeiten daraus erscheinen nicht als ausstehende Noten.
+            </span>
+            <Button variant="outline" onClick={() => useMappingDialog.getState().show(unmapped[0].id)}>Fächer zuordnen</Button>
+          </div>
+        )}
         {(error || msg) && <p role="alert" className="mb-3 text-sm text-destructive">{error ?? msg}</p>}
         {subjects?.length === 0 && <p className="text-muted-foreground">Lege zuerst auf der Startseite Fächer an.</p>}
         <div className="grid gap-4 lg:grid-cols-2">

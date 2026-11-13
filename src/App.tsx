@@ -1,3 +1,4 @@
+import { GlobalMappingDialog } from "@/features/settings/MappingDialog";
 import { lazy, Suspense, useEffect } from "react";
 import { StartupNotices } from "@/features/update/StartupNotices";
 import { GlassBackdrop } from "@/components/glass/Backdrop";
@@ -98,6 +99,7 @@ export default function App() {
       {calcOpen && <Suspense fallback={null}><CalcPanel /></Suspense>}
       <ShortcutsDialog open={dialog === "shortcuts"} onOpenChange={(o) => setDialog(o ? "shortcuts" : null)} />
       <StartupNotices />
+      <GlobalMappingDialog />
       <CommandPalette open={dialog === "palette"} onOpenChange={(o) => setDialog(o ? "palette" : null)} />
       {!setupDone && <Suspense fallback={null}><Onboarding onDone={() => go({ view: "home" })} /></Suspense>}
     </ThemeProvider>
