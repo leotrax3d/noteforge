@@ -245,10 +245,27 @@ fn rpc_result(v: Value) -> Result<Value, IntErr> {
             -8500 => IntErr::Auth("WebUntis: Schule nicht gefunden".into()),
             -8520 => IntErr::Auth("WebUntis: Sitzung abgelaufen".into()),
             -8509 => IntErr::Remote("WebUntis: keine Berechtigung für diese Daten".into()),
+            -7004 | -7000 => IntErr::Remote(NOT_ALLOWED_DATE.into()),
             _ => IntErr::Remote(format!("WebUntis: {msg} ({code})")),
         });
     }
     v.get("result").cloned().ok_or_else(|| IntErr::Remote("WebUntis: leere Antwort".into()))
+}
+
+/// Zeitraum liegt außerhalb dessen, was die Schule freigibt (Schuljahr/Sichtbarkeit).
+pub const NOT_ALLOWED_DATE: &str = "WebUntis: Datum außerhalb des freigegebenen Zeitraums";
+
+fn is_date_err(e: &IntErr) -> bool {
+    matches!(e, IntErr::Remote(m) if m == NOT_ALLOWED_DATE)
+}
+
+fn ymd(d: i64) -> Option<chrono::NaiveDate> {
+    chrono::NaiveDate::from_ymd_opt((d / 10000) as i32, (d / 100 % 100) as u32, (d % 100) as u32)
+}
+
+fn to_ymd(d: chrono::NaiveDate) -> i64 {
+    use chrono::Datelike;
+    d.year() as i64 * 10000 + d.month() as i64 * 100 + d.day() as i64
 }
 
 impl Session {
@@ -288,7 +305,28 @@ impl Session {
     }
 
     /// Stundenplan inkl. Vertretungen/Ausfälle für [from, to] (yyyymmdd).
+    /// Gesperrte Tage (-7004 „no allowed date“) werden wochenweise übersprungen.
     pub async fn timetable(&self, from: i64, to: i64) -> Result<Vec<Period>, IntErr> {
+        match self.timetable_any(from, to).await {
+            Err(e) if is_date_err(&e) => {
+                let (Some(mut d), Some(end)) = (ymd(from), ymd(to)) else { return Ok(Vec::new()) };
+                let mut out = Vec::new();
+                while d <= end {
+                    let e = (d + chrono::Duration::days(6)).min(end);
+                    match self.timetable_any(to_ymd(d), to_ymd(e)).await {
+                        Ok(p) => out.extend(p),
+                        Err(x) if is_date_err(&x) => {}
+                        Err(x) => return Err(x),
+                    }
+                    d = e + chrono::Duration::days(1);
+                }
+                Ok(out)
+            }
+            r => r,
+        }
+    }
+
+    async fn timetable_any(&self, from: i64, to: i64) -> Result<Vec<Period>, IntErr> {
         match self.timetable_of(self.person, from, to).await {
             // Viele Schulen sperren den persönlichen Plan für Schüler → Klassenplan
             Err(IntErr::Remote(m)) if m.contains("keine Berechtigung") && self.klasse > 0 && self.person != (1, self.klasse) => {
@@ -380,6 +418,13 @@ pub fn urlencode(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn date_error_and_ymd() {
+        let e = rpc_result(json!({ "error": { "code": -7004, "message": "no allowed date" } })).unwrap_err();
+        assert!(is_date_err(&e));
+        assert_eq!(to_ymd(ymd(20261231).unwrap() + chrono::Duration::days(1)), 20270101);
+    }
 
     #[test]
     fn server_normalization() {
