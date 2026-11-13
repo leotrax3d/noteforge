@@ -55,11 +55,10 @@ jobs:
             - `Noteforge_*_x64_de-DE.msi` (MSI)
 
             Neu in dieser Version:
-            - Schreibschrift: geschwindigkeitsabhängige Glättung (kein Zittern, keine abgerundeten Schleifen), keine Überschwinger mehr
-            - Stift stillhalten löscht keinen Strich mehr (kein Radialmenü); Formerkennung erst nach längerem Halten
-            - Leichte Verbindungsstriche bleiben sichtbar (weniger Druck-Ausdünnung)
-            - Neuer Knopf „Seite an Bildschirm anpassen“ (Strg+2, erneut: Seitenbreite), auch für PDF-Seiten
-            - Beim Öffnen wird die erste Seite (A4/PDF) auf Bildschirmbreite gezoomt
-            - Zwei-Finger-Zoom funktioniert auch direkt nach dem Schreiben mit dem Stift (z. B. auf PDFs)
+            - Dunkelmodus: Umschalten in den Einstellungen wirkt sofort (kein weißer Hintergrund mit heller Schrift mehr)
+            - Zwei-Finger-Zoom: hängengebliebene Finger und zu große gemeldete Kontaktflächen blockieren Gesten nicht mehr
+            - Vollbild: schwebende Werkzeugleiste oben, Optionen klappen beim Antippen auf und nach der Auswahl wieder zu
+            - Seitenleiste mit Reitern Raster / Liste / Lesezeichen; Lesezeichen über das Blatt-Menü
+            - Kopfzeilen-Leiste wieder direkt auf der Fachfarbe; Breiten als Striche; Aufklapp-Pfeil am aktiven Stift
           releaseDraft: false
           prerelease: false  # „latest“ muss auf das neueste Release zeigen (Update-Endpunkt)

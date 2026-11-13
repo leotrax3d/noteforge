@@ -43,6 +43,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.head.appendChild(st);
     root.classList.toggle("dark", resolved === "dark");
     root.style.colorScheme = resolved;
+    // index.html setzt vor dem ersten Zeichnen einen festen Hintergrund (gegen weißes Aufblitzen).
+    // Der muss beim Umschalten mitwechseln – sonst bleibt die Fläche hell und die Schrift wird unlesbar.
+    root.style.background = resolved === "dark" ? "#0a0a0a" : "#ffffff";
+    if ("__TAURI_INTERNALS__" in window && !root.hasAttribute("data-material")) {
+      void import("@tauri-apps/api/window")
+        .then(({ getCurrentWindow }) => getCurrentWindow().setBackgroundColor(resolved === "dark" ? "#0a0a0a" : "#ffffff"))
+        .catch(() => {});
+    }
     void window.getComputedStyle(document.body).color; // Neuberechnung erzwingen
     const id = requestAnimationFrame(() => requestAnimationFrame(() => st.remove()));
     return () => { cancelAnimationFrame(id); st.remove(); };
