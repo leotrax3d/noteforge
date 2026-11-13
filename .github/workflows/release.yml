@@ -55,7 +55,11 @@ jobs:
             - `Noteforge_*_x64_de-DE.msi` (MSI)
 
             Neu in dieser Version:
-            - Moodle BW: Anmeldung über den Schul-Login (Schule@BW) in einem eigenen Fenster, wie in der Moodle-App – Noteforge sieht das Passwort nicht
-            - Die Anmeldeart der Moodle-Seite wird automatisch erkannt
+            - Palm Rejection: aufliegende Hand wird beim Schreiben mit dem Stift ignoriert (auch keine Zoom-Gesten mehr)
+            - Autosave läuft im Hintergrund, ohne den Stift zu unterbrechen
+            - Bilder, PDFs und Formen sperren (fest im Hintergrund, Schloss zum Entsperren)
+            - OCR: erkannten Text zeilenweise oder als Markierung kopieren
+            - Textfelder: an der ganzen Kopfleiste verschieben, Alt = ohne Einrasten, Papierkorb/Entf zum Löschen, immer über Bildern und PDFs
+            - Werkzeugleiste lässt sich in die Kopfzeile neben den Fachnamen ziehen
           releaseDraft: false
           prerelease: false  # „latest“ muss auf das neueste Release zeigen (Update-Endpunkt)
