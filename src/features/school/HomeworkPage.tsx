@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { api, inTauri } from "@/lib/api";
 import { dueLabel, emptyHomework, school, type Homework } from "@/lib/school";
 import { integrations, syncNow, useSyncRev } from "@/lib/integrations";
@@ -122,7 +121,6 @@ export function HomeworkPage({ subjectId }: { subjectId?: string }) {
           </Button>
         )}
         <Button variant="ghost" onClick={() => go({ view: "grades" })}>Noten</Button>
-        <ThemeToggle />
       </header>
 
       <form onSubmit={(e) => void add(e)} className="flex flex-wrap items-end gap-2 border-b p-3" aria-label="Neue Hausaufgabe">

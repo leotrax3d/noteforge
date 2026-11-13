@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { ArrowLeft, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { api } from "@/lib/api";
 import type { CalendarEvent, Subject } from "@/lib/types";
 import { mutate, useAsync } from "@/lib/use-async";
@@ -84,7 +83,6 @@ export function CalendarPage({ date: initial, mode: initialMode }: { date?: numb
         <Button variant="ghost" size="icon" aria-label={mode === "month" ? "Nächster Monat" : "Nächste Woche"} onClick={() => step(1)}><ChevronRight /></Button>
         <h2 className="mr-auto text-lg font-medium" aria-live="polite">{title}</h2>
         <Button onClick={() => create(sameDay(cursor, today) || mode === "week" ? today : cursor)}><Plus /> Termin</Button>
-        <ThemeToggle />
       </header>
 
       {mode === "month" ? (

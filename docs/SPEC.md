@@ -131,6 +131,12 @@ Strokes: Punkte als `Float32Array` (x, y, pressure, tilt, t), Stift-ID, Farbe, B
 - Manuell vergebene Namen (`"manual"`) werden nie automatisch überschrieben; Kontextmenü „Automatischen Titel wiederherstellen“. Automatische Titel erscheinen in der Seitenleiste grau-kursiv.
 - Migration 0009: bestehende Blätter mit Titel → `manual`, leere → `auto` + „Unbenannt“.
 
+### 4.9 Alles anzeigen
+- Knopf „Alles anzeigen“ (Gruppe Ansicht, neben Zoom) und Strg+1: Kamera auf die Begrenzung aller Inhalte (Striche, Textfelder, Bilder, PDF-Seiten, Tabellen) mit 48 px Rand.
+- Höchstens 200 % Zoom bei wenig Inhalt; leeres Blatt → Startansicht (wie Strg+0).
+- Weicher Übergang (~260 ms, Zoom logarithmisch); bei „Bewegung reduzieren“ sofort.
+- Der Hell/Dunkel-Umschalter in den Kopfzeilen entfällt; das Design wird nur in den Einstellungen gewählt.
+
 ## 5. OneNote-Funktionen
 Unterseiten, Drag & Drop-Sortierung, Tags (To-Do, Wichtig, Frage, Lernen für KA, eigene) mit Tag-Übersicht, Seitenlinks `[[…]]`, Volltextsuche (Text + erkannte Handschrift + OCR), Seitenvorlagen, Seitenversionen, Papierkorb, Ink-Wiedergabe, PDF-Export (Blatt/Thema/Fach), Drucken.
 

@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { ConfirmDialog } from "@/components/common/dialogs";
 import { api } from "@/lib/api";
 import { arrayMove } from "@/lib/tree";
@@ -109,7 +108,6 @@ export function HomePage() {
           {cloudRunning ? <RefreshCw className="animate-spin" /> : <Settings />}
           {cloudError && <span className="absolute top-2 right-2 size-2 rounded-full bg-destructive" />}
         </Button>
-        <ThemeToggle />
       </header>
 
       <main className="flex-1 overflow-auto p-6">

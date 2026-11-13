@@ -522,6 +522,7 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
       else if (mod && (k === "+" || k === "=")) engine.zoomBy(1.25);
       else if (mod && k === "-") engine.zoomBy(1 / 1.25);
       else if (mod && k === "0") engine.resetView();
+      else if (mod && k === "1") { e.preventDefault(); engine.fitContent(); }
       else if (mod && k === "s") void flush();
       else if ((k === "delete" || k === "backspace") && engine.hasSelection) engine.deleteSelection();
       else if (k === "delete" && editingRef.current) {
@@ -828,7 +829,7 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
           onUndo={() => e()?.undo()}
           onRedo={() => e()?.redo()}
           zoomLabelRef={zoomRef}
-          onZoom={(f) => (f === "reset" ? e()?.resetView() : e()?.zoomBy(f))}
+          onZoom={(f) => (f === "reset" ? e()?.resetView() : f === "fit" ? e()?.fitContent() : e()?.zoomBy(f))}
           page={page}
           onPageChange={onPageChange}
           onInsert={(k, sz) => void onInsert(k, sz)}

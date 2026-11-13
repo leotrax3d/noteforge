@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Check, FileText, Image as ImageIcon, PenLine, Plus, Search, Table2, Trash2, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { NameDialog } from "@/components/common/dialogs";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
@@ -66,7 +65,6 @@ export function TagsPage({ tagId }: { tagId?: string }) {
         <Button variant="ghost" size="icon" aria-label="Zurück" onClick={() => go(back ?? { view: "home" })}><ArrowLeft /></Button>
         <h1 className="mr-auto ml-1 text-lg font-semibold">Tags</h1>
         <Button variant="ghost" onClick={() => go({ view: "search" })}><Search /> Suche</Button>
-        <ThemeToggle />
       </header>
       <div className="flex flex-wrap items-center gap-1 border-b px-3 py-2" role="toolbar" aria-label="Tag-Filter">
         <Chip active={!filter} onClick={() => setFilter(null)}>Alle</Chip>

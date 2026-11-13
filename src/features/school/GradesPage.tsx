@@ -3,7 +3,6 @@ import { ArrowLeft, Calculator, Hourglass, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { api } from "@/lib/api";
 import {
   DEFAULT_WRITTEN_PCT, SCALE, fmtGrade, gradeLabel, gradeTone, groupBySubject, neededGrade, overallAverage, parseGrade,
@@ -64,7 +63,6 @@ export function GradesPage({ subjectId }: { subjectId?: string }) {
           </select>
         </label>
         <Button variant="ghost" onClick={() => go({ view: "homework" })}>Hausaufgaben</Button>
-        <ThemeToggle />
       </header>
 
       <main className="flex-1 overflow-auto p-4">

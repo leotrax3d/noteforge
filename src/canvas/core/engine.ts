@@ -178,6 +178,9 @@ interface Selection {
   s: number;
 }
 
+/** „Alles anzeigen“ zoomt bei wenig Inhalt nicht weiter hinein. */
+const FIT_MAX_ZOOM = 2;
+
 export class CanvasEngine {
   readonly store = new StrokeStore();
   events: EngineEvents = {};
@@ -547,6 +550,47 @@ export class CanvasEngine {
 
   zoomBy(f: number) {
     this.zoomTo(this.cam.s * f);
+  }
+
+  /** Alles anzeigen: Kamera so, dass alle Inhalte mit Rand sichtbar sind (höchstens 200 %).
+   *  Leeres Blatt → Startansicht. Weicher Übergang (rAF, ~250 ms). */
+  fitContent() {
+    if (!this.W) return;
+    const r = this.contentBounds();
+    let to: { s: number; x: number; y: number };
+    if (!r) {
+      const cur = this.cam;
+      this.fitted = false;
+      this.fit();
+      to = this.cam;
+      this.cam = cur;
+    } else {
+      const pad = 48;
+      const s = clampZoom(Math.min(FIT_MAX_ZOOM, (this.W - 2 * pad) / Math.max(1, r.w), (this.H - 2 * pad) / Math.max(1, r.h)));
+      to = { s, x: r.x + r.w / 2 - this.W / 2 / s, y: r.y + r.h / 2 - this.H / 2 / s };
+    }
+    this.fitted = true;
+    this.animateCam(to);
+  }
+
+  private camRaf = 0;
+  private animateCam(to: { s: number; x: number; y: number }) {
+    cancelAnimationFrame(this.camRaf);
+    cancelAnimationFrame(this.settleRaf);
+    const from = { ...this.cam }, t0 = performance.now(), dur = 260;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    // Mittelpunkt (Bildschirm) und Zoom (logarithmisch) interpolieren → keine Schlingerbewegung
+    const cx = (c: typeof from) => c.x + this.W / 2 / c.s, cy = (c: typeof from) => c.y + this.H / 2 / c.s;
+    const step = (now: number) => {
+      const k = reduce ? 1 : Math.min(1, (now - t0) / dur);
+      const e = 1 - (1 - k) ** 3;
+      const s = Math.exp(Math.log(from.s) + (Math.log(to.s) - Math.log(from.s)) * e);
+      const mx = cx(from) + (cx(to) - cx(from)) * e, my = cy(from) + (cy(to) - cy(from)) * e;
+      this.cam = { s, x: mx - this.W / 2 / s, y: my - this.H / 2 / s };
+      this.cameraChanged(true);
+      this.camRaf = k < 1 ? requestAnimationFrame(step) : 0;
+    };
+    this.camRaf = requestAnimationFrame(step);
   }
 
   resetView() {

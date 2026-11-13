@@ -5,7 +5,6 @@ import { toggleFocus, usePrefs } from "@/store/prefs";
 import { useCloudRev } from "@/lib/sync";
 import { typing } from "@/lib/shortcuts";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { api, putAsset } from "@/lib/api";
 import { EmptyState } from "@/components/common/EmptyState";
 import { subjectIcon } from "@/lib/catalog";
@@ -194,7 +193,6 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
         )}
         <Button variant="ghost" size="icon" aria-label="Suche" title="Suche (Strg+F)" onClick={() => go({ view: "search" })}><Search /></Button>
         <Button variant="ghost" size="icon" aria-label="Tag-Übersicht" title="Tags" onClick={() => go({ view: "tags" })}><Tags /></Button>
-        <ThemeToggle />
       </header>
       {data.error && <p className="px-4 py-2 text-destructive">{data.error}</p>}
       <div className={cn("relative flex min-h-0 flex-1", leftHanded && "flex-row-reverse")}>

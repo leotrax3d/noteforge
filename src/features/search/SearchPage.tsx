@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, FileText, Search, Tags } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { api } from "@/lib/api";
 import type { SearchHit } from "@/lib/types";
 import { useNav } from "@/store/nav";
@@ -55,7 +54,6 @@ export function SearchPage({ query: initial = "" }: { query?: string }) {
           />
         </div>
         <Button variant="ghost" onClick={() => go({ view: "tags" })}><Tags /> Tags</Button>
-        <ThemeToggle />
       </header>
       <main className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="mx-auto max-w-3xl">
