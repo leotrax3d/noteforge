@@ -137,6 +137,17 @@ Strokes: Punkte als `Float32Array` (x, y, pressure, tilt, t), Stift-ID, Farbe, B
 - Weicher Übergang (~260 ms, Zoom logarithmisch); bei „Bewegung reduzieren“ sofort.
 - Der Hell/Dunkel-Umschalter in den Kopfzeilen entfällt; das Design wird nur in den Einstellungen gewählt.
 
+### 4.10 Handschrift / Schreibschrift
+- Positionsglättung per 1€-Filter in Bildschirmpixeln (min. Grenzfrequenz 5 Hz, β 0,015): langsames Schreiben ohne Zittern, schnelle Schleifen und Verbindungsbögen ohne Nachziehen. perfect-freehand-`streamline` nur noch gering (≈ 0,1–0,2).
+- Vorhersage (`getPredictedEvents`): nur ein Punkt, höchstens 4 px vor dem letzten echten – keine Überschwinger an Umkehrpunkten.
+- Stift stillhalten öffnet kein Radialmenü mehr (Stifttaste/Finger dafür); fester Punkt oder „nachdenkender“ Stift verliert keine Tinte.
+- Formerkennung per Halten am Strichende beim Stift erst nach 750 ms (Finger/Maus 500 ms), damit Pausen am Wortende Schrift nicht in Formen verwandeln.
+- Druck-Ausdünnung reduziert (Füller 0,5, Bleistift 0,3): leichte Verbindungsstriche bleiben sichtbar.
+
+### 4.11 Seite an Bildschirm anpassen
+- Knopf „Seite an Bildschirm anpassen“ (neben Zoom, Strg+2): passt die Seite in Bildschirmmitte (DIN-A4-Seite oder importierte PDF-Seite) ganz ein; erneut drücken → Seitenbreite. Ohne Seiten wie „Alles anzeigen“. Animiert.
+- Start-Zoom beim Öffnen: erste Seite (A4/PDF) auf Bildschirmbreite (höchstens 160 %), oberer Seitenrand sichtbar. Endlos-Blätter ohne PDF bleiben bei 100 %.
+
 ## 5. OneNote-Funktionen
 Unterseiten, Drag & Drop-Sortierung, Tags (To-Do, Wichtig, Frage, Lernen für KA, eigene) mit Tag-Übersicht, Seitenlinks `[[…]]`, Volltextsuche (Text + erkannte Handschrift + OCR), Seitenvorlagen, Seitenversionen, Papierkorb, Ink-Wiedergabe, PDF-Export (Blatt/Thema/Fach), Drucken.
 

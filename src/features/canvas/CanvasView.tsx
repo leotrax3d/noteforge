@@ -317,6 +317,7 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
         setLoaded(true);
         const box = focus ? engine.elementBBox(focus) : null;
         if (box) engine.focusOn(box);
+        else engine.initialFit(); // erste Seite (A4/PDF) auf Bildschirmbreite
         api.listPageTags(page.id).then((t) => alive && setPageTags(t), console.error);
       },
       (err) => {
@@ -524,6 +525,7 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
       else if (mod && k === "-") engine.zoomBy(1 / 1.25);
       else if (mod && k === "0") engine.resetView();
       else if (mod && k === "1") { e.preventDefault(); engine.fitContent(); }
+      else if (mod && k === "2") { e.preventDefault(); engine.fitPage(); }
       else if (mod && k === "s") void flush();
       else if ((k === "delete" || k === "backspace") && engine.hasSelection) engine.deleteSelection();
       else if (k === "delete" && editingRef.current) {
@@ -832,7 +834,7 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
           onUndo={() => e()?.undo()}
           onRedo={() => e()?.redo()}
           zoomLabelRef={zoomRef}
-          onZoom={(f) => (f === "reset" ? e()?.resetView() : f === "fit" ? e()?.fitContent() : e()?.zoomBy(f))}
+          onZoom={(f) => (f === "reset" ? e()?.resetView() : f === "fit" ? e()?.fitContent() : f === "page" ? e()?.fitPage() : e()?.zoomBy(f))}
           page={page}
           onPageChange={onPageChange}
           onInsert={(k, sz) => void onInsert(k, sz)}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PressureSmoother, clampPressureEdges, isDot, minDistWorld, tuneForWidth } from "./ink-filter";
+import { PressureSmoother, clampPressureEdges, isDot, minDistWorld, tuneForWidth, OneEuro } from "./ink-filter";
 import { PSTRIDE } from "./model";
 
 const pts = (arr: [number, number, number][]) => {
@@ -30,5 +30,23 @@ describe("ink-filter", () => {
   });
   it("dünnt kleine Stifte weniger aus", () => {
     expect(tuneForWidth({ thinning: 0.6 }, 1).thinning!).toBeLessThan(tuneForWidth({ thinning: 0.6 }, 8).thinning!);
+  });
+});
+
+describe("OneEuro", () => {
+  it("dämpft Zittern bei langsamer Bewegung", () => {
+    const f = new OneEuro(), o = { x: 0, y: 0 };
+    let maxDev = 0;
+    for (let i = 0; i < 200; i++) {
+      f.push(100 + (i % 2 ? 0.6 : -0.6), 50, i * 4, o);
+      if (i > 20) maxDev = Math.max(maxDev, Math.abs(o.x - 100));
+    }
+    expect(maxDev).toBeLessThan(0.2);
+  });
+  it("folgt schneller Bewegung fast ohne Verzögerung (Schleifen bleiben eng)", () => {
+    const f = new OneEuro(), o = { x: 0, y: 0 };
+    // 1500 px/s, 240 Hz
+    for (let i = 0; i <= 60; i++) f.push(i * 6.25, 0, i * (1000 / 240), o);
+    expect(60 * 6.25 - o.x).toBeLessThan(6);
   });
 });

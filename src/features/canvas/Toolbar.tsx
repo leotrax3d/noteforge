@@ -5,7 +5,7 @@ import {
   Grid3x3, Calculator, Check, LineChart, Palette, RotateCcw, SlidersHorizontal, X, ZoomIn,
   Crop, DraftingCompass, Eraser, GripVertical, Hand, Highlighter, ImagePlus, Lasso, Pen, PenTool, Pencil, Plus, Redo2, Ruler,
   Settings2, Shapes, Table, Trash2, TriangleRight, Type, Undo2, FileUp,
-  Angle, Fullscreen, MoveRight, PaintBucket, ScanSearch, Sparkles, Wand,
+  Angle, Fullscreen, Maximize, MoveRight, PaintBucket, ScanSearch, Sparkles, Wand,
 } from "lucide-react";
 import { MoleculeIcon } from "@/features/chem/MoleculeIcon";
 import { TablePicker } from "./objects/TablePicker";
@@ -33,7 +33,7 @@ export interface ToolbarProps {
   onUndo: () => void;
   onRedo: () => void;
   zoomLabelRef: RefObject<HTMLSpanElement | null>;
-  onZoom: (factor: number | "reset" | "fit") => void;
+  onZoom: (factor: number | "reset" | "fit" | "page") => void;
   page: Page;
   onPageChange: (patch: PagePatch) => void;
   onInsert: (kind: InsertKind, size?: { rows: number; cols: number }) => void;
@@ -140,7 +140,7 @@ export const ITEM_INFO: Record<ToolItem, { label: string; key?: string }> = {
   highlighter: { label: "Textmarker", key: "M" }, eraser: { label: "Radierer", key: "E" }, lasso: { label: "Lasso", key: "L" },
   pan: { label: "Verschieben", key: "H" }, text: { label: "Text", key: "T" }, guides: { label: "Hilfsmittel", key: "R = Formmodus" },
   insert: { label: "Einfügen" }, presets: { label: "Stift-Presets", key: "1–9" }, undo: { label: "Rückgängig", key: "Strg+Z" },
-  redo: { label: "Wiederholen", key: "Strg+Y" }, zoom: { label: "Zoom", key: "Strg+0" }, fit: { label: "Alles anzeigen", key: "Strg+1" }, page: { label: "Blatteinstellungen" },
+  redo: { label: "Wiederholen", key: "Strg+Y" }, zoom: { label: "Zoom", key: "Strg+0" }, fit: { label: "Alles anzeigen", key: "Strg+1" }, fitpage: { label: "Seite an Bildschirm anpassen", key: "Strg+2 · erneut: Seitenbreite" }, page: { label: "Blatteinstellungen" },
   calc: { label: "Taschenrechner", key: "Strg+Umschalt+R" }, plot: { label: "Funktionsgraph", key: "Strg+Umschalt+G" }, image: { label: "Bild einfügen", key: "Strg+V" },
   shapes: { label: "Formen-Bibliothek", key: "S" }, heads: { label: "Pfeilspitzen" }, fill: { label: "Füllen", key: "F" },
   angle: { label: "Winkel messen", key: "W" }, zoomwrite: { label: "Zoom-Schreibfeld", key: "Z" },
@@ -151,7 +151,7 @@ const ITEM_ICON: Record<ToolItem, ReactNode> = {
   fountain: <PenTool />, ballpoint: <Pen />, pencil: <Pencil />, highlighter: <Highlighter />, eraser: <Eraser />, lasso: <Lasso />,
   pan: <Hand />, text: <Type />, guides: <Ruler />, insert: <ImagePlus />, presets: <Palette />, undo: <Undo2 />, redo: <Redo2 />,
   zoom: <ZoomIn />, page: <Settings2 />, calc: <Calculator />, plot: <LineChart />, image: <ImagePlus />,
-  shapes: <Shapes />, heads: <MoveRight />, fill: <PaintBucket />, angle: <Angle />, zoomwrite: <ScanSearch />, fit: <Fullscreen />,
+  shapes: <Shapes />, heads: <MoveRight />, fill: <PaintBucket />, angle: <Angle />, zoomwrite: <ScanSearch />, fit: <Fullscreen />, fitpage: <Maximize />,
   laser: <Wand />, vanish: <Sparkles />, molecule: <MoleculeIcon />,
 };
 
@@ -162,7 +162,7 @@ const GROUP_OF: Record<ToolItem, string> = {
   guides: "formen", shapes: "formen", heads: "formen", fill: "formen", angle: "formen",
   insert: "einfuegen", molecule: "einfuegen", image: "einfuegen", calc: "einfuegen", plot: "einfuegen",
   laser: "zeigen", vanish: "zeigen", zoomwrite: "zeigen",
-  undo: "verlauf", redo: "verlauf", zoom: "ansicht", fit: "ansicht", page: "ansicht",
+  undo: "verlauf", redo: "verlauf", zoom: "ansicht", fit: "ansicht", fitpage: "ansicht", page: "ansicht",
 };
 const GROUP_LABEL: Record<string, string> = {
   schreiben: "Stifte", bearbeiten: "Radieren & Auswählen", formen: "Formen & Messen", einfuegen: "Einfügen",
@@ -211,7 +211,7 @@ export function HeadPicker({ head0, head1, onChange }: { head0: Head; head1: Hea
 }
 const WRITE_PENS: ToolItem[] = ["fountain", "ballpoint", "pencil"];
 /** In der Kopfzeile nicht gezeigt – stehen in den schwebenden Leisten darunter. */
-const BELOW_HEADER = new Set<ToolItem>(["presets", "undo", "redo", "zoom", "fit"]);
+const BELOW_HEADER = new Set<ToolItem>(["presets", "undo", "redo", "zoom", "fit", "fitpage"]);
 const QUICK_INK = ["#111827", "#2563eb", "#dc2626"];
 
 /** Optionsleiste unter der Kopfzeile (wie GoodNotes): Stiftart, Breite, Farben bzw. Radierer-Optionen. */
@@ -487,6 +487,8 @@ export function Toolbar(p: ToolbarProps) {
         );
       case "fit":
         return <ToolButton label={label} onClick={() => p.onZoom("fit")}><Fullscreen /></ToolButton>;
+      case "fitpage":
+        return <ToolButton label={label} onClick={() => p.onZoom("page")}><Maximize /></ToolButton>;
       case "shapes": return <ToolButton label={label} onClick={() => p.onInsert("shapes")}><Shapes /></ToolButton>;
       case "molecule": return <ToolButton label={label} onClick={() => p.onInsert("molecule")}><MoleculeIcon /></ToolButton>;
       case "heads":
@@ -824,7 +826,7 @@ export function Toolbar(p: ToolbarProps) {
         {/* Zoom & „Alles anzeigen“ auf der anderen Seite */}
         <div role="group" aria-label="Ansicht" data-glass="float" data-glass-float=""
           className={cn("absolute top-3 z-20 flex items-center gap-0.5 rounded-2xl border bg-card/95 p-1 shadow-md backdrop-blur", leftHanded ? "left-3" : "right-3")}>
-          {render("zoom")}{render("fit")}
+          {render("zoom")}{render("fitpage")}{render("fit")}
         </div>
         <OptionsBar onMore={() => setOpen(open === "pen" ? null : "pen")} />
       </>)}

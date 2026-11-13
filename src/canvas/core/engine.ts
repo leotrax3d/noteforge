@@ -13,7 +13,7 @@ import {
   type Mat,
   type Vec,
 } from "./geometry";
-import { a4PageCount, a4Size, clampZoom, type PageSetup } from "./layout";
+import { a4PageCount, a4PageRect, a4Size, clampZoom, type PageSetup } from "./layout";
 import { PSTRIDE, computeBBox, intersects, makeStroke, uid, type PenKind, type Stroke } from "./model";
 import { PENS, buildOutline, buildPath, drawStroke, strokePath, toFreehand } from "./pens";
 import { StrokeStore, type Change } from "./store";
@@ -34,7 +34,7 @@ import { MM, a4CamBounds, clampTo, rubber } from "./layout";
 import type { BBox } from "@/lib/types";
 import { PdfRaster } from "./pdf-raster";
 import { getAsset } from "@/lib/api";
-import { PressureSmoother, clampPressureEdges, minDistWorld } from "./ink-filter";
+import { OneEuro, PressureSmoother, clampPressureEdges, minDistWorld } from "./ink-filter";
 import { makeObj } from "./objects";
 import type { MolData } from "@/features/chem/mol";
 import { angleDeg, fmtDeg, type AngleSpec, type FillSpec, type Head, type LineSpec, type VecSpec } from "../vector/vec";
@@ -133,6 +133,10 @@ interface GuideDrag {
 }
 
 const HOLD_MS = 500;
+/** Stift: so lange am Strichende stillhalten, bis Formerkennung greift (Pausen beim Schreiben ≠ Form). */
+const PEN_SHAPE_HOLD_MS = 750;
+/** Vorhersage höchstens so weit (Bildschirmpixel) vor den echten Punkt. */
+const PRED_MAX_PX = 4;
 const HOLD_SLOP = 5;
 type Handle = "move" | "scale" | "rotate";
 
@@ -245,6 +249,8 @@ export class CanvasEngine {
   private liveOpacity = 1;
   private livePressure = false;
   private smooth = new PressureSmoother();
+  private posFilter = new OneEuro();
+  private readonly fpt = { x: 0, y: 0 };
   private lastP = 0.5;
   private rawSeen = false;
   private inkDebug = false;
@@ -595,6 +601,63 @@ export class CanvasEngine {
     this.camRaf = requestAnimationFrame(step);
   }
 
+  /** Seiten des Blatts: DIN-A4-Seiten bzw. importierte PDF-Seiten (Weltkoordinaten). */
+  private pageRects(): BBox[] {
+    const out: BBox[] = [];
+    if (this.setup.mode === "a4") for (let i = 0; i < this.pageCount; i++) out.push(a4PageRect(i, this.setup.orientation));
+    for (const o of this.store.objects()) if (o.kind === "image" && o.data.locked) out.push({ x: o.x, y: o.y, w: o.w, h: o.h });
+    return out;
+  }
+
+  /** Seite in Bildschirmmitte (sonst die nächstgelegene). */
+  private pageAtCenter(): BBox | null {
+    const cx = this.cam.x + this.W / 2 / this.cam.s, cy = this.cam.y + this.H / 2 / this.cam.s;
+    let best: BBox | null = null, bd = Infinity;
+    for (const r of this.pageRects()) {
+      const dx = Math.max(r.x - cx, 0, cx - r.x - r.w), dy = Math.max(r.y - cy, 0, cy - r.y - r.h);
+      const d = Math.hypot(dx, dy) - (dx === 0 && dy === 0 ? r.w * r.h * 1e-9 : 0);
+      if (d < bd) { bd = d; best = r; }
+    }
+    return best;
+  }
+
+  private camFor(r: BBox, how: "page" | "width") {
+    const pad = 16;
+    const sw = (this.W - 2 * pad) / Math.max(1, r.w), sh = (this.H - 2 * pad) / Math.max(1, r.h);
+    const s = clampZoom(how === "page" ? Math.min(sw, sh) : sw);
+    // Ganze Seite: zentriert; Seitenbreite: oberen Rand der Seite zeigen (bzw. aktuelle Höhe halten)
+    const cy = this.cam.y + this.H / 2 / this.cam.s;
+    const y = how === "page" ? r.y + r.h / 2 - this.H / 2 / s
+      : Math.min(Math.max(cy - this.H / 2 / s, r.y - pad / s), r.y + r.h - this.H / s + pad / s);
+    return { s, x: r.x + r.w / 2 - this.W / 2 / s, y };
+  }
+
+  /** Seite (auch PDF-Seite) an den Bildschirm anpassen. Erneut drücken wechselt ganze Seite ↔ Seitenbreite.
+   *  Ohne Seiten → wie „Alles anzeigen“. */
+  fitPage(): "page" | "width" | null {
+    if (!this.W) return null;
+    const r = this.pageAtCenter();
+    if (!r) { this.fitContent(); return null; }
+    const page = this.camFor(r, "page");
+    const how = Math.abs(this.cam.s - page.s) / page.s < 0.02 && Math.abs(page.s - this.camFor(r, "width").s) > 1e-3 ? "width" : "page";
+    this.fitted = true;
+    this.animateCam(how === "page" ? page : this.camFor(r, "width"));
+    return how;
+  }
+
+  /** Start-Zoom nach dem Laden: erste Seite (A4/PDF) auf Bildschirmbreite (höchstens 160 %). */
+  initialFit() {
+    if (!this.W) return;
+    const rs = this.pageRects().sort((a, b) => a.y - b.y || a.x - b.x);
+    const r = rs[0];
+    if (!r) return;
+    const pad = 16;
+    const s = clampZoom(Math.min(1.6, (this.W - 2 * pad) / Math.max(1, r.w)));
+    this.fitted = true;
+    this.cam = { s, x: r.x + r.w / 2 - this.W / 2 / s, y: r.y - pad / s };
+    this.cameraChanged(true);
+  }
+
   resetView() {
     this.fitted = false;
     this.fit();
@@ -725,8 +788,8 @@ export class CanvasEngine {
     this.fitted = true;
     if (this.setup.mode === "a4") {
       const { w } = a4Size(this.setup.orientation);
-      const s = clampZoom(Math.min(1, (this.W - 48) / w));
-      this.cam = { s, x: -(this.W / s - w) / 2, y: -24 / s };
+      const s = clampZoom(Math.min(1.6, (this.W - 32) / w)); // Seitenbreite, nicht winzig auf großen Bildschirmen
+      this.cam = { s, x: -(this.W / s - w) / 2, y: -16 / s };
     } else {
       this.cam = { s: 1, x: 0, y: 0 };
     }
@@ -987,8 +1050,9 @@ export class CanvasEngine {
     this.holdTimer = 0;
     if (this.mode !== "draw" && this.mode !== "pan") return;
     const idle = performance.now() - this.holdT;
-    if (idle < HOLD_MS - 8) {
-      this.holdTimer = window.setTimeout(this.onHoldTick, HOLD_MS - idle);
+    const need = this.mode === "draw" && this.activeType === "pen" ? PEN_SHAPE_HOLD_MS : HOLD_MS;
+    if (idle < need - 8) {
+      this.holdTimer = window.setTimeout(this.onHoldTick, need - idle);
       return;
     }
     this.onHold();
@@ -1010,6 +1074,9 @@ export class CanvasEngine {
         return;
       }
     }
+    // Stift: kein Radialmenü durch Stillhalten (dafür gibt es die Stifttaste) – sonst geht ein fester Punkt
+    // oder ein aufgesetzter, „nachdenkender“ Stift samt Tinte verloren
+    if (still && this.mode === "draw" && this.activeType === "pen") return this.armHold();
     if (still && (this.mode === "pan" || (this.mode === "draw" && !this.snap))) {
       // Long-Press → Radialmenü
       this.pts.n = 0;
@@ -1223,8 +1290,15 @@ export class CanvasEngine {
           else this.addPoint(e);
         }
         this.pred.n = 0;
+        // Vorhersage nur 1 Punkt und kurz begrenzt: sonst schießt der Live-Strich an Umkehrpunkten (Schreibschrift) über
         const pr = e.getPredictedEvents?.();
-        if (pr) for (let i = 0; i < pr.length; i++) this.addPoint(pr[i], this.pred);
+        if (pr && pr.length && this.pts.n) {
+          this.addPoint(pr[0], this.pred);
+          const li = (this.pts.n - 1) * PSTRIDE, d = this.pred.data;
+          const vx = d[0] - this.pts.data[li], vy = d[1] - this.pts.data[li + 1];
+          const len = Math.hypot(vx, vy), max = PRED_MAX_PX / this.cam.s;
+          if (len > max) { d[0] = this.pts.data[li] + (vx * max) / len; d[1] = this.pts.data[li + 1] + (vy * max) / len; }
+        }
         this.activeDirty = true;
         this.request();
         return;
@@ -1506,6 +1580,7 @@ export class CanvasEngine {
     this.pts.n = 0;
     this.pred.n = 0;
     this.smooth.reset();
+    this.posFilter.reset();
     this.lastP = 0.5;
     this.rawSeen = false;
     this.shaped = false;
@@ -1520,6 +1595,12 @@ export class CanvasEngine {
 
   private addPoint(e: PointerEvent, buf = this.pts) {
     const q = this.local(e);
+    if (buf === this.pts && !this.snap) {
+      // Zittern weg, ohne Schleifen/Ecken nachzuziehen (Bildschirmpixel → zoomunabhängig gleiches Schriftbild)
+      this.posFilter.push(q.x, q.y, e.timeStamp, this.fpt);
+      q.x = this.fpt.x;
+      q.y = this.fpt.y;
+    }
     let x = q.x / this.cam.s + this.cam.x, y = q.y / this.cam.s + this.cam.y;
     const sn = this.snap;
     if (sn) {

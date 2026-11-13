@@ -28,13 +28,13 @@ export type BarSize = "s" | "m" | "l";
 export const TOOL_ITEMS = [
   "fountain", "ballpoint", "pencil", "highlighter", "eraser", "lasso", "pan", "text", "guides", "insert",
   "presets", "undo", "redo", "zoom", "page", "calc", "plot", "image",
-  "shapes", "heads", "fill", "angle", "zoomwrite", "laser", "vanish", "molecule", "fit",
+  "shapes", "heads", "fill", "angle", "zoomwrite", "laser", "vanish", "molecule", "fit", "fitpage",
 ] as const;
 export type ToolItem = (typeof TOOL_ITEMS)[number];
 export const DEFAULT_ITEMS: ToolItem[] = [
   "fountain", "ballpoint", "pencil", "highlighter", "eraser", "lasso", "pan", "text", "guides", "insert", "molecule",
   "shapes", "heads", "fill", "angle", "zoomwrite", "laser",
-  "presets", "undo", "redo", "zoom", "fit", "page",
+  "presets", "undo", "redo", "zoom", "fit", "fitpage", "page",
 ];
 
 export const PALETTE = [
@@ -118,6 +118,10 @@ function load(): Partial<Persisted> {
     if (p.items && !(p.seen ?? []).includes("fit") && !p.items.includes("fit")) {
       const i = p.items.indexOf("zoom");
       p.items = i < 0 ? [...p.items, "fit"] : [...p.items.slice(0, i + 1), "fit", ...p.items.slice(i + 1)];
+    }
+    if (p.items && !(p.seen ?? []).includes("fitpage") && !p.items.includes("fitpage")) {
+      const i = p.items.indexOf("fit");
+      p.items = i < 0 ? [...p.items, "fitpage"] : [...p.items.slice(0, i + 1), "fitpage", ...p.items.slice(i + 1)];
     }
     if (p.dock === "top" && !(p.seen ?? []).includes("island")) p.dock = "header";
     return p;
@@ -206,7 +210,7 @@ useTools.subscribe((s) => {
   try {
     // Laser/verschwindende Tinte nicht als Startwerkzeug merken
     const t = tool === "laser" || tool === "vanish" ? "pen" : tool;
-    localStorage.setItem(KEY, JSON.stringify({ tool: t, pen, color, width, eraserMode, eraserSize, fingerDraws, pointerGrab, gridSnap, shapeMode, perPen, presets, customColors, dock, floatPos, orient, size, items, opacity, head0, head1, fillOpacity, fillHatch, vanishMs, zoomFactor, seen: ["molecule", "island", "fit"] }));
+    localStorage.setItem(KEY, JSON.stringify({ tool: t, pen, color, width, eraserMode, eraserSize, fingerDraws, pointerGrab, gridSnap, shapeMode, perPen, presets, customColors, dock, floatPos, orient, size, items, opacity, head0, head1, fillOpacity, fillHatch, vanishMs, zoomFactor, seen: ["molecule", "island", "fit", "fitpage"] }));
   } catch {
     /* ignorieren */
   }

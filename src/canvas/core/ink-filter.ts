@@ -103,6 +103,46 @@ export function tuneForWidth<T extends { thinning?: number; smoothing?: number; 
     ...o,
     thinning: (o.thinning ?? 0.5) * (0.45 + 0.55 * small),
     smoothing: Math.max(o.smoothing ?? 0.5, 0.62 - 0.12 * small),
-    streamline: Math.min(o.streamline ?? 0.5, 0.3 + 0.15 * small),
+    // Positionsglättung macht der 1€-Filter in der Engine; hier nur noch wenig, sonst werden Schleifen rund gezogen
+    streamline: Math.min(o.streamline ?? 0.5, 0.1 + 0.08 * small),
   };
+}
+
+/**
+ * 1€-Filter (Casiez et al. 2012) für Stiftpositionen in Bildschirmpixeln:
+ * langsam → starke Glättung (kein Zittern), schnell → kaum Glättung (keine Verzögerung,
+ * Schleifen und Ecken der Schreibschrift bleiben scharf). Keine Allokation pro Punkt.
+ */
+export class OneEuro {
+  private x = 0;
+  private y = 0;
+  private dx = 0;
+  private dy = 0;
+  private t = -1;
+  constructor(public minCutoff = 5, public beta = 0.015, public dCutoff = 1.2) {}
+  reset() {
+    this.t = -1;
+  }
+  private static alpha(cutoff: number, dt: number) {
+    const tau = 1 / (2 * Math.PI * cutoff);
+    return 1 / (1 + tau / dt);
+  }
+  /** Filtert (x, y) zum Zeitpunkt `tMs`; Ergebnis in `out`. */
+  push(x: number, y: number, tMs: number, out: { x: number; y: number }) {
+    if (this.t < 0) {
+      this.x = x; this.y = y; this.dx = 0; this.dy = 0; this.t = tMs;
+      out.x = x; out.y = y;
+      return;
+    }
+    const dt = Math.max(1e-3, (tMs - this.t) / 1000);
+    this.t = tMs;
+    const ad = OneEuro.alpha(this.dCutoff, dt);
+    this.dx += ad * ((x - this.x) / dt - this.dx);
+    this.dy += ad * ((y - this.y) / dt - this.dy);
+    const speed = Math.hypot(this.dx, this.dy);
+    const a = OneEuro.alpha(this.minCutoff + this.beta * speed, dt);
+    this.x += a * (x - this.x);
+    this.y += a * (y - this.y);
+    out.x = this.x; out.y = this.y;
+  }
 }
