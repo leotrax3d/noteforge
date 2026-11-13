@@ -55,10 +55,9 @@ jobs:
             - `Noteforge_*_x64_de-DE.msi` (MSI)
 
             Neu in dieser Version:
-            - „Alles anzeigen“ (Knopf neben dem Zoom, Strg+1): bringt alle Inhalte des Blatts ins Bild
-            - Hell/Dunkel-Umschalter aus den Kopfzeilen entfernt (Design weiterhin in den Einstellungen)
-            - Tabellen in beliebiger Größe, Spaltenbreiten ziehen (auch per Finger), neues Rechtsklickmenü für Text und Tabellen
-            - Textfelder wachsen beim Tippen mit (wie in OneNote); Werkzeugleiste als Insel in der Kopfzeile
-            - WebUntis: Abgleich bricht nicht mehr mit „no allowed date (-7004)“ ab – gesperrte Zeiträume werden übersprungen
+            - Neue Kopfzeile im GoodNotes-Stil: farbig in der Fachfarbe, Werkzeuge mittig, Blatt-Aktionen rechts
+            - Schwebende Optionsleiste fürs aktive Werkzeug (Stiftart, Breite, Schnellfarben bzw. Radierer-Modus und -Größe)
+            - Rückgängig/Wiederholen sowie Zoom und „Alles anzeigen“ als schwebende Leisten am Rand
+            - Menüs, Popover, Dialoge und schwebende Leisten im Milchglas-Stil (frosted)
           releaseDraft: false
           prerelease: false  # „latest“ muss auf das neueste Release zeigen (Update-Endpunkt)
