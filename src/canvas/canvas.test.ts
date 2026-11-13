@@ -16,13 +16,32 @@ describe("PalmRejection", () => {
     p.onUp("pen", 1, 100);
     expect(p.onDown("touch", 2, 500)).toBe("ignore");
     p.onUp("touch", 2, 510);
-    expect(p.onDown("touch", 3, 2000)).toBe("draw");
+    expect(p.onDown("touch", 3, 4000)).toBe("draw");
   });
-  it("erkennt 2-Finger-Gesten auch bei aktivem Stift", () => {
+  it("Handballen bei aktivem Stift löst keine Geste aus und bleibt Handballen", () => {
     const p = new PalmRejection();
     p.onDown("pen", 1, 0);
-    p.onDown("touch", 2, 10);
+    expect(p.onDown("touch", 2, 10)).toBe("ignore");
+    expect(p.onDown("touch", 3, 20)).toBe("ignore");
+    p.onUp("pen", 1, 30);
+    // Stift längst weg, Hand liegt noch: weiterer Kontakt zählt nicht als Geste
+    expect(p.onDown("touch", 4, 9000)).toBe("ignore");
+    expect(p.isPalm(2)).toBe(true);
+  });
+  it("erkennt 2-Finger-Gesten ohne Stift", () => {
+    const p = new PalmRejection();
+    expect(p.onDown("touch", 2, 10)).toBe("draw");
     expect(p.onDown("touch", 3, 20)).toBe("gesture");
+  });
+  it("große Kontaktfläche gilt immer als Handballen", () => {
+    expect(new PalmRejection().onDown("touch", 2, 0, 60)).toBe("ignore");
+  });
+  it("Stift übernimmt: laufende Finger werden zu Handballen", () => {
+    const p = new PalmRejection();
+    p.onDown("touch", 2, 0);
+    p.demoteTouches();
+    expect(p.isPalm(2)).toBe(true);
+    expect(p.touchCount).toBe(0);
   });
   it("Maus zeichnet immer", () => {
     expect(new PalmRejection().onDown("mouse", 1, 0)).toBe("draw");

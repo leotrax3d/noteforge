@@ -139,12 +139,12 @@ pub fn recover_file(path: &Path, db: &Db) -> Result<usize> {
 }
 
 #[tauri::command]
-pub fn journal_write(j: State<Journal>, entry: Entry) -> Result<()> {
+pub async fn journal_write(j: State<'_, Journal>, entry: Entry) -> Result<()> {
     j.write(entry)
 }
 
 #[tauri::command]
-pub fn journal_commit(j: State<Journal>, session: String, page_id: String, up_to: u64) -> Result<()> {
+pub async fn journal_commit(j: State<'_, Journal>, session: String, page_id: String, up_to: u64) -> Result<()> {
     j.commit(session, page_id, up_to)
 }
 

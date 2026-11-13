@@ -81,6 +81,14 @@ Strokes: Punkte als `Float32Array` (x, y, pressure, tilt, t), Stift-ID, Farbe, B
 - **Lineal/Geodreieck vergrößern:** Doppelpfeil-Griff, 1-cm-Schritte (Lineal 10–60 cm, Geodreieck 8–40 cm Hypotenuse). Die mm-Skala wird verlängert, nicht gestreckt.
 - Aufgeklappte Werkzeuggruppen klappen beim Zeichnen animiert ein. Die Leiste weicht den Blatt-Aktionen aus.
 
+### 4.7 Objekte, Textfelder, Eingabe (v0.2.8)
+- **Sperren:** Bilder, PDFs und Formen lassen sich über das Schloss im Auswahlmenü sperren. Gesperrte Elemente liegen fest im Hintergrund und werden beim Antippen, Lasso und Hover nicht mehr ausgewählt. Mit Maus/Finger (Stift: nur mit Lasso) erscheint oben rechts ein Schloss-Symbol; Antippen entsperrt das Element und wählt es aus.
+- **OCR-Ergebnis:** Der erkannte Text erscheint zeilenweise. Jede Zeile hat einen eigenen Kopieren-Knopf; markierter Text lässt sich gezielt kopieren oder als Textfeld einfügen.
+- **Textfelder:** Die ganze Kopfleiste verschiebt das Feld. Mit gedrückter Alt-Taste wird nicht am Raster bzw. an den Linien eingerastet. Ein Papierkorb in der Kopfleiste löscht das Feld, ebenso Entf, wenn es aktiv, aber nicht im Schreibmodus ist. Textfelder und Tabellen liegen immer eine Ebene über Bildern, PDFs und Formen, beim Zeichnen wie bei der Treffererkennung.
+- **Werkzeugleiste in der Kopfzeile:** Die Werkzeugleiste lässt sich in die Kopfzeile ziehen, rechts neben den Fachnamen; alternativ unter Leiste anpassen → Position „Kopfzeile“. Dort belegt sie keinen Blattplatz. Im Fokusmodus fällt sie auf „Oben“ zurück.
+- **Palm Rejection:** Touch wird ignoriert, solange der Stift aufliegt, in Reichweite schwebt oder vor weniger als 2,5 s benutzt wurde. Kontakte mit großer Fläche (≥ 32 px) gelten immer als Handballen. Ein einmal erkannter Handballen bleibt es bis zum Abheben und löst keine Zoom-/Pan-Geste aus. Setzt der Stift auf, während ein Handballen schon eine Aktion begonnen hat, wird diese verworfen und der Stift gewinnt. Auch Textfelder ignorieren den Handballen.
+- **Autosave ohne Ruckeln:** Speichern und Journal warten, bis kein Strich läuft (≥ 250 ms nach dem Absetzen). Die Schreib-Commands (`save_elements`, `journal_*`, `auto_version`) laufen asynchron im Thread-Pool statt auf dem Hauptthread, damit die Stifteingabe der WebView nie blockiert wird.
+
 ### 4.2 Blatt-Titel
 - Kein Titelbalken auf dem Blatt: der Canvas beginnt direkt oben. Speicherstatus, Versionen, Ink-Wiedergabe und Blatt-Aktionen (Export, Vorlage, Erstellt/Geändert) sitzen in einer kleinen Leiste oben rechts (Linkshänder: links).
 - **Umbenennen** nur in der Seitenleiste: Doppelklick/Doppeltipp auf den Namen → Inline-Eingabe (Enter oder Klick daneben speichert, Esc bricht ab), Kontextmenü „Umbenennen“, Taste **F2** für das offene Blatt.

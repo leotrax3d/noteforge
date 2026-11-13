@@ -1,4 +1,4 @@
-import { PalmRejection } from "../palm-rejection";
+import { PALM_CONTACT_PX, PalmRejection } from "../palm-rejection";
 import { PALETTES, drawBackground, pageFill, type Palette } from "./background";
 import {
   apply,
@@ -555,6 +555,11 @@ export class CanvasEngine {
 
   // ---- Auswahl-Aktionen ----
 
+  /** Gerade wird gezeichnet/radiert/verschoben (Speichern dann zurückstellen). */
+  get inputActive() {
+    return this.mode !== "idle" && this.mode !== "gesture" ? true : performance.now() - this.lastUpAt < 250;
+  }
+
   get hasSelection() {
     return !!this.sel;
   }
@@ -779,8 +784,13 @@ export class CanvasEngine {
   private onDown = (e: PointerEvent) => {
     const now = performance.now();
     const p = this.local(e);
-    if (e.pointerType === "touch") this.touches.set(e.pointerId, p);
-    const decision = this.palm.onDown(e.pointerType, e.pointerId, now);
+    const decision = this.palm.onDown(e.pointerType, e.pointerId, now, Math.max(e.width || 0, e.height || 0));
+    if (e.pointerType === "touch") {
+      if (decision === "ignore") return; // Handballen: weder zeichnen noch Geste
+      this.touches.set(e.pointerId, p);
+    }
+    // Stift setzt auf, während ein Finger/Handballen gerade etwas tut → Finger-Aktion verwerfen, Stift gewinnt
+    if (e.pointerType === "pen" && this.mode !== "idle" && this.activeType === "touch") this.abortTouch();
 
     if (e.pointerType === "touch" && this.touches.size >= 2) {
       if (this.mode === "guide" && this.activeType === "touch") return this.beginGuideTwo();
@@ -831,6 +841,14 @@ export class CanvasEngine {
       const r = this.guideAt(w, tool === "pen" && !fingerPans);
       if (r === "snap") return this.beginStroke(e, q);
       if (r) return this.beginGuideDrag(r.g, r.kind, w);
+    }
+
+    // Schloss über einem gesperrten Element → entsperren
+    const lk = this.lockBadgeAt(q);
+    if (lk) {
+      this.unlockObject(lk.id);
+      this.endPointer();
+      return;
     }
 
     // Greifbalken über einem Bild/PDF-Element → aufnehmen und verschieben (jedes Werkzeug)
@@ -1270,6 +1288,7 @@ export class CanvasEngine {
           const o = this.topObjAt(this.toWorld(this.downPos.x, this.downPos.y));
           if (o?.kind === "image") this.hoverObj = o; // Antippen zeigt den Greifbalken
           else this.hoverObj = null;
+          this.lockHover = o ? null : this.lockedAt(this.toWorld(this.downPos.x, this.downPos.y));
           this.invalidate(false);
           this.registerTap(e, null);
         }
@@ -1319,7 +1338,27 @@ export class CanvasEngine {
     }
   };
 
+  /** Touch auf DOM-Objekten (Textfelder) ebenfalls verwerfen, solange der Stift aktiv ist. */
+  isPalmTouch(e: { pointerType: string; pointerId: number; width?: number; height?: number }): boolean {
+    if (e.pointerType !== "touch") return false;
+    return this.palm.isPalm(e.pointerId) || this.palm.penActive(performance.now()) || Math.max(e.width ?? 0, e.height ?? 0) >= PALM_CONTACT_PX;
+  }
+
+  /** Laufende Ein-/Mehrfinger-Aktion verwerfen (Handballen lag vor dem Stift auf). */
+  private abortTouch() {
+    if (this.mode === "draw") this.pts.n = 0;
+    if (this.mode === "lasso") this.lasso = [];
+    if (this.mode === "erase") this.endErase();
+    if (this.mode === "pan") this.settle();
+    this.palm.demoteTouches();
+    this.touches.clear();
+    this.endPointer();
+  }
+
+  private lastUpAt = -Infinity;
+
   private endPointer() {
+    this.lastUpAt = performance.now();
     clearTimeout(this.holdTimer);
     this.holdTimer = 0;
     this.gd = null;
@@ -1713,9 +1752,40 @@ export class CanvasEngine {
     let best: CanvasObj | null = null;
     for (const o of objs) {
       if (o.kind === "image" && o.data.locked) continue;
-      if (hitObj(o, w.x, w.y) && (!best || o.z > best.z)) best = o;
+      if (hitObj(o, w.x, w.y) && (!best || layerRank(o) > layerRank(best) || (layerRank(o) === layerRank(best) && o.z > best.z))) best = o;
     }
     return best;
+  }
+
+  /** Oberstes gesperrtes Bild/PDF unter `w` (für das Entsperren-Symbol). */
+  private lockedAt(w: Vec): ImageObj | null {
+    let best: ImageObj | null = null;
+    for (const o of this.store.objects())
+      if (o.kind === "image" && o.data.locked && hitObj(o, w.x, w.y) && (!best || o.z > best.z)) best = o;
+    return best;
+  }
+
+  /** Ausgewählte Bilder/PDFs sperren: liegen dann fest im Hintergrund und werden nicht mehr ausgewählt. */
+  lockSelection() {
+    const sel = this.sel;
+    if (!sel?.objs.length) return;
+    const ids = new Set(sel.objs.map((o) => o.id));
+    this.commitSelection();
+    const before = this.store.objects().filter((o): o is ImageObj => o.kind === "image" && ids.has(o.id));
+    const after = before.map((o) => ({ ...o, data: { ...o.data, locked: true } }));
+    this.store.commit({ add: [], remove: [], removeObj: before, addObj: after });
+    this.hoverObj = null;
+    this.events.onToast?.(after.length === 1 ? "Gesperrt – liegt jetzt im Hintergrund" : `${after.length} Elemente gesperrt`);
+  }
+
+  /** Gesperrtes Bild/PDF wieder bedienbar machen und auswählen. */
+  unlockObject(id: string) {
+    const o = this.store.getObj(id);
+    if (o?.kind !== "image" || !o.data.locked) return;
+    const after: ImageObj = { ...o, data: { ...o.data, locked: undefined } };
+    this.store.commit({ add: [], remove: [], removeObj: [o], addObj: [after] });
+    this.lockHover = null;
+    this.select([], [after]);
   }
 
   /** Greifbalken (Bildschirm) über einem Bild/PDF: 120×44 px, mittig über der Oberkante. */
@@ -1726,6 +1796,44 @@ export class CanvasEngine {
     return { x: cx - 60, y: top - 50, w: 120, h: 44 };
   }
 
+  /** Gesperrtes Element unter der Maus/angetippt: kleines Schloss oben rechts zum Entsperren. */
+  private lockHover: ImageObj | null = null;
+
+  private lockBadgeRect(o: ImageObj) {
+    const c = objCorners(o).map((p) => this.toScreen(p.x, p.y));
+    const top = Math.min(...c.map((p) => p.y)), right = Math.max(...c.map((p) => p.x));
+    return { x: Math.min(right, this.W) - 52, y: Math.max(top, 0) + 8, w: 44, h: 44 };
+  }
+
+  private lockBadgeAt(q: Vec): ImageObj | null {
+    const o = this.lockHover;
+    if (!o || this.sel) return null;
+    const r = this.lockBadgeRect(o);
+    return q.x >= r.x && q.x <= r.x + r.w && q.y >= r.y && q.y <= r.y + r.h ? o : null;
+  }
+
+  private drawLockBadge(ctx: CanvasRenderingContext2D) {
+    const o = this.lockHover;
+    if (!o || this.sel || this.mode !== "idle") return;
+    const r = this.lockBadgeRect(o);
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.fillStyle = this.pal.dark ? "#27272a" : "#ffffff";
+    ctx.strokeStyle = this.pal.dark ? "#52525b" : "#d4d4d8";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(r.x + 4, r.y + 4, r.w - 8, r.h - 8, 10);
+    ctx.fill();
+    ctx.stroke();
+    // Schloss
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+    ctx.strokeStyle = ctx.fillStyle = this.pal.dark ? "#d4d4d8" : "#52525b";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy - 3, 5, Math.PI, 0);
+    ctx.stroke();
+    ctx.fillRect(cx - 7, cy - 3, 14, 11);
+  }
+
   private gripAt(q: Vec): ImageObj | null {
     const o = this.hoverObj;
     if (!o || this.sel) return null;
@@ -1734,11 +1842,17 @@ export class CanvasEngine {
   }
 
   private updateHover(q: Vec, type: string) {
-    if (this.gripAt(q)) return; // auf dem Balken bleiben
+    if (this.gripAt(q) || this.lockBadgeAt(q)) return; // auf dem Balken bleiben
     const o = this.topObjAt(this.toWorld(q.x, q.y));
     const img = o?.kind === "image" && !this.hidden.has(o.id) ? o : null;
     if (img !== this.hoverObj) {
       this.hoverObj = img;
+      this.invalidate(false);
+    }
+    // Mit dem Stift nur beim Lasso (sonst würde man beim Schreiben aus Versehen entsperren)
+    const lk = !o && (type !== "pen" || this.tool.tool === "lasso") ? this.lockedAt(this.toWorld(q.x, q.y)) : null;
+    if (lk !== this.lockHover) {
+      this.lockHover = lk;
       this.invalidate(false);
     }
     // Text/Tabellen nur mit der Maus (Stift schreibt sonst ins Textfeld statt aufs Blatt)
@@ -2497,6 +2611,7 @@ export class CanvasEngine {
     }
 
     this.drawGrip(ctx);
+    this.drawLockBadge(ctx);
     this.drawSnapLines(ctx);
     if (this.inkDebug) this.drawInkDebug(ctx);
 
@@ -2555,4 +2670,9 @@ export function intersectLines(a1: Vec, a2: Vec, b1: Vec, b2: Vec): Vec | null {
   if (Math.abs(d) < 1e-9) return null;
   const t = ((a1.x - b1.x) * (b1.y - b2.y) - (a1.y - b1.y) * (b1.x - b2.x)) / d;
   return { x: a1.x + t * (a2.x - a1.x), y: a1.y + t * (a2.y - a1.y) };
+}
+
+/** Ebenen: Textfelder/Tabellen liegen immer über Bildern, PDFs und Formen. */
+function layerRank(o: CanvasObj): number {
+  return o.kind === "image" ? 0 : 1;
 }

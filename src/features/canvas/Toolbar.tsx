@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { createPortal } from "react-dom";
+import { usePrefs } from "@/store/prefs";
 import {
   Grid3x3, Calculator, Check, LineChart, Palette, RotateCcw, SlidersHorizontal, X, ZoomIn,
   Crop, DraftingCompass, Eraser, GripVertical, Hand, Highlighter, ImagePlus, Lasso, Pen, PenTool, Pencil, Plus, Redo2, Ruler,
@@ -15,7 +17,7 @@ import { cn } from "@/lib/utils";
 import type { PenKind } from "@/canvas/core/model";
 import { PENS } from "@/canvas/core/pens";
 import type { Page, PagePatch } from "@/lib/types";
-import { DEFAULT_HATCH, HIGHLIGHTS, MAX_PRESET_COUNT, PALETTE, TOOL_ITEMS, useTools, type BarSize, type Dock, type ToolItem } from "./tool-store";
+import { DEFAULT_HATCH, HIGHLIGHTS, MAX_PRESET_COUNT, PALETTE, TOOL_ITEMS, useTools, type BarSize, type Dock, type ToolItem, TOOLBAR_SLOT } from "./tool-store";
 
 export const PEN_ICONS: Record<PenKind, typeof Pen> = {
   fountain: PenTool,
@@ -240,7 +242,13 @@ export function Toolbar(p: ToolbarProps) {
   const [presetEdit, setPresetEdit] = useState<string | null>(null);
   const [reorder, setReorder] = useState<{ item: ToolItem; over: number | null; fromTray: boolean } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  const vertical = t.orient === "vertical";
+  /** Platzhalter im Blatt: Bezugsrahmen fürs Ziehen, auch wenn die Leiste in der Kopfzeile sitzt */
+  const homeRef = useRef<HTMLSpanElement>(null);
+  const focus = usePrefs((s) => s.focus);
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => setSlot(document.getElementById(TOOLBAR_SLOT)), []);
+  const inHeader = t.dock === "header" && !!slot && !focus && !drag;
+  const vertical = t.orient === "vertical" && !inHeader;
   const px = SIZE_PX[t.size];
 
   const onPen = (pen: PenKind) => {
@@ -254,7 +262,7 @@ export function Toolbar(p: ToolbarProps) {
 
   // Ziehen am Griff: frei verschieben; nahe einer Kante andocken, sonst frei schweben.
   const onGrip = (e: React.PointerEvent) => {
-    const parent = rootRef.current?.parentElement;
+    const parent = homeRef.current?.parentElement;
     if (!parent) return;
     e.preventDefault();
     const el = e.currentTarget as HTMLElement;
@@ -267,7 +275,10 @@ export function Toolbar(p: ToolbarProps) {
       const x = (ev.clientX - pr.left) / pr.width, y = (ev.clientY - pr.top) / pr.height;
       const d: [Dock, number][] = [["top", y], ["left", x], ["right", 1 - x], ["bottom", 1 - y]];
       d.sort((a, b) => a[1] - b[1]);
-      if (d[0][1] < 0.12) t.setDock(d[0][0]);
+      const sr = document.getElementById(TOOLBAR_SLOT)?.getBoundingClientRect();
+      // Über das Blatt hinaus nach oben gezogen → in die Kopfzeile neben den Fachnamen
+      if (sr && sr.height > 0 && ev.clientY < pr.top && ev.clientY >= sr.top - 24) t.setDock("header");
+      else if (d[0][1] < 0.12) t.setDock(d[0][0]);
       else t.setFloat({ x: Math.min(0.95, Math.max(0.05, x)), y: Math.min(0.95, Math.max(0.05, y)) });
       setDrag(null);
     };
@@ -299,7 +310,7 @@ export function Toolbar(p: ToolbarProps) {
   useEffect(() => {
     const check = () => {
       const el = rootRef.current, pill = el?.parentElement?.querySelector<HTMLElement>("[data-page-actions]");
-      if (!el || !pill || drag || pill.offsetParent === null) { if (dodge) setDodge(0); return; }
+      if (!el || !pill || drag || inHeader || pill.offsetParent === null) { if (dodge) setDodge(0); return; }
       const r = el.getBoundingClientRect(), p = pill.getBoundingClientRect();
       const top = r.top - dodge, bottom = r.bottom - dodge;
       const hit = r.left < p.right + 8 && r.right > p.left - 8 && top < p.bottom + 8 && bottom > p.top - 8;
@@ -347,8 +358,9 @@ export function Toolbar(p: ToolbarProps) {
     left: "left-3 top-1/2 -translate-y-1/2",
     right: "right-3 top-1/2 -translate-y-1/2",
     float: "-translate-x-1/2 -translate-y-1/2",
+    header: "top-3 left-1/2 -translate-x-1/2",
   };
-  const side = t.dock === "top" ? "bottom" : t.dock === "bottom" ? "top" : t.dock === "left" ? "right" : t.dock === "right" ? "left" : vertical ? "right" : "bottom";
+  const side = inHeader || t.dock === "top" || t.dock === "header" ? "bottom" : t.dock === "bottom" ? "top" : t.dock === "left" ? "right" : t.dock === "right" ? "left" : vertical ? "right" : "bottom";
   const isHl = t.pen === "highlighter";
   const hidden = TOOL_ITEMS.filter((i) => !t.items.includes(i));
 
@@ -431,7 +443,7 @@ export function Toolbar(p: ToolbarProps) {
 
   const editPreset = t.presets.find((x) => x.id === presetEdit) ?? null;
 
-  return (
+  const bar = (
     <div
       ref={rootRef}
       role="toolbar"
@@ -442,16 +454,18 @@ export function Toolbar(p: ToolbarProps) {
       data-dock={t.dock}
       data-size={t.size}
       className={cn(
-        "absolute z-20 flex items-center gap-1 rounded-2xl border bg-card/95 p-1.5 shadow-xl backdrop-blur",
-        vertical ? "max-h-[calc(100%-24px)] flex-col overflow-y-auto" : "w-max max-w-[calc(100%-24px)] flex-row flex-wrap justify-center",
-        drag ? "pointer-events-auto opacity-80" : dockClass[t.dock],
+        inHeader
+          ? "relative flex max-w-full min-w-0 flex-row items-center gap-1 overflow-x-auto"
+          : "absolute z-20 flex items-center gap-1 rounded-2xl border bg-card/95 p-1.5 shadow-xl backdrop-blur",
+        !inHeader && (vertical ? "max-h-[calc(100%-24px)] flex-col overflow-y-auto" : "w-max max-w-[calc(100%-24px)] flex-row flex-wrap justify-center"),
+        !inHeader && (drag ? "pointer-events-auto opacity-80" : dockClass[t.dock]),
         editing && "ring-2 ring-primary",
       )}
       style={{
-        ...(drag ? { left: drag.x, top: drag.y, transform: "translate(-22px, -22px)" } : t.dock === "float" ? { left: `${t.floatPos.x * 100}%`, top: `${t.floatPos.y * 100}%` } : {}),
+        ...(drag ? { left: drag.x, top: drag.y, transform: "translate(-22px, -22px)" } : inHeader ? {} : t.dock === "float" ? { left: `${t.floatPos.x * 100}%`, top: `${t.floatPos.y * 100}%` } : {}),
         ...(dodge && !drag ? { marginTop: dodge } : {}),
         // Größe: Schaltflächen skalieren (mind. 44 px Touch-Ziel)
-        zoom: px / 44,
+        zoom: inHeader ? Math.min(1, px / 44) : px / 44,
       } as React.CSSProperties}
     >
       <button type="button" aria-label="Werkzeugleiste verschieben" title="Ziehen: an Kante andocken oder frei ablegen"
@@ -640,7 +654,7 @@ export function Toolbar(p: ToolbarProps) {
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">Position</p>
             <Chips label="Position" value={t.dock} onChange={(d) => (d === "float" ? t.setFloat(t.floatPos) : t.setDock(d))}
-              options={[{ value: "top", label: "Oben" }, { value: "left", label: "Links" }, { value: "right", label: "Rechts" }, { value: "float", label: "Schwebend" }]} />
+              options={[{ value: "header", label: "Kopfzeile" }, { value: "top", label: "Oben" }, { value: "left", label: "Links" }, { value: "right", label: "Rechts" }, { value: "float", label: "Schwebend" }]} />
           </div>
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">Größe</p>
@@ -681,7 +695,14 @@ export function Toolbar(p: ToolbarProps) {
       </Popover>
     </div>
   );
+  return (
+    <>
+      <span ref={homeRef} hidden aria-hidden />
+      {inHeader ? createPortal(bar, slot!) : bar}
+    </>
+  );
 }
+
 
 function PageSettings({ page, onChange, side }: { page: Page; onChange: (p: PagePatch) => void; side: "top" | "bottom" | "left" | "right" }) {
   const fingerDraws = useTools((s) => s.fingerDraws);

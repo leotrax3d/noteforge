@@ -15,7 +15,10 @@ export interface Preset {
   opacity?: number;
 }
 
-export type Dock = "top" | "bottom" | "left" | "right" | "float";
+/** Platz in der Fach-Kopfzeile, in den sich die Werkzeugleiste andocken lässt. */
+export const TOOLBAR_SLOT = "nf-toolbar-slot";
+/** „header“ = in der Kopfzeile neben dem Fachnamen (kein Platzverbrauch im Blatt). */
+export type Dock = "top" | "bottom" | "left" | "right" | "float" | "header";
 export type BarOrient = "horizontal" | "vertical";
 export type BarSize = "s" | "m" | "l";
 
@@ -179,7 +182,7 @@ export const useTools = create<ToolsStore>((set, get) => ({
   // Ausrichtung passend zur Kante: vertikal oben/unten → links andocken, horizontal links/rechts → oben
   setOrient: (orient) => set((s) => ({
     orient,
-    dock: orient === "vertical" && (s.dock === "top" || s.dock === "bottom") ? "left" : orient === "horizontal" && (s.dock === "left" || s.dock === "right") ? "top" : s.dock,
+    dock: orient === "vertical" && (s.dock === "top" || s.dock === "bottom" || s.dock === "header") ? "left" : orient === "horizontal" && (s.dock === "left" || s.dock === "right") ? "top" : s.dock,
   })),
   setSize: (size) => set({ size }),
   setItems: (items) => set({ items: items.filter((i, k) => TOOL_ITEMS.includes(i) && items.indexOf(i) === k) }),

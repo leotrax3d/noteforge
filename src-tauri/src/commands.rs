@@ -64,10 +64,12 @@ pub fn move_page(db: S, id: String, section_id: String, parent_page_id: Option<S
 pub fn list_elements(db: S, page_id: String) -> Result<Vec<Element>> {
     repo::list_elements(&db.conn(), &page_id)
 }
+// Schreib-Commands sind `async`: Tauri führt synchrone Commands auf dem Hauptthread aus – das hält die
+// WebView-Eingabe (Stift) an, solange SQLite schreibt. Async laufen sie im Thread-Pool.
 #[tauri::command]
-pub fn upsert_element(db: S, element: Element) -> Result<()> { repo::upsert_element(&db.conn(), &element) }
+pub async fn upsert_element(db: S<'_>, element: Element) -> Result<()> { repo::upsert_element(&db.conn(), &element) }
 #[tauri::command]
-pub fn save_elements(db: S, page_id: String, upserts: Vec<Element>, deletes: Vec<String>) -> Result<()> {
+pub async fn save_elements(db: S<'_>, page_id: String, upserts: Vec<Element>, deletes: Vec<String>) -> Result<()> {
     repo::save_elements(&mut db.conn(), &page_id, &upserts, &deletes)
 }
 #[tauri::command]
@@ -136,7 +138,7 @@ pub fn create_version(db: S, page_id: String, label: String) -> Result<VersionMe
     on::create_version(&db.conn(), &page_id, &label)
 }
 #[tauri::command]
-pub fn auto_version(db: S, page_id: String, min_interval_ms: i64) -> Result<Option<VersionMeta>> {
+pub async fn auto_version(db: S<'_>, page_id: String, min_interval_ms: i64) -> Result<Option<VersionMeta>> {
     on::auto_version(&db.conn(), &page_id, min_interval_ms)
 }
 #[tauri::command]

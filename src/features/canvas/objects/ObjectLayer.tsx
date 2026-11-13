@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Check, GripHorizontal, MoveHorizontal, Minus, Plus } from "lucide-react";
+import { Check, GripHorizontal, MoveHorizontal, Minus, Plus, Trash2 } from "lucide-react";
 import type { CanvasEngine } from "@/canvas/core/engine";
 import { makeObj, type CanvasObj, type TableObj, type TextObj } from "@/canvas/core/objects";
 import type { BBox, ElementTag } from "@/lib/types";
@@ -123,9 +123,10 @@ function Frame({ obj, engine, interactive, editingId, hoverId, onEditing, childr
     // Eingerastete Textfelder bleiben beim Verschieben auf den Linien (Grundlinie) bzw. Kästchen
     const lh = before.kind === "text" ? before.data.lh : undefined;
     const grid = before.kind === "text" && before.data.padX === 0;
-    const snap = (d: number, on: boolean) => (lh && on ? Math.round(d / lh) * lh : d);
+    // Alt gedrückt → frei verschieben (kein Einrasten)
+    const snap = (d: number, on: boolean, alt: boolean) => (lh && on && !alt ? Math.round(d / lh) * lh : d);
     const move = (ev: PointerEvent) => {
-      const dx = snap((ev.clientX - x0) / scale, grid), dy = snap((ev.clientY - y0) / scale, true);
+      const dx = snap((ev.clientX - x0) / scale, grid, ev.altKey), dy = snap((ev.clientY - y0) / scale, true, ev.altKey);
       engine.updateObjectLive(makeObj({ ...before, x: before.x + dx, y: before.y + dy }) as CanvasObj);
     };
     const up = () => {
@@ -157,6 +158,7 @@ function Frame({ obj, engine, interactive, editingId, hoverId, onEditing, childr
       onPointerLeave={(e) => e.pointerType === "mouse" && setHeld(false)}
       onPointerDown={(e) => {
         e.stopPropagation();
+        if (engine?.isPalmTouch(e)) { e.preventDefault(); return; } // Handballen beim Schreiben
         if (!active) onEditing(obj.id);
         // Gedrückt halten → verschieben (kurzes Antippen bleibt Bearbeiten/Markieren)
         const x0 = e.clientX, y0 = e.clientY, el = e.currentTarget as HTMLElement, id = e.pointerId;
@@ -174,15 +176,24 @@ function Frame({ obj, engine, interactive, editingId, hoverId, onEditing, childr
     >
       {children}
       {active && (
-        // Kopfleiste wie in OneNote: Mitte = verschieben, rechts = Breite ändern
-        <div className="absolute inset-x-[-1px] -top-4 flex h-4 items-center rounded-t-md border border-b-0 bg-muted text-muted-foreground" data-format-bar>
-          <button type="button" aria-label={`${label} verschieben`} title="Verschieben" tabIndex={-1}
-            onPointerDown={(e) => { e.stopPropagation(); startMove(e.currentTarget, e.pointerId, e.clientX, e.clientY); }}
-            className="mx-auto flex h-full w-16 cursor-move touch-none items-center justify-center gap-0.5 after:absolute after:-inset-y-3 after:inset-x-0 relative">
-            <GripHorizontal className="size-3.5" />
+        // Kopfleiste wie in OneNote: ganze Leiste = verschieben, rechts = Breite ändern bzw. löschen
+        <div className="absolute inset-x-[-1px] -top-5 flex h-5 cursor-move touch-none items-center rounded-t-md border border-b-0 bg-muted text-muted-foreground after:absolute after:inset-x-0 after:-top-3 after:h-3"
+          data-format-bar data-testid="box-header" role="button" aria-label={`${label} verschieben`} title="Ziehen zum Verschieben (Alt: ohne Einrasten)"
+          onPointerDown={(e) => {
+            if ((e.target as HTMLElement).closest("button")) return;
+            e.preventDefault();
+            e.stopPropagation();
+            startMove(e.currentTarget, e.pointerId, e.clientX, e.clientY);
+          }}>
+          <span className="pointer-events-none mx-auto flex items-center"><GripHorizontal className="size-3.5" /></span>
+          <button type="button" aria-label={`${label} löschen`} title="Löschen (Entf)" tabIndex={-1} data-testid="box-delete"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => { engine?.removeObject(obj.id); onEditing(null); }}
+            className="relative flex h-full w-7 items-center justify-center hover:text-destructive after:absolute after:-inset-y-3 after:-inset-x-1">
+            <Trash2 className="size-3.5" />
           </button>
           <button type="button" aria-label={`Breite von ${label} ändern`} title="Breite ändern" tabIndex={-1} onPointerDown={(e) => drag(e, "width")}
-            className="relative flex h-full w-6 cursor-ew-resize touch-none items-center justify-center after:absolute after:-inset-3">
+            className="relative flex h-full w-7 cursor-ew-resize touch-none items-center justify-center after:absolute after:-inset-y-3 after:-inset-x-1">
             <MoveHorizontal className="size-3" />
           </button>
         </div>

@@ -1,3 +1,4 @@
+import { TOOLBAR_SLOT } from "@/features/canvas/tool-store";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, FileText, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Search, Tags } from "lucide-react";
 import { toggleFocus, usePrefs } from "@/store/prefs";
@@ -185,7 +186,9 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
         <span className="ml-1 flex size-8 items-center justify-center rounded-md text-white" style={{ background: "var(--subject)" }}>
           <Icon className="size-5" />
         </span>
-        <h1 className="mr-auto ml-2 truncate text-lg font-semibold">{subject?.name}</h1>
+        <h1 className="ml-2 shrink truncate text-lg font-semibold">{subject?.name}</h1>
+        {/* Werkzeugleiste kann hier andocken (Position „Kopfzeile“) */}
+        <div id={TOOLBAR_SLOT} className="flex min-h-11 min-w-0 flex-1 items-center justify-center self-stretch px-2" />
         {page && (
           <Button variant="ghost" size="icon" aria-label="Fokusmodus" title="Fokusmodus (F11)" onClick={() => toggleFocus(true)}><Maximize2 /></Button>
         )}

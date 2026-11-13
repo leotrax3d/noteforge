@@ -99,6 +99,8 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
   const [loaded, setLoaded] = useState(false);
   const [objects, setObjects] = useState<CanvasObj[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const editingRef = useRef<string | null>(null);
+  editingRef.current = editingId;
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [radial, setRadial] = useState<Vec | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -217,16 +219,18 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
     const j = jRef.current, now = Date.now();
     if (!j.first) j.first = now;
     window.clearTimeout(j.timer);
-    j.timer = window.setTimeout(() => {
+    const run = () => {
+      const engine = engineRef.current;
+      if (engine?.inputActive) { j.timer = window.setTimeout(run, 150); return; }
       j.timer = 0;
       j.first = 0;
-      const engine = engineRef.current;
       if (!engine?.store.hasPending) return;
       const b = engine.store.peekPending();
       void journal.write(page.id, [...b.upserts.map((x) => strokeToElement(x, page.id)), ...b.objects.map((o) => objToElement(o, page.id))], b.deletes)
         .then((n) => { j.seq = n; })
         .catch(console.error);
-    }, Math.max(0, Math.min(250, j.first + 2500 - now)));
+    };
+    j.timer = window.setTimeout(run, Math.max(0, Math.min(250, j.first + 2500 - now)));
   }, [page.id]);
 
   const scheduleSave = useCallback(() => {
@@ -237,7 +241,12 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
     setSave((v) => (v === "pending" ? v : "pending"));
     clearTimeout(s.timer);
     const wait = Math.max(0, Math.min(SAVE_DELAY, s.first + SAVE_MAX_WAIT - now));
-    s.timer = window.setTimeout(() => void flush(), wait);
+    // Nie mitten im Strich speichern: solange Eingabe läuft, kurz zurückstellen (Stift bleibt flüssig)
+    const tryFlush = () => {
+      if (engineRef.current?.inputActive) s.timer = window.setTimeout(tryFlush, 200);
+      else void flush();
+    };
+    s.timer = window.setTimeout(tryFlush, wait);
   }, [flush, journalSoon]);
 
   // ---- Engine-Lebenszyklus ----
@@ -497,6 +506,11 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
       else if (mod && k === "0") engine.resetView();
       else if (mod && k === "s") void flush();
       else if ((k === "delete" || k === "backspace") && engine.hasSelection) engine.deleteSelection();
+      else if (k === "delete" && editingRef.current) {
+        // Textfeld aktiv, aber nicht im Schreibmodus → ganzes Textfeld löschen
+        engine.removeObject(editingRef.current);
+        setEditingId(null);
+      }
       else if (mod && k === "t" && e.shiftKey) useTools.getState().setTool("text");
       else if (k === "escape") engine.commitSelection();
       else if (k.startsWith("arrow") && engine.hasSelection) {
@@ -819,6 +833,7 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
             onColor={(c) => e()?.recolorSelection(c)}
             onCopy={() => e()?.duplicateSelection()}
             onDelete={() => e()?.deleteSelection()}
+            onLock={() => e()?.lockSelection()}
             onDone={() => e()?.commitSelection()}
             onInkToText={() => void inkToText()}
             onInkToLatex={() => void inkToFormula()}

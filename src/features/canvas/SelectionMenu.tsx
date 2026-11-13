@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookmarkPlus, Check, Copy, LineChart, MoveRight, Palette, PencilRuler, ScanText, Sigma, Trash2, Type } from "lucide-react";
+import { BookmarkPlus, Check, Copy, LineChart, Lock, MoveRight, Palette, PencilRuler, ScanText, Sigma, Trash2, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { SelectionInfo } from "@/canvas/core/engine";
@@ -9,7 +9,8 @@ import { TagMenu } from "@/features/tags/TagMenu";
 import { MoleculeIcon } from "@/features/chem/MoleculeIcon";
 import { VIEW_LABELS, type MolView } from "@/features/chem/mol";
 
-export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDone, activeTags, onTag, onInkToText, onInkToLatex, onOcr, onEditPlot, onHeads, onEditVec, onSaveTemplate, onEditMol, onMolView }: {
+export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDone, activeTags, onTag, onInkToText, onInkToLatex, onOcr, onEditPlot, onHeads, onEditVec, onSaveTemplate, onEditMol, onMolView, onLock }: {
+  onLock: () => void;
   onEditMol: () => void;
   onMolView: (v: MolView) => void;
   onHeads: (h: Partial<{ head0: Head; head1: Head }>) => void;
@@ -88,6 +89,9 @@ export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDo
       )}
       <Button variant="ghost" size="icon" aria-label="Als Vorlage speichern" title="Als Vorlage speichern (Formen-Bibliothek → Eigene)" onClick={onSaveTemplate}><BookmarkPlus /></Button>
       {onEditPlot && <Button variant="ghost" size="icon" aria-label="Graph bearbeiten" title="Graph im Plotter bearbeiten" onClick={onEditPlot}><LineChart /></Button>}
+      {sel.images > 0 && sel.strokes === 0 && (
+        <Button variant="ghost" size="icon" aria-label="Sperren" title="Sperren: fest im Hintergrund, nicht mehr auswählbar (Schloss-Symbol zum Entsperren)" onClick={onLock}><Lock /></Button>
+      )}
       <Button variant="ghost" size="icon" aria-label="Kopieren" title="Kopieren" onClick={onCopy}><Copy /></Button>
       <Button variant="ghost" size="icon" aria-label="Löschen" title="Löschen" onClick={onDelete}><Trash2 /></Button>
       <Button variant="ghost" size="icon" aria-label="Auswahl aufheben" title="Fertig" onClick={onDone}><Check /></Button>
