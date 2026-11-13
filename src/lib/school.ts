@@ -11,7 +11,7 @@ export interface Homework {
   /** Fälligkeit (ms), null = ohne Termin */
   due: number | null;
   doneAt: number | null;
-  source: "manual" | "moodle";
+  source: "manual" | "moodle" | "webuntis";
   url: string;
   createdAt: number;
   updatedAt: number;
@@ -20,6 +20,8 @@ export type GradeKind = "written" | "oral";
 export type GradeScale = "grades" | "points";
 export interface Grade { id: string; subjectId: string; kind: GradeKind; title: string; value: number; weight: number; date: number }
 export interface GradeConfig { scale: GradeScale; writtenPct: Record<string, number> }
+/** Geschriebene Arbeit/Test, Note fehlt noch („Ausstehend“). Note eintragen = saveGrade mit derselben ID. */
+export interface PendingGrade { id: string; subjectId: string; kind: GradeKind; title: string; date: number }
 
 export interface SchoolBackend {
   listHomework(doneSince: number): Promise<Homework[]>;
@@ -27,6 +29,8 @@ export interface SchoolBackend {
   setHomeworkDone(id: string, done: boolean): Promise<Homework>;
   deleteHomework(id: string): Promise<void>;
   listGrades(): Promise<Grade[]>;
+  /** Legt dabei fehlende Einträge für inzwischen geschriebene Arbeiten an (auch offline). */
+  listPendingGrades(): Promise<PendingGrade[]>;
   saveGrade(g: Grade): Promise<Grade>;
   deleteGrade(id: string): Promise<void>;
   gradeConfig(): Promise<GradeConfig>;
@@ -40,6 +44,7 @@ const tauri: SchoolBackend = {
   setHomeworkDone: (id, done) => invoke<Homework>("set_homework_done", { id, done }).finally(notifyLocalChange),
   deleteHomework: (id) => invoke<void>("delete_homework", { id }).finally(notifyLocalChange),
   listGrades: () => invoke("list_grades"),
+  listPendingGrades: () => invoke("list_pending_grades"),
   saveGrade: (grade) => invoke("save_grade", { grade }),
   deleteGrade: (id) => invoke("delete_grade", { id }),
   gradeConfig: () => invoke("grade_config"),
@@ -210,6 +215,16 @@ export class MemorySchool implements SchoolBackend {
     return { ...h };
   }
   async deleteHomework(id: string) { this.hw = this.hw.filter((x) => x.id !== id); }
+  private skipped = new Set<string>();
+  async listPendingGrades(): Promise<PendingGrade[]> {
+    const { api } = await import("./api");
+    const now = Date.now();
+    const evs = await api.listEvents(now - 14 * 86_400_000, now);
+    return evs
+      .filter((e) => (e.type === "exam" || e.type === "test") && e.subjectId && (e.end ?? e.start + 2_700_000) <= now)
+      .map((e) => ({ id: `pending:event:${e.id}`, subjectId: e.subjectId!, kind: "written" as const, title: e.title, date: e.start }))
+      .filter((p) => !this.skipped.has(p.id) && !this.grades.some((g) => g.id === p.id));
+  }
   async listGrades() { return [...this.grades].sort((a, b) => a.date - b.date).map((g) => ({ ...g })); }
   async saveGrade(g: Grade) {
     const sc = SCALE[this.cfg.scale];
@@ -219,7 +234,10 @@ export class MemorySchool implements SchoolBackend {
     this.grades = [...this.grades.filter((x) => x.id !== n.id), n];
     return { ...n };
   }
-  async deleteGrade(id: string) { this.grades = this.grades.filter((x) => x.id !== id); }
+  async deleteGrade(id: string) {
+    if (id.startsWith("pending:")) this.skipped.add(id);
+    this.grades = this.grades.filter((x) => x.id !== id);
+  }
   async gradeConfig() { return structuredClone(this.cfg); }
   async setSubjectWeight(subjectId: string, writtenPct: number) { this.cfg.writtenPct[subjectId] = writtenPct; }
   async setGradeScale(scale: GradeScale) {

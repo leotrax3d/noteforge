@@ -1,5 +1,5 @@
 import { useLabels } from "@/store/labels";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext, KeyboardSensor, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors,
   type DragEndEvent,
@@ -25,7 +25,10 @@ import { useNav } from "@/store/nav";
 import { openSoon } from "@/lib/utils";
 import { SubjectDialog } from "./SubjectDialog";
 import { UpcomingExams } from "./UpcomingExams";
-import { TodayTimetable } from "./TodayTimetable";
+import { TodayTimetable, openLessonSubject } from "./TodayTimetable";
+import { useAutoSync, useLessonWindow } from "./use-lessons";
+import { useNow } from "@/lib/clock";
+import { runningLesson } from "@/lib/timetable";
 import { SchoolWidgets } from "./SchoolWidgets";
 import { AccountsDialog } from "@/features/settings/AccountsDialog";
 import { MappingDialog } from "@/features/settings/MappingDialog";
@@ -58,6 +61,28 @@ export function HomePage() {
   const [accounts, setAccounts] = useState(false);
   const [mapping, setMapping] = useState(false);
   const sensors = useDragSensors();
+  const now = useNow();
+  useAutoSync();
+  const untis = useLessonWindow(now, [subjects]);
+  const running = untis ? runningLesson(untis.lessons, now) : null;
+  const activeId = running?.subjectId ?? null;
+  // Laufende Stunde: Fach an erster Stelle (nur Anzeige, gespeicherte Reihenfolge bleibt)
+  const shown = useMemo(() => {
+    const list = subjects ?? [];
+    const a = list.find((s) => s.id === activeId);
+    return a ? [a, ...list.filter((s) => s !== a)] : list;
+  }, [subjects, activeId]);
+  // Optional: aktives Fach bei Stundenbeginn automatisch öffnen (einmal pro Stunde)
+  const autoOpen = usePrefs((s) => s.autoOpenLesson);
+  const opened = useRef<string | null>(null);
+  useEffect(() => {
+    if (!autoOpen || !running?.subjectId) return;
+    const key = `${running.id}:${running.start}`;
+    if (opened.current === key || sessionStorage.getItem("nf-auto-opened") === key) return;
+    opened.current = key;
+    try { sessionStorage.setItem("nf-auto-opened", key); } catch { /* egal */ }
+    void openLessonSubject(running.subjectId, go);
+  }, [autoOpen, running, go]);
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     if (!subjects || !over || active.id === over.id) return;
@@ -88,19 +113,20 @@ export function HomePage() {
       </header>
 
       <main className="flex-1 overflow-auto p-6">
-        <TodayTimetable subjects={subjects ?? []} onSetup={() => setAccounts(true)} />
-        <UpcomingExams subjects={subjects ?? []} />
-        <SchoolWidgets subjects={subjects ?? []} />
+        {untis?.connected && <TodayTimetable subjects={subjects ?? []} lessons={untis.lessons} now={now} />}
+        <UpcomingExams subjects={subjects ?? []} now={now} />
+        <SchoolWidgets subjects={subjects ?? []} lessons={untis?.lessons ?? []} now={now} />
         <h2 className="mb-4 text-lg font-medium">Meine Fächer</h2>
         {error && <p className="mb-4 text-destructive">{error}</p>}
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-          <SortableContext items={subjects?.map((s) => s.id) ?? []} strategy={rectSortingStrategy}>
+          <SortableContext items={shown.map((s) => s.id)} strategy={rectSortingStrategy}>
             <ul className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-4" aria-label="Fächer">
-              {subjects?.map((s) => (
+              {shown.map((s) => (
                 <SubjectTile
                   key={s.id}
                   subject={s}
+                  active={s.id === activeId}
                   onOpen={() => go({ view: "subject", subjectId: s.id, pageId: null })}
                   onEdit={() => setEditing(s)}
                   onDelete={() => setDeleting(s)}
@@ -145,7 +171,7 @@ export function HomePage() {
   );
 }
 
-function SubjectTile(props: { subject: Subject; onOpen: () => void; onEdit: () => void; onDelete: () => void }) {
+function SubjectTile(props: { subject: Subject; active?: boolean; onOpen: () => void; onEdit: () => void; onDelete: () => void }) {
   const { subject: s } = props;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: s.id });
   const Icon = subjectIcon(s.icon);
@@ -154,22 +180,28 @@ function SubjectTile(props: { subject: Subject; onOpen: () => void; onEdit: () =
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 10 : undefined }}
-      className="relative"
+      className={props.active ? "relative rounded-xl ring-4 ring-primary ring-offset-2 ring-offset-background" : "relative"}
     >
       <button
         type="button"
         {...attributes}
         {...listeners}
         onClick={props.onOpen}
-        aria-label={`${s.name} öffnen`}
+        aria-label={`${s.name} öffnen${props.active ? " (Unterricht läuft gerade)" : ""}`}
+        data-active={props.active || undefined}
         aria-roledescription="sortierbare Kachel"
         onContextMenu={(e) => { e.preventDefault(); openSoon(setMenu); }}
         data-glass="tile"
-        className="nf-tile-subject flex aspect-[4/3] w-full touch-manipulation flex-col justify-between rounded-xl p-4 text-left text-white shadow-sm outline-none transition-shadow hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/70 data-[dragging=true]:shadow-xl"
+        className="nf-tile-subject relative flex aspect-[4/3] w-full touch-manipulation flex-col justify-between rounded-xl p-4 text-left text-white shadow-sm outline-none transition-shadow hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/70 data-[dragging=true]:shadow-xl"
         data-dragging={isDragging}
         style={{ background: s.color, ["--subject" as string]: s.color }}
       >
         <span className="nf-tile-icon"><Icon className="size-9 opacity-90" /></span>
+        {props.active && (
+          <span data-testid="active-lesson-badge" className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-black shadow">
+            <span className="size-2 animate-pulse rounded-full bg-red-600 motion-reduce:animate-none" aria-hidden /> Jetzt
+          </span>
+        )}
         <span className="line-clamp-2 text-lg font-semibold">{s.name}</span>
       </button>
       <DropdownMenu open={menu} onOpenChange={setMenu}>

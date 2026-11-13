@@ -30,7 +30,7 @@ const clean = (e: unknown) => String(e).replace(/^Error: /, "");
 type CatId = "look" | "pen" | "notify" | "sync" | "google" | "backup";
 const CATS: { id: CatId; label: string; icon: React.ReactNode; words: string }[] = [
   { id: "look", label: "Darstellung", icon: <Palette />, words: "design hell dunkel system akzent farbe theme logo glas transparenz blur mica acrylic hintergrund" },
-  { id: "pen", label: "Stift & Bedienung", icon: <PenLine />, words: "stift druck kalibrierung stifttaste linkshänder rechtshänder leistung akku energie sparmodus fps tastenkürzel assistent einrichtung" },
+  { id: "pen", label: "Stift & Bedienung", icon: <PenLine />, words: "stift druck kalibrierung stifttaste linkshänder rechtshänder leistung akku energie sparmodus fps tastenkürzel assistent einrichtung stundenplan webuntis fach automatisch öffnen" },
   { id: "notify", label: "Erinnerungen", icon: <Bell />, words: "erinnerungen benachrichtigung spitz hinweise tipps vorlaufzeit" },
   { id: "sync", label: "Sync", icon: <Cloud />, words: "nextcloud sync abgleich app-passwort server ordner" },
   { id: "google", label: "Google Kalender", icon: <CalendarDays />, words: "google kalender calendar konto oauth client-id synchronisieren termine" },
@@ -275,6 +275,8 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
             />
           <Switch id="perf" label="Leistungsanzeige" checked={prefs.perfOverlay} onChange={prefs.setPerfOverlay}
             />
+          <Switch id="autoopen" label="Aktuelles Fach automatisch öffnen (WebUntis)" checked={prefs.autoOpenLesson}
+            onChange={prefs.setAutoOpenLesson} />
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => prefs.setDialog("shortcuts")}><Keyboard /> Tastenkürzel anzeigen</Button>
             <Button variant="outline" data-testid="restart-onboarding" onClick={() => { prefs.setDialog(null); useSetup.getState().set({ done: false, step: 0 }); }}>

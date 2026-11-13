@@ -85,7 +85,8 @@ export interface CalendarEvent {
   start: number;
   end: number | null;
   note: string;
-  source: "manual" | "moodle";
+  /** „webuntis“: von WebUntis angekündigte Arbeit/Test (nur lesend) */
+  source: "manual" | "moodle" | "webuntis";
   /** Erinnerung in Minuten vor Beginn, null = keine. */
   remindBefore: number | null;
   /** Verknüpftes Blatt (Deep-Link im Google-Termin). */

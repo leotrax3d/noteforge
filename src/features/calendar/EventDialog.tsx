@@ -72,7 +72,9 @@ export function EventDialog({ event, subjects, onOpenChange, onSave, onDelete }:
         >
           <DialogHeader>
             <DialogTitle>{v.id ? "Termin bearbeiten" : "Neuer Termin"}</DialogTitle>
-            <DialogDescription className="sr-only">Termin mit Typ, Fach, Datum und Erinnerung</DialogDescription>
+            <DialogDescription className={v.source === "webuntis" ? "" : "sr-only"}>
+              {v.source === "webuntis" ? "Von WebUntis angekündigt – Titel und Zeit kommen beim Abgleich von dort." : "Termin mit Typ, Fach, Datum und Erinnerung"}
+            </DialogDescription>
           </DialogHeader>
 
           <div role="radiogroup" aria-label="Typ" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -87,7 +89,7 @@ export function EventDialog({ event, subjects, onOpenChange, onSave, onDelete }:
 
           <div className="grid gap-2">
             <Label htmlFor="ev-title">Titel</Label>
-            <Input id="ev-title" autoFocus value={v.title} placeholder="z. B. Klassenarbeit Bruchrechnung"
+            <Input id="ev-title" autoFocus disabled={v.source === "webuntis"} value={v.title} placeholder="z. B. Klassenarbeit Bruchrechnung"
               onChange={(e) => set({ title: e.target.value })} />
           </div>
 
@@ -114,15 +116,15 @@ export function EventDialog({ event, subjects, onOpenChange, onSave, onDelete }:
           <div className="grid grid-cols-[1fr_auto_auto] gap-2">
             <div className="grid gap-2">
               <Label htmlFor="ev-date">Datum</Label>
-              <Input id="ev-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <Input id="ev-date" disabled={v.source === "webuntis"} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="ev-time">Beginn</Label>
-              <Input id="ev-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+              <Input id="ev-time" disabled={v.source === "webuntis"} type="time" value={time} onChange={(e) => setTime(e.target.value)} />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="ev-end">Ende</Label>
-              <Input id="ev-end" type="time" value={endTime} disabled={!time} onChange={(e) => setEndTime(e.target.value)} />
+              <Input id="ev-end" type="time" value={endTime} disabled={!time || v.source === "webuntis"} onChange={(e) => setEndTime(e.target.value)} />
             </div>
           </div>
 

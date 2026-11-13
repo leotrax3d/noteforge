@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, Calculator, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Calculator, Hourglass, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,7 @@ import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { api } from "@/lib/api";
 import {
   DEFAULT_WRITTEN_PCT, SCALE, fmtGrade, gradeLabel, gradeTone, groupBySubject, neededGrade, overallAverage, parseGrade,
-  school, subjectAverage, type Grade, type GradeConfig, type GradeKind, type GradeScale,
+  school, subjectAverage, type Grade, type GradeConfig, type GradeKind, type GradeScale, type PendingGrade,
 } from "@/lib/school";
 import { useCloudRev } from "@/lib/sync";
 import type { Subject } from "@/lib/types";
@@ -22,8 +22,8 @@ export const KIND_TEXT: Record<GradeKind, string> = { written: "schriftlich", or
 export function useGrades() {
   const cloud = useCloudRev((s) => s.rev);
   return useAsync(async () => {
-    const [grades, cfg] = await Promise.all([school.listGrades(), school.gradeConfig()]);
-    return { grades, cfg };
+    const [grades, cfg, pending] = await Promise.all([school.listGrades(), school.gradeConfig(), school.listPendingGrades().catch(() => [])]);
+    return { grades, cfg, pending };
   }, [cloud]);
 }
 
@@ -42,9 +42,10 @@ export function GradesPage({ subjectId }: { subjectId?: string }) {
     await reload();
   };
 
-  // Fächer mit Noten zuerst, sonst Reihenfolge der Startseite; gewähltes Fach ganz oben
+  const pendingIds = new Set((data?.pending ?? []).map((p) => p.subjectId));
+  // Fächer mit ausstehenden Noten, dann mit Noten zuerst, sonst Reihenfolge der Startseite; gewähltes Fach ganz oben
   const list = [...(subjects ?? [])].sort((a, b) =>
-    Number(b.id === subjectId) - Number(a.id === subjectId) || Number(by.has(b.id)) - Number(by.has(a.id)) || a.order - b.order);
+    Number(b.id === subjectId) - Number(a.id === subjectId) || Number(pendingIds.has(b.id)) - Number(pendingIds.has(a.id)) || Number(by.has(b.id)) - Number(by.has(a.id)) || a.order - b.order);
 
   return (
     <div className="flex h-full flex-col">
@@ -80,7 +81,8 @@ export function GradesPage({ subjectId }: { subjectId?: string }) {
         {subjects?.length === 0 && <p className="text-muted-foreground">Lege zuerst auf der Startseite Fächer an.</p>}
         <div className="grid gap-4 lg:grid-cols-2">
           {list.map((s) => (
-            <SubjectGrades key={s.id} subject={s} grades={by.get(s.id) ?? []} cfg={cfg} run={run} />
+            <SubjectGrades key={s.id} subject={s} grades={by.get(s.id) ?? []} cfg={cfg} run={run}
+              pending={(data?.pending ?? []).filter((p) => p.subjectId === s.id)} />
           ))}
         </div>
       </main>
@@ -88,9 +90,10 @@ export function GradesPage({ subjectId }: { subjectId?: string }) {
   );
 }
 
-function SubjectGrades({ subject, grades, cfg, run }: {
-  subject: Subject; grades: Grade[]; cfg: GradeConfig; run: (fn: () => Promise<unknown>) => Promise<void>;
+function SubjectGrades({ subject, grades, cfg, run, pending }: {
+  subject: Subject; grades: Grade[]; cfg: GradeConfig; run: (fn: () => Promise<unknown>) => Promise<void>; pending: PendingGrade[];
 }) {
+  const [filling, setFilling] = useState<PendingGrade | null>(null);
   const pct = cfg.writtenPct[subject.id] ?? DEFAULT_WRITTEN_PCT;
   const [pctDraft, setPctDraft] = useState<number | null>(null);
   const avg = subjectAverage(grades, pctDraft ?? pct);
@@ -133,6 +136,28 @@ function SubjectGrades({ subject, grades, cfg, run }: {
         </ul>
       )}
 
+      {pending.length > 0 && (
+        <ul className="grid gap-1 border-t p-3" aria-label={`Ausstehende Noten ${subject.name}`}>
+          {pending.map((p) => (
+            <li key={p.id} data-testid="pending-grade" className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-2 py-1 text-sm dark:bg-amber-950/40">
+              <Hourglass className="size-4 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden />
+              <span className="font-medium">{p.title || "Arbeit"}</span>
+              <span className="text-muted-foreground">{fmtDate(p.date, false)}</span>
+              <span className="rounded bg-amber-200 px-1.5 text-xs font-medium text-amber-950 dark:bg-amber-800 dark:text-amber-50">Ausstehend</span>
+              <span className="ml-auto flex">
+                <Button variant="ghost" onClick={() => setFilling(filling?.id === p.id ? null : p)}>Note eintragen</Button>
+                <Button variant="ghost" size="icon" aria-label={`${p.title || "Arbeit"} entfernen (nicht mitgeschrieben)`} title="Entfernen, z. B. nicht mitgeschrieben"
+                  onClick={() => void run(() => school.deleteGrade(p.id))}><Trash2 className="size-4" /></Button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {filling && (
+        <AddGrade key={filling.id} subject={subject} scale={scale} preset={filling}
+          onAdd={(g) => run(() => school.saveGrade(g)).then(() => setFilling(null))} />
+      )}
+
       <div className="flex flex-wrap gap-2 border-t p-2">
         <Button variant={adding ? "secondary" : "ghost"} onClick={() => setAdding(!adding)}><Plus /> Note eintragen</Button>
         <Button variant={calc ? "secondary" : "ghost"} onClick={() => setCalc(!calc)}><Calculator /> Was brauche ich?</Button>
@@ -143,8 +168,8 @@ function SubjectGrades({ subject, grades, cfg, run }: {
   );
 }
 
-function AddGrade({ subject, scale, onAdd }: { subject: Subject; scale: GradeScale; onAdd: (g: Grade) => Promise<void> }) {
-  const [f, setF] = useState({ value: "", kind: "written" as GradeKind, weight: "1", title: "", date: toDateInput(Date.now()) });
+function AddGrade({ subject, scale, onAdd, preset }: { subject: Subject; scale: GradeScale; onAdd: (g: Grade) => Promise<void>; preset?: PendingGrade }) {
+  const [f, setF] = useState({ value: "", kind: (preset?.kind ?? "written") as GradeKind, weight: "1", title: preset?.title ?? "", date: toDateInput(preset?.date ?? Date.now()) });
   const value = parseGrade(f.value, scale);
   const weight = Number(f.weight.replace(",", "."));
   const ok = value != null && weight > 0 && weight <= 10;
@@ -154,7 +179,7 @@ function AddGrade({ subject, scale, onAdd }: { subject: Subject; scale: GradeSca
       onSubmit={(e) => {
         e.preventDefault();
         if (!ok) return;
-        void onAdd({ id: "", subjectId: subject.id, kind: f.kind, title: f.title, value: value!, weight, date: fromInputs(f.date, "12:00") })
+        void onAdd({ id: preset?.id ?? "", subjectId: subject.id, kind: f.kind, title: f.title, value: value!, weight, date: fromInputs(f.date, "12:00") })
           .then(() => setF((x) => ({ ...x, value: "", title: "" })));
       }}>
       <div className="grid gap-1"><Label htmlFor={`${id}-v`}>{SCALE[scale].unit}</Label>

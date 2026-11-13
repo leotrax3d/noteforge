@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CalendarClock, ExternalLink, MoreVertical, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowLeft, BellRing, CalendarClock, CalendarX, ExternalLink, MoreVertical, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,9 @@ import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { api, inTauri } from "@/lib/api";
 import { dueLabel, emptyHomework, school, type Homework } from "@/lib/school";
 import { integrations, syncNow, useSyncRev } from "@/lib/integrations";
+import { homeworkHint, type HomeworkHint } from "@/lib/timetable";
+import { useNow } from "@/lib/clock";
+import { useLessonWindow } from "@/features/home/use-lessons";
 import { useCloudRev } from "@/lib/sync";
 import type { Subject } from "@/lib/types";
 import { useAsync } from "@/lib/use-async";
@@ -61,7 +64,9 @@ export function HomeworkPage({ subjectId }: { subjectId?: string }) {
   const [moodle, setMoodle] = useState<boolean | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const now = Date.now();
+  const now = useNow();
+  const untis = useLessonWindow(now, [subjects]);
+  const lessons = untis?.lessons ?? [];
 
   useEffect(() => { void integrations.status().then((s) => setMoodle(!!s.moodle)).catch(() => setMoodle(false)); }, []);
 
@@ -154,7 +159,7 @@ export function HomeworkPage({ subjectId }: { subjectId?: string }) {
             <ul className="divide-y rounded-xl border">
               {list.map((h) => (
                 <HomeworkRow key={h.id} h={h} subject={h.subjectId ? subj.get(h.subjectId) : undefined} now={now}
-                  onToggle={(d) => void toggle(h, d)} onEdit={() => setEditing(h)}
+                  hint={homeworkHint(h, lessons, now)} onToggle={(d) => void toggle(h, d)} onEdit={() => setEditing(h)}
                   onDelete={() => void school.deleteHomework(h.id).then(reload, (e) => setMsg(String(e)))} />
               ))}
             </ul>
@@ -168,8 +173,8 @@ export function HomeworkPage({ subjectId }: { subjectId?: string }) {
   );
 }
 
-export function HomeworkRow({ h, subject, now, onToggle, onEdit, onDelete, compact }: {
-  h: Homework; subject?: Subject; now: number; onToggle: (done: boolean) => void;
+export function HomeworkRow({ h, subject, now, hint, onToggle, onEdit, onDelete, compact }: {
+  h: Homework; subject?: Subject; now: number; hint?: HomeworkHint; onToggle: (done: boolean) => void;
   onEdit?: () => void; onDelete?: () => void; compact?: boolean;
 }) {
   const due = dueLabel(h.due, now);
@@ -186,7 +191,18 @@ export function HomeworkRow({ h, subject, now, onToggle, onEdit, onDelete, compa
               <CalendarClock className="size-3.5" />{due.text}
             </span>
           )}
+          {hint?.dueNext && (
+            <span data-testid="hw-due-next" className="flex items-center gap-1 rounded bg-amber-100 px-1.5 text-xs font-medium text-amber-900 dark:bg-amber-900/50 dark:text-amber-100">
+              <BellRing className="size-3" aria-hidden /> Fällig in der nächsten Stunde
+            </span>
+          )}
+          {hint?.cancelled && (
+            <span data-testid="hw-cancelled" className="flex items-center gap-1 rounded bg-red-100 px-1.5 text-xs font-medium text-red-900 dark:bg-red-900/50 dark:text-red-100">
+              <CalendarX className="size-3" aria-hidden /> Stunde fällt aus
+            </span>
+          )}
           {h.source === "moodle" && <span className="rounded bg-muted px-1.5 text-xs">Moodle</span>}
+          {h.source === "webuntis" && <span className="rounded bg-muted px-1.5 text-xs">WebUntis</span>}
           {!compact && h.note && <span className="truncate">{h.note.split("\n")[0]}</span>}
         </div>
       </button>
@@ -198,7 +214,7 @@ export function HomeworkRow({ h, subject, now, onToggle, onEdit, onDelete, compa
           <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`Optionen für ${h.title}`}><MoreVertical /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             {onEdit && <DropdownMenuItem onSelect={onEdit}><Pencil /> Bearbeiten</DropdownMenuItem>}
-            {onDelete && <DropdownMenuItem variant="destructive" onSelect={onDelete}><Trash2 /> {h.source === "moodle" ? "Ausblenden" : "Löschen"}</DropdownMenuItem>}
+            {onDelete && <DropdownMenuItem variant="destructive" onSelect={onDelete}><Trash2 /> {h.source === "manual" ? "Löschen" : "Ausblenden"}</DropdownMenuItem>}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
@@ -213,13 +229,13 @@ function HomeworkDialog({ item, subjects, onClose, onSave }: {
   const [date, setDate] = useState("");
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => { setF(item); setErr(null); setDate(item?.due != null ? toDateInput(item.due) : ""); }, [item]);
-  const moodle = f?.source === "moodle";
+  const moodle = f?.source === "moodle" || f?.source === "webuntis";
   return (
     <Dialog open={!!item} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Hausaufgabe bearbeiten</DialogTitle>
-          <DialogDescription className="sr-only">{moodle ? "Aus Moodle übernommen – Titel und Frist kommen aus Moodle." : "Eigene Aufgabe"}</DialogDescription>
+          <DialogDescription className="sr-only">{moodle ? `Aus ${f?.source === "webuntis" ? "WebUntis" : "Moodle"} übernommen – Titel und Frist kommen von dort.` : "Eigene Aufgabe"}</DialogDescription>
         </DialogHeader>
         {f && (
           <form id="hw-form" className="grid gap-3" onSubmit={(e) => {

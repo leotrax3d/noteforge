@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { BookCheck, GraduationCap } from "lucide-react";
+import { useMemo } from "react";
+import { BellRing, BookCheck, GraduationCap } from "lucide-react";
+import type { Lesson } from "@/lib/integrations";
+import { homeworkHint } from "@/lib/timetable";
 import { Button } from "@/components/ui/button";
 import { fmtGrade, gradeTone, groupBySubject, overallAverage, school, subjectAverage, DEFAULT_WRITTEN_PCT } from "@/lib/school";
 import type { Subject } from "@/lib/types";
@@ -10,18 +12,16 @@ import { useGrades } from "@/features/school/GradesPage";
 import { toneCls } from "@/features/school/common";
 
 /** Startseite: offene Hausaufgaben (zum Abhaken) und Notenschnitt. */
-export function SchoolWidgets({ subjects }: { subjects: Subject[] }) {
+export function SchoolWidgets({ subjects, lessons, now }: { subjects: Subject[]; lessons: Lesson[]; now: number }) {
   const go = useNav((s) => s.go);
   const hw = useHomework();
   const gr = useGrades();
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const t = window.setInterval(() => setNow(Date.now()), 60_000);
-    return () => window.clearInterval(t);
-  }, []);
   const subj = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects]);
   const open = (hw.data ?? []).filter((h) => h.doneAt == null);
-  const shown = open.slice(0, 5);
+  const hints = new Map(open.map((h) => [h.id, homeworkHint(h, lessons, now)]));
+  // Für die nächste Stunde fällige zuerst
+  const shown = [...open].sort((a, b) => Number(!!hints.get(b.id)?.dueNext) - Number(!!hints.get(a.id)?.dueNext)).slice(0, 5);
+  const dueNext = open.filter((h) => hints.get(h.id)?.dueNext);
 
   const cfg = gr.data?.cfg;
   const overall = gr.data && cfg ? overallAverage(gr.data.grades, cfg) : null;
@@ -38,12 +38,22 @@ export function SchoolWidgets({ subjects }: { subjects: Subject[] }) {
           <h2 id="hw-h" className="mr-auto text-lg font-medium">Hausaufgaben {open.length > 0 && <span className="text-muted-foreground font-normal">· {open.length} offen</span>}</h2>
           <Button variant="ghost" onClick={() => go({ view: "homework" })}><BookCheck /> Alle</Button>
         </div>
+        {dueNext.length > 0 && (
+          <div role="alert" data-testid="hw-next-banner" className="mb-2 flex min-h-11 items-center gap-3 rounded-xl border border-amber-500/50 bg-amber-100/70 px-4 py-2 text-amber-950 dark:bg-amber-900/40 dark:text-amber-50">
+            <BellRing className="size-5 shrink-0" aria-hidden />
+            <span className="font-medium">
+              {dueNext.length === 1
+                ? `Noch offen für die nächste ${subj.get(dueNext[0].subjectId!)?.name ?? ""}-Stunde: ${dueNext[0].title}`
+                : `${dueNext.length} Hausaufgaben für die nächste Stunde sind noch offen`}
+            </span>
+          </div>
+        )}
         {shown.length === 0 ? (
           <p data-glass="panel" className="rounded-xl border border-dashed p-4 text-muted-foreground">Keine offenen Hausaufgaben</p>
         ) : (
           <ul data-glass="panel" className="divide-y rounded-xl border" aria-label="Offene Hausaufgaben">
             {shown.map((h) => (
-              <HomeworkRow key={h.id} h={h} compact now={now} subject={h.subjectId ? subj.get(h.subjectId) : undefined}
+              <HomeworkRow key={h.id} h={h} compact now={now} hint={hints.get(h.id)} subject={h.subjectId ? subj.get(h.subjectId) : undefined}
                 onEdit={() => go({ view: "homework" })}
                 onToggle={(d) => void school.setHomeworkDone(h.id, d).then(hw.reload, console.error)} />
             ))}

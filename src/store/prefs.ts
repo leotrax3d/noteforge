@@ -7,6 +7,9 @@ interface Prefs {
   leftHanded: boolean;
   /** Leistungsanzeige auf dem Canvas */
   perfOverlay: boolean;
+  /** Beginnt eine Stunde, öffnet die Startseite das Fach automatisch (Standard aus) */
+  autoOpenLesson: boolean;
+  setAutoOpenLesson: (v: boolean) => void;
   /** Debug-Modus: Rohpunkte/Druck/Umriss + FPS (Strg+Umschalt+D, nicht gespeichert) */
   inkDebug: boolean;
   setInkDebug: (v: boolean) => void;
@@ -22,7 +25,7 @@ interface Prefs {
 
 const KEY = "noteforge-prefs";
 
-function load(): Partial<Pick<Prefs, "leftHanded" | "perfOverlay">> {
+function load(): Partial<Pick<Prefs, "leftHanded" | "perfOverlay" | "autoOpenLesson">> {
   try {
     return JSON.parse(localStorage.getItem(KEY) ?? "{}");
   } catch {
@@ -32,7 +35,7 @@ function load(): Partial<Pick<Prefs, "leftHanded" | "perfOverlay">> {
 
 function save(p: Prefs) {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ leftHanded: p.leftHanded, perfOverlay: p.perfOverlay }));
+    localStorage.setItem(KEY, JSON.stringify({ leftHanded: p.leftHanded, perfOverlay: p.perfOverlay, autoOpenLesson: p.autoOpenLesson }));
   } catch {
     /* privat/gesperrt: nur für diese Sitzung */
   }
@@ -41,6 +44,7 @@ function save(p: Prefs) {
 export const usePrefs = create<Prefs>((set, get) => ({
   leftHanded: false,
   perfOverlay: false,
+  autoOpenLesson: false,
   focus: false,
   inkDebug: false,
   dialog: null,
@@ -48,6 +52,7 @@ export const usePrefs = create<Prefs>((set, get) => ({
   setDialog: (dialog) => set({ dialog }),
   setLeftHanded: (leftHanded) => { set({ leftHanded }); save(get()); },
   setPerfOverlay: (perfOverlay) => { set({ perfOverlay }); save(get()); },
+  setAutoOpenLesson: (autoOpenLesson) => { set({ autoOpenLesson }); save(get()); },
   setFocus: (focus) => set({ focus }),
   setInkDebug: (inkDebug) => set({ inkDebug }),
 }));

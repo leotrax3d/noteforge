@@ -4,11 +4,13 @@ import App from "./App";
 import "./index.css";
 import { initPower } from "./lib/power";
 import { applyGlass, initGlass, startInkWatcher } from "./lib/glass";
+import { startClock } from "./lib/clock";
 
 void initPower();
 applyGlass();
 void initGlass();
 startInkWatcher();
+startClock();
 // Natives Ziehen nur für ausdrücklich ziehbare Elemente (z. B. Leiste anpassen) und Dateien von außen
 window.addEventListener("dragstart", (e) => {
   const t = e.target as Element | null;

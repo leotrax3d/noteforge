@@ -88,6 +88,7 @@ export class DemoIntegrations implements Integrations {
       const d = new Date(this.now());
       const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7) - 7);
       this.lessons = [];
+      const todayIdx = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - monday.getTime()) / 86_400_000);
       for (let day = 0; day < 42; day++) {
         const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + day);
         const wd = (date.getDay() + 6) % 7;
@@ -97,13 +98,23 @@ export class DemoIntegrations implements Integrations {
           const start = date.getTime() + min * 60_000;
           this.lessons.push({
             id: day * 100 + i, start, end: start + 45 * 60_000, untisSubjectId: su.id, subjectName: su.name, subjectLong: su.longName,
-            rooms: `R${100 + i}`, teachers: "Mus", state: day === 7 && i === 2 ? "cancelled" : "normal", info: day === 7 && i === 2 ? "Entfall" : "",
+            rooms: `R${100 + i}`, teachers: "Mus",
+            state: day === 7 && i === 2 ? "cancelled" : day === todayIdx && i === 3 ? "irregular" : day === todayIdx + 1 && i === 1 ? "cancelled" : "normal",
+            info: day === 7 && i === 2 ? "Entfall" : day === todayIdx && i === 3 ? "Hub statt Mus" : "",
             subjectId: null,
           });
         });
       }
       this.st.untisLastSync = this.now();
       rep.lessons = this.lessons.length;
+      // Demo: eine von WebUntis angekündigte Klassenarbeit morgen
+      const evs = await api.listEvents(0, Number.MAX_SAFE_INTEGER);
+      if (!evs.some((e) => e.source === "webuntis")) {
+        const t = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() + DEMO_SLOTS[1] * 60_000;
+        const su = this.lessons.find((l) => l.start === t);
+        const subjectId = su ? subjects.find((s) => s.webuntisSubjectId === su.untisSubjectId)?.id ?? null : null;
+        await api.saveEvent({ id: "", subjectId, type: "exam", title: "Klassenarbeit", start: t, end: t + 90 * 60_000, note: "", source: "webuntis", remindBefore: 1440 });
+      }
     }
     if (this.st.moodle) {
       const existing = await api.listEvents(0, Number.MAX_SAFE_INTEGER);
@@ -162,7 +173,14 @@ export const MIN_FREE_MS = 25 * 60_000;
 export type FreeReason = "gap" | "cancelled";
 export type DaySlot =
   | { kind: "lesson"; start: number; end: number; lesson: Lesson }
-  | { kind: "free"; start: number; end: number; reason: FreeReason; lesson?: Lesson };
+  | { kind: "free"; start: number; end: number; reason: FreeReason; lesson?: Lesson }
+  | { kind: "lunch"; start: number; end: number };
+
+/** Mittagspause statt Freistunde: 40–100 min Lücke, Beginn zwischen 11:15 und 14:15 Uhr (Ortszeit). */
+export function isLunchGap(start: number, end: number): boolean {
+  const len = end - start, d = new Date(start), m = d.getHours() * 60 + d.getMinutes();
+  return len >= 40 * 60_000 && len <= 100 * 60_000 && m >= 11 * 60 + 15 && m <= 14 * 60 + 15;
+}
 
 /**
  * Stundenplan eines Tages mit Freistunden: Lücken zwischen stattfindenden Stunden (länger als eine
@@ -183,10 +201,13 @@ export function daySlots(lessons: Lesson[]): DaySlot[] {
     } else out.push({ kind: "lesson", start: l.start, end: l.end, lesson: l });
   }
   // Reguläre Lücken: Zeiträume ohne Stunde (weder aktiv noch entfallen) zwischen erster und letzter Stunde
-  let cover = first;
+  let cover = first, lunch = false;
   for (const l of sorted) {
     if (l.start >= last) break;
-    if (l.start - cover >= MIN_FREE_MS) out.push({ kind: "free", start: cover, end: l.start, reason: "gap" });
+    if (l.start - cover >= MIN_FREE_MS) {
+      if (!lunch && isLunchGap(cover, l.start)) { lunch = true; out.push({ kind: "lunch", start: cover, end: l.start }); }
+      else out.push({ kind: "free", start: cover, end: l.start, reason: "gap" });
+    }
     cover = Math.max(cover, l.end);
   }
   return out.sort((a, b) => a.start - b.start);
