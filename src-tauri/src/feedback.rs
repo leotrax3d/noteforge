@@ -70,10 +70,12 @@ pub async fn submit_bug_report(description: String) -> Result<String, String> {
         .timeout(Duration::from_secs(15))
         .build()
         .map_err(|e| e.to_string())?;
-    let res = http
-        .post(format!("{url}/rest/v1/bug_reports"))
-        .header("apikey", &key)
-        .bearer_auth(&key)
+    let mut req = http.post(format!("{url}/rest/v1/bug_reports")).header("apikey", &key);
+    // Alter anon-Schlüssel ist ein JWT und gehört auch in Authorization; neue „sb_publishable_…“-Schlüssel nicht.
+    if key.starts_with("eyJ") {
+        req = req.bearer_auth(&key);
+    }
+    let res = req
         .header("Prefer", "return=minimal")
         .json(&p)
         .send()
