@@ -55,10 +55,9 @@ jobs:
             - `Noteforge_*_x64_de-DE.msi` (MSI)
 
             Neu in dieser Version:
-            - Google Kalender: Klassenarbeiten, Hausaufgaben, Moodle-Abgaben und optional der Stundenplan in Google; Google-Kalender im Noteforge-Kalender; Änderungen in Google kommen zurück (Einrichtung siehe README)
-            - Antippen wählt Striche und Formen aus; Finger und Maus: tippen = Text, ziehen = verschieben
-            - Am Raster einrasten; Lineal und Geodreieck vergrößerbar
-            - WebUntis: Schulsuche in den Konten, vergangene Tage bleiben gespeichert
-            - Zoomen mit dem Mausrad auch über Textfeldern; diverse Oberflächen-Fixes
+            - Neues Design „Glas“ (hell und dunkel): halbtransparente, weichgezeichnete Leisten, Menüs, Dialoge und Kacheln; Fensterhintergrund Mica/Acrylic; optional eigenes Hintergrundbild
+            - Einstellungen → Darstellung: Transparenz und Blur mit Live-Vorschau, Verhalten im Akkumodus, „Animationen reduzieren“
+            - Lesbarkeit: Deckkraft wird automatisch für WCAG-AA-Kontrast erhöht; Windows-„Transparenzeffekte aus“ und Kontrastmodus werden beachtet
+            - Stift bleibt schnell: Stiftleiste schreibt ohne Blur, schaltet danach weich zurück
           releaseDraft: false
           prerelease: false  # „latest“ muss auf das neueste Release zeigen (Update-Endpunkt)
