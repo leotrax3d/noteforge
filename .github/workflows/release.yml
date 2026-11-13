@@ -55,9 +55,11 @@ jobs:
             - `Noteforge_*_x64_de-DE.msi` (MSI)
 
             Neu in dieser Version:
-            - Neues Design „Glas“ (hell und dunkel): halbtransparente, weichgezeichnete Leisten, Menüs, Dialoge und Kacheln; Fensterhintergrund Mica/Acrylic; optional eigenes Hintergrundbild
-            - Einstellungen → Darstellung: Transparenz und Blur mit Live-Vorschau, Verhalten im Akkumodus, „Animationen reduzieren“
-            - Lesbarkeit: Deckkraft wird automatisch für WCAG-AA-Kontrast erhöht; Windows-„Transparenzeffekte aus“ und Kontrastmodus werden beachtet
-            - Stift bleibt schnell: Stiftleiste schreibt ohne Blur, schaltet danach weich zurück
+            - WebUntis offline: Stundenplan, Arbeiten/Tests, Hausaufgaben und Abwesenheiten werden lokal gespeichert und bei Verbindung abgeglichen
+            - Laufende Stunde: Fach steht auf der Startseite an erster Stelle („Jetzt“); optional automatisch öffnen
+            - Pausen-Banner (5/10 min, große Pause, Mittagspause) und Stundenplan-Menü Heute/Morgen mit Punkten für Ausfälle, Freistunden und Vertretungen
+            - Hinweise: Hausaufgabe für die nächste Stunde noch offen, Stunde fällt aus, Arbeit morgen
+            - Geschriebene Arbeiten erscheinen im Notentab als „Ausstehend“, bis die Note eingetragen ist
+            - Uhrzeit wird über die eingerichteten Server abgeglichen (falsche Systemuhr stört nicht mehr)
           releaseDraft: false
           prerelease: false  # „latest“ muss auf das neueste Release zeigen (Update-Endpunkt)
