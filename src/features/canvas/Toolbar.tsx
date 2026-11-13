@@ -245,7 +245,7 @@ function OptionsBar({ onMore }: { onMore: () => void }) {
             return (
               <button key={w} type="button" role="radio" aria-checked={t.width === w} aria-label={`Breite ${w}`} title={`Breite ${w}`}
                 onClick={() => t.setWidth(w)} className={cn(pill, t.width === w && "bg-accent")}>
-                <span className="rounded-full bg-foreground" style={{ width: d, height: d }} />
+                <span className="rounded-full bg-foreground" style={{ width: 22, height: Math.max(2, d / 2.2) }} />
               </button>
             );
           })}
