@@ -266,3 +266,16 @@ html.glass-solid [data-slot$="-overlay"] { -webkit-backdrop-filter: none; backdr
 [data-goodbar] button:hover { background: color-mix(in srgb, var(--bar-fg) 14%, transparent); color: var(--bar-fg); }
 [data-goodbar] button[aria-pressed="true"] { background: color-mix(in srgb, var(--bar-fg) 24%, transparent) !important; box-shadow: none; --tw-ring-shadow: 0 0 #0000; }
 [data-goodbar] [data-bar-sep] { background: color-mix(in srgb, var(--bar-fg) 30%, transparent); }
+
+/* Frosted: alle Überlagerungen (Menüs, Popover, Dialoge, schwebende Leisten) milchglasartig */
+[data-slot$="-content"]:not([data-slot="accordion-content"]):not([data-slot="tabs-content"]),
+[data-glass-float], [data-glass="float"], [data-page-actions-float] {
+  background-color: color-mix(in srgb, var(--popover) 72%, transparent) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+  border-color: color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+.dark [data-slot$="-content"]:not([data-slot="accordion-content"]):not([data-slot="tabs-content"]),
+.dark [data-glass-float], .dark [data-glass="float"] {
+  background-color: color-mix(in srgb, var(--popover) 62%, transparent) !important;
+}
