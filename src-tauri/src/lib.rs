@@ -63,10 +63,8 @@ pub fn run() {
                 let material = onboarding::app_setting(&conn, "app.windowMaterial").unwrap_or_else(|| "off".into());
                 let dark = onboarding::app_setting(&conn, "app.windowDark").as_deref() != Some("0");
                 drop(conn);
-                if material != "off" {
-                    if let Some(w) = app.get_webview_window("main") {
-                        window_fx::apply(&w, &material, dark);
-                    }
+                if let (true, Some(w)) = (material != "off", app.get_webview_window("main")) {
+                    window_fx::apply(&w, &material, dark);
                 }
             }
             app.manage(db);

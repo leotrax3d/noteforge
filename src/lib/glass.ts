@@ -27,23 +27,12 @@ export interface GlassSettings {
 }
 
 export const GLASS_DEFAULTS: GlassSettings = {
-  enabled: false, opacity: 0.55, blur: 24, material: "mica", background: "aurora", customAsset: null,
+  enabled: false, opacity: 0.55, blur: 24, material: "mica", background: "none", customAsset: null,
   autoAccent: false, saverBlur: "reduce", reduceMotion: false,
 };
 
-/** Mitgelieferte abstrakte Verläufe; `stops` sind die Grundfarben (für Kontrast und Akzent). */
-export const BACKGROUNDS: { id: string; label: string; css: string; stops: string[]; accent: string }[] = [
-  { id: "aurora", label: "Polarlicht", accent: "#7c3aed", stops: ["#1e1b4b", "#7c3aed", "#06b6d4", "#22c55e"],
-    css: "radial-gradient(60% 70% at 15% 20%, #7c3aed 0%, transparent 60%), radial-gradient(50% 60% at 85% 30%, #06b6d4 0%, transparent 60%), radial-gradient(60% 60% at 60% 90%, #22c55e 0%, transparent 60%), #1e1b4b" },
-  { id: "sunset", label: "Abendrot", accent: "#ea580c", stops: ["#3b0a2a", "#f97316", "#db2777", "#facc15"],
-    css: "radial-gradient(70% 60% at 20% 80%, #f97316 0%, transparent 60%), radial-gradient(60% 60% at 80% 20%, #db2777 0%, transparent 60%), radial-gradient(40% 40% at 60% 60%, #facc15 0%, transparent 70%), #3b0a2a" },
-  { id: "ocean", label: "Ozean", accent: "#0284c7", stops: ["#0c1a3a", "#0284c7", "#14b8a6", "#6366f1"],
-    css: "radial-gradient(60% 60% at 25% 30%, #0284c7 0%, transparent 60%), radial-gradient(60% 70% at 80% 70%, #14b8a6 0%, transparent 60%), radial-gradient(40% 40% at 70% 15%, #6366f1 0%, transparent 70%), #0c1a3a" },
-  { id: "forest", label: "Wald", accent: "#16a34a", stops: ["#0b1f14", "#16a34a", "#84cc16", "#0d9488"],
-    css: "radial-gradient(60% 60% at 20% 25%, #16a34a 0%, transparent 60%), radial-gradient(50% 60% at 85% 75%, #84cc16 0%, transparent 60%), radial-gradient(50% 50% at 50% 50%, #0d9488 0%, transparent 70%), #0b1f14" },
-  { id: "mono", label: "Graphit", accent: "#64748b", stops: ["#111827", "#475569", "#94a3b8"],
-    css: "radial-gradient(60% 60% at 30% 30%, #475569 0%, transparent 60%), radial-gradient(60% 60% at 75% 75%, #94a3b8 0%, transparent 60%), #111827" },
-];
+/** Neutrale Prüftöne für die Kontrastberechnung (kein Farbverlauf: Hintergrund ist Fenstermaterial, App-Farbe oder eigenes Bild). */
+export const TEST_BACKDROPS: string[][] = [["#202020", "#0a0a0a"], ["#f3f3f3", "#ffffff"], ["#1e1b4b", "#7c3aed", "#06b6d4", "#facc15"]];
 
 // ---------- Kontrast (WCAG 2.1) ----------
 
@@ -126,7 +115,7 @@ export function glassActive(s = useGlass.getState()): boolean {
 
 export function bgStops(s = useGlass.getState(), mode: "light" | "dark"): string[] {
   if (s.background === "custom") return s.customStops.length ? s.customStops : PLAIN[mode];
-  return BACKGROUNDS.find((b) => b.id === s.background)?.stops ?? PLAIN[mode];
+  return PLAIN[mode];
 }
 
 const supportsBackdrop = () => typeof CSS !== "undefined" && (CSS.supports("backdrop-filter", "blur(1px)") || CSS.supports("-webkit-backdrop-filter", "blur(1px)"));
@@ -136,7 +125,7 @@ export function effective(s = useGlass.getState(), mode: "light" | "dark", savin
   let blur = s.blur;
   if (saving) blur = s.saverBlur === "off" ? 0 : s.saverBlur === "reduce" ? Math.min(blur, 8) : blur;
   if (!backdropOk) blur = 0;
-  const backdrops = s.background === "none" ? PLAIN[mode].map(hexToRgb) : backdropColors(bgStops(s, mode), mode);
+  const backdrops = s.background !== "custom" ? PLAIN[mode].map(hexToRgb) : backdropColors(bgStops(s, mode), mode);
   // Ohne Weichzeichnung schimmert der Hintergrund ungefiltert durch → deutlich deckender
   const wanted = blur === 0 ? Math.max(s.opacity, 0.85) : s.opacity;
   return { blur, opacity: safeOpacity(wanted, backdrops, mode) };
@@ -213,7 +202,9 @@ export async function saveGlassImage(file: Blob): Promise<void> {
     const c = document.createElement("canvas");
     c.width = Math.max(1, Math.round(img.naturalWidth * k));
     c.height = Math.max(1, Math.round(img.naturalHeight * k));
-    c.getContext("2d")?.drawImage(img, 0, 0, c.width, c.height);
+    // Einmalig weichzeichnen: zur Laufzeit liegt nur ein statisches Bild hinter dem Glas (kein CSS-Filter)
+    const g = c.getContext("2d");
+    if (g) { g.filter = "blur(40px)"; g.drawImage(img, -60, -60, c.width + 120, c.height + 120); }
     const data = c.toDataURL("image/jpeg", 0.85);
     if (inTauriWin()) {
       const { invoke } = await import("@tauri-apps/api/core");

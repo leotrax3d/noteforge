@@ -178,11 +178,12 @@ input[type="range"].hue::-webkit-slider-thumb { margin-top: -4px; background: #f
 }
 
 /* Fensterhintergrund: mit Mica/Acrylic scheint das Fenstermaterial durch, sonst Verlauf/Bild */
-html.glass[data-material], html.glass[data-material] body { background: transparent; }
+html.glass body { background: transparent; }
+html.glass[data-material] { background: transparent; }
 .nf-backdrop { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; display: none; }
 html.glass .nf-backdrop { display: block; }
 html.glass[data-material][data-glass-bg="none"] .nf-backdrop { display: none; }
-.nf-backdrop > div { position: absolute; inset: -80px; background: var(--background); filter: blur(60px) saturate(140%); transform: translateZ(0); }
+.nf-backdrop > div { position: absolute; inset: -80px; background: var(--background);  }
 .nf-backdrop::after { content: ""; position: absolute; inset: 0; background: var(--glass-dim); }
 
 /* Wiederverwendbare Glasfläche */

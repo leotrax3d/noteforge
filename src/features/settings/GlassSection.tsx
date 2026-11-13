@@ -4,7 +4,7 @@ import { ImagePlus, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/common/Switch";
-import { BACKGROUNDS, effective, glassActive, saveGlassImage, useGlass, type Material, type SaverBlur } from "@/lib/glass";
+import { effective, glassActive, saveGlassImage, useGlass, type Material, type SaverBlur } from "@/lib/glass";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/theme/theme-provider";
 
@@ -24,12 +24,11 @@ function Radio<T extends string>({ label, value, options, onChange }: { label: s
 
 /** Kleine Vorschau: Kachel über dem gewählten Hintergrund mit den aktuellen Glas-Werten. */
 export function GlassPreview({ className }: { className?: string }) {
-  const g = useGlass();
-  const bg = BACKGROUNDS.find((b) => b.id === g.background)?.css ?? BACKGROUNDS[0].css;
   return (
     <div data-testid="glass-preview" className={cn("relative h-32 overflow-hidden rounded-2xl", className)} aria-hidden>
-      <div className="absolute -inset-6" style={{ background: bg, filter: "blur(24px)" }} />
-      <div className="absolute inset-0" style={{ background: "var(--glass-dim)" }} />
+      <div className="absolute inset-0 bg-muted" />
+      <div className="absolute top-6 left-24 h-10 w-56 rounded-full bg-foreground/25" />
+      <div className="absolute top-20 left-8 h-6 w-72 rounded-full bg-foreground/15" />
       <div className="glass-surface absolute top-4 left-4 flex h-24 w-40 flex-col justify-between p-3 text-foreground" style={{ borderRadius: "var(--radius-glass)" }}>
         <span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground"><Sparkles className="size-4" /></span>
         <span className="text-sm font-medium">Mathe <span className="text-muted-foreground">· 3 Blätter</span></span>
@@ -65,19 +64,15 @@ export function GlassSection() {
           <div className="grid gap-1.5">
             <Label>Hintergrund</Label>
             <div role="radiogroup" aria-label="Hintergrund" className="flex flex-wrap gap-2">
-              <button type="button" role="radio" aria-checked={g.background === "none"} aria-label="Kein Hintergrund" title="Kein Hintergrund" onClick={() => g.set({ background: "none" })}
+              <button type="button" role="radio" aria-checked={g.background === "none"} aria-label="Kein eigenes Bild" title="Kein eigenes Bild" onClick={() => g.set({ background: "none" })}
                 className={cn("size-11 rounded-full border-2 bg-background", g.background === "none" && "ring-[3px] ring-primary ring-offset-2 ring-offset-background")} />
-              {BACKGROUNDS.map((b) => (
-                <button key={b.id} type="button" role="radio" aria-checked={g.background === b.id} aria-label={b.label} title={b.label} onClick={() => g.set({ background: b.id })}
-                  className={cn("size-11 rounded-full", g.background === b.id && "ring-[3px] ring-primary ring-offset-2 ring-offset-background")} style={{ background: b.css }} />
-              ))}
               <Button variant={g.background === "custom" ? "secondary" : "outline"} role="radio" aria-checked={g.background === "custom"}
                 className={cn("h-11", g.background === "custom" && "ring-2 ring-ring")} onClick={() => file.current?.click()}><ImagePlus /> Eigenes Bild</Button>
               <input ref={file} type="file" accept="image/*" className="hidden" data-testid="glass-file"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) void saveGlassImage(f).catch(console.error); e.target.value = ""; }} />
             </div>
           </div>
-          <Switch id="glass-accent" label="Akzentfarbe aus dem Hintergrund" checked={g.autoAccent} onChange={(autoAccent) => g.set({ autoAccent })} />
+          {g.background === "custom" && <Switch id="glass-accent" label="Akzentfarbe aus dem Hintergrundbild" checked={g.autoAccent} onChange={(autoAccent) => g.set({ autoAccent })} />}
           <Radio<Material> label="Fensterhintergrund" value={g.material} onChange={(material) => g.set({ material })}
             options={[["mica", "Mica"], ["acrylic", "Acrylic"], ["off", "Aus"]]} />
           <Radio<SaverBlur> label="Im Akku-Leistungsmodus" value={g.saverBlur} onChange={(saverBlur) => g.set({ saverBlur })}

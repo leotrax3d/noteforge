@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { backdropColors, BACKGROUNDS, contrast, effective, GLASS_DEFAULTS, hexToRgb, mix, safeOpacity, TINT } from "./glass";
+import { backdropColors, contrast, effective, GLASS_DEFAULTS, hexToRgb, mix, safeOpacity, TEST_BACKDROPS, TINT } from "./glass";
 
 describe("Glas-Kontrast (WCAG AA)", () => {
   it("berechnet Kontraste wie WCAG", () => {
@@ -7,9 +7,9 @@ describe("Glas-Kontrast (WCAG AA)", () => {
     expect(contrast(hexToRgb("#777"), hexToRgb("#fff"))).toBeCloseTo(4.48, 1);
   });
   for (const mode of ["light", "dark"] as const) {
-    for (const bg of BACKGROUNDS) {
-      it(`${mode} / ${bg.label}: Text und gedämpfter Text ≥ 4,5:1 bei jeder Benutzer-Deckkraft`, () => {
-        const backs = backdropColors(bg.stops, mode);
+    for (const stops of TEST_BACKDROPS) {
+      it(`${mode} / ${stops.join(",")}: Text und gedämpfter Text ≥ 4,5:1 bei jeder Benutzer-Deckkraft`, () => {
+        const backs = backdropColors(stops, mode);
         for (const wanted of [0.2, 0.4, 0.55, 0.8]) {
           const a = safeOpacity(wanted, backs, mode);
           expect(a).toBeGreaterThanOrEqual(wanted);
