@@ -86,15 +86,18 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 
   $("#login-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const f = new FormData(e.currentTarget);
+    const form = e.currentTarget; // nach await ist currentTarget null
+    const f = new FormData(form);
     const btn = $("#login-btn");
     btn.disabled = true;
     $("#login-error").hidden = true;
-    const { error } = await sb.auth.signInWithPassword({ email: String(f.get("email")), password: String(f.get("password")) });
-    btn.disabled = false;
-    if (error) { $("#login-error").textContent = errorText(error); $("#login-error").hidden = false; return; }
-    e.currentTarget.reset();
-    await route();
+    const fail = (err) => { $("#login-error").textContent = errorText(err); $("#login-error").hidden = false; };
+    try {
+      const { error } = await sb.auth.signInWithPassword({ email: String(f.get("email")), password: String(f.get("password")) });
+      if (error) return fail(error);
+      form.reset();
+      await route();
+    } catch (err) { fail(err); } finally { btn.disabled = false; }
   });
   for (const b of document.querySelectorAll(".logout")) b.addEventListener("click", async () => { await sb.auth.signOut(); show("login"); });
   $("#reload").addEventListener("click", () => void load());
