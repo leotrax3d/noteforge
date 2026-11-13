@@ -8,7 +8,7 @@
    insert into public.admins (user_id) select id from auth.users where email = 'admin@example.org';
    ```
    Öffentliche Registrierung abschalten (Authentication → Providers → Email → „Allow new users to sign up“ aus).
-3. **App:** In GitHub unter Settings → Secrets and variables → Actions → *Variables* `NOTEFORGE_SUPABASE_URL`
+3. **App:** Projekt-URL und Schlüssel stehen als Standard in `src-tauri/src/feedback.rs`. Für ein anderes Projekt in GitHub unter Settings → Secrets and variables → Actions → *Variables* `NOTEFORGE_SUPABASE_URL`
    und `NOTEFORGE_SUPABASE_ANON_KEY` (Project Settings → API → anon/publishable) anlegen. Der nächste Release
    enthält sie. Lokal: beide Variablen vor `pnpm tauri build` setzen.
 4. **Dashboard:** dieselben zwei Werte in `admin/config.js` eintragen und den Ordner `admin/` statisch hosten

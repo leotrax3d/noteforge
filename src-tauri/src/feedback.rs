@@ -35,9 +35,13 @@ pub fn payload(description: &str) -> Result<Payload, String> {
 }
 
 /// Projekt-URL und anon-Schlüssel; `None`, wenn beim Bauen nicht gesetzt.
+/// Öffentliches Noteforge-Projekt als Standard; beim Bauen per Umgebungsvariable überschreibbar.
+const DEFAULT_URL: &str = "https://pcccowrdxfpnstmftthk.supabase.co";
+const DEFAULT_KEY: &str = "sb_publishable_gCWGMssp40UTa5WNkyFSpg_pREJ65pG";
+
 pub fn config() -> Option<(String, String)> {
-    let url = option_env!("NOTEFORGE_SUPABASE_URL")?.trim().trim_end_matches('/');
-    let key = option_env!("NOTEFORGE_SUPABASE_ANON_KEY")?.trim();
+    let url = option_env!("NOTEFORGE_SUPABASE_URL").filter(|s| !s.trim().is_empty()).unwrap_or(DEFAULT_URL).trim().trim_end_matches('/');
+    let key = option_env!("NOTEFORGE_SUPABASE_ANON_KEY").filter(|s| !s.trim().is_empty()).unwrap_or(DEFAULT_KEY).trim();
     (!url.is_empty() && !key.is_empty()).then(|| (url.to_string(), key.to_string()))
 }
 
