@@ -1,4 +1,5 @@
-import { TOOLBAR_SLOT } from "@/features/canvas/tool-store";
+import { PAGE_ACTIONS_SLOT, TOOLBAR_SLOT } from "@/features/canvas/tool-store";
+import { onColor } from "@/features/canvas/Toolbar";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, FileText, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Search, Tags } from "lucide-react";
 import { toggleFocus, usePrefs } from "@/store/prefs";
@@ -173,26 +174,29 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
 
   const Icon = subjectIcon(subject?.icon ?? "");
   return (
-    <div className="flex h-full flex-col" style={{ ["--subject" as string]: subject?.color ?? "var(--primary)" }}>
-      <header data-glass="bar" className={cn("flex items-center gap-1 border-b px-2 py-1", focusMode && "hidden")} style={{ borderBottomColor: "var(--subject)" }}>
-        <Button variant="ghost" size="icon" aria-label="Zur Startseite" onClick={() => go({ view: "home" })}>
+    <div className="flex h-full flex-col" style={{ ["--subject" as string]: subject?.color ?? "var(--primary)", ["--bar-fg" as string]: onColor(subject?.color ?? "#2563eb") }}>
+      {/* GoodNotes-artig: farbige Leiste – links Navigation, Mitte Werkzeuge, rechts Blatt-Aktionen */}
+      <header data-goodbar="" className={cn("flex min-h-14 items-center gap-0.5 px-2 py-1", focusMode && "hidden")}>
+        <Button variant="ghost" size="icon" aria-label="Zur Startseite" title="Zur Startseite" onClick={() => go({ view: "home" })}>
           <ArrowLeft />
         </Button>
         <Button variant="ghost" size="icon" aria-label={sidebarOpen ? "Seitenleiste ausblenden" : "Seitenleiste einblenden"}
+          title={sidebarOpen ? "Seitenleiste ausblenden" : "Seitenleiste einblenden"}
           aria-pressed={sidebarOpen} onClick={() => setSidebarOpen((o) => !o)}>
           {leftHanded ? (sidebarOpen ? <PanelRightClose /> : <PanelRightOpen />) : sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
         </Button>
-        <span className="ml-1 flex size-8 items-center justify-center rounded-md text-white" style={{ background: "var(--subject)" }}>
-          <Icon className="size-5" />
+        <Button variant="ghost" size="icon" aria-label="Suche" title="Suche (Strg+F)" onClick={() => go({ view: "search" })}><Search /></Button>
+        <Button variant="ghost" size="icon" aria-label="Tag-Übersicht" title="Tags" onClick={() => go({ view: "tags" })}><Tags /></Button>
+        <span className={cn("ml-1 items-center gap-2", page ? "hidden 2xl:flex" : "flex")} title={subject?.name}>
+          <Icon className="size-5 shrink-0" />
+          <h1 className="max-w-48 truncate text-base font-semibold">{subject?.name}</h1>
         </span>
-        <h1 className="ml-2 shrink truncate text-lg font-semibold">{subject?.name}</h1>
-        {/* Werkzeugleiste kann hier andocken (Position „Kopfzeile“) */}
-        <div id={TOOLBAR_SLOT} className="flex min-h-11 min-w-0 flex-1 items-center justify-center self-stretch px-3 py-1" />
+        {/* Werkzeugleiste dockt hier an (Position „Kopfzeile“) */}
+        <div id={TOOLBAR_SLOT} className="flex min-h-11 min-w-0 flex-1 items-center justify-center self-stretch px-2" />
+        <div id={PAGE_ACTIONS_SLOT} className="flex items-center gap-0.5" />
         {page && (
           <Button variant="ghost" size="icon" aria-label="Fokusmodus" title="Fokusmodus (F11)" onClick={() => toggleFocus(true)}><Maximize2 /></Button>
         )}
-        <Button variant="ghost" size="icon" aria-label="Suche" title="Suche (Strg+F)" onClick={() => go({ view: "search" })}><Search /></Button>
-        <Button variant="ghost" size="icon" aria-label="Tag-Übersicht" title="Tags" onClick={() => go({ view: "tags" })}><Tags /></Button>
       </header>
       {data.error && <p className="px-4 py-2 text-destructive">{data.error}</p>}
       <div className={cn("relative flex min-h-0 flex-1", leftHanded && "flex-row-reverse")}>

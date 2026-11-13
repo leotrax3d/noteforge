@@ -209,6 +209,79 @@ export function HeadPicker({ head0, head1, onChange }: { head0: Head; head1: Hea
     </div>
   );
 }
+const WRITE_PENS: ToolItem[] = ["fountain", "ballpoint", "pencil"];
+/** In der Kopfzeile nicht gezeigt – stehen in den schwebenden Leisten darunter. */
+const BELOW_HEADER = new Set<ToolItem>(["presets", "undo", "redo", "zoom", "fit"]);
+const QUICK_INK = ["#111827", "#2563eb", "#dc2626"];
+
+/** Optionsleiste unter der Kopfzeile (wie GoodNotes): Stiftart, Breite, Farben bzw. Radierer-Optionen. */
+function OptionsBar({ onMore }: { onMore: () => void }) {
+  const t = useTools();
+  const pen = t.tool === "pen";
+  if (!pen && t.tool !== "eraser") return null;
+  const hl = t.pen === "highlighter";
+  const quick = hl ? HIGHLIGHTS.slice(0, 4) : QUICK_INK;
+  const colors = quick.includes(t.color) ? quick : [...quick, t.color];
+  const pill = "flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-accent";
+  return (
+    <div role="toolbar" aria-label={pen ? "Stiftoptionen" : "Radiereroptionen"} data-testid="options-bar" data-glass="float" data-glass-float=""
+      className="absolute top-3 left-1/2 z-20 flex max-w-[calc(100%-260px)] -translate-x-1/2 items-center gap-0.5 overflow-x-auto rounded-2xl border bg-card/95 p-1 shadow-md backdrop-blur [scrollbar-width:none]">
+      {pen ? (<>
+        {!hl && (<>
+          {(["fountain", "ballpoint", "pencil"] as PenKind[]).map((k) => {
+            const Icon = PEN_ICONS[k];
+            return (
+              <button key={k} type="button" aria-label={PENS[k].label} title={PENS[k].label} aria-pressed={t.pen === k}
+                onClick={() => t.setPen(k)} className={cn(pill, "rounded-xl", t.pen === k && "bg-[var(--subject)] text-[var(--bar-fg,white)] hover:bg-[var(--subject)]")}>
+                <Icon className="size-5" />
+              </button>
+            );
+          })}
+          <Sep vertical={false} />
+        </>)}
+        <div role="radiogroup" aria-label="Strichbreite" className="flex items-center">
+          {PENS[t.pen].widths.slice(0, 3).concat(PENS[t.pen].widths.includes(t.width) && PENS[t.pen].widths.indexOf(t.width) > 2 ? [t.width] : []).map((w) => {
+            const d = Math.min(22, w * (hl ? 0.7 : 2) + 2);
+            return (
+              <button key={w} type="button" role="radio" aria-checked={t.width === w} aria-label={`Breite ${w}`} title={`Breite ${w}`}
+                onClick={() => t.setWidth(w)} className={cn(pill, t.width === w && "bg-accent")}>
+                <span className="rounded-full bg-foreground" style={{ width: d, height: d }} />
+              </button>
+            );
+          })}
+        </div>
+        <Sep vertical={false} />
+        <div role="radiogroup" aria-label="Farbe" className="flex items-center">
+          {colors.map((c) => (
+            <button key={c} type="button" role="radio" aria-checked={t.color === c} aria-label={`Farbe ${c}`} title={c}
+              onClick={() => t.setColor(c)} className={pill}>
+              <span className={cn("flex size-7 items-center justify-center rounded-full border border-black/10", t.color === c && "ring-2 ring-ring ring-offset-2 ring-offset-card")}
+                style={{ background: c }}>
+                {t.color === c && <Check className="size-4" style={{ color: onColor(c) }} />}
+              </span>
+            </button>
+          ))}
+          <button type="button" aria-label="Weitere Farben und Breiten" title="Weitere Farben und Breiten" onClick={onMore} className={pill}>
+            <span className="flex size-7 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground"><Plus className="size-4" /></span>
+          </button>
+        </div>
+      </>) : (<>
+        {([["stroke", "Ganze Striche"], ["partial", "Teilweise"]] as const).map(([m, label]) => (
+          <button key={m} type="button" aria-pressed={t.eraserMode === m} onClick={() => t.setEraser({ eraserMode: m })}
+            className={cn("h-11 shrink-0 rounded-xl px-3 text-sm hover:bg-accent", t.eraserMode === m && "bg-accent font-medium")}>{label}</button>
+        ))}
+        <Sep vertical={false} />
+        {([[8, "S"], [14, "M"], [24, "L"], [40, "XL"]] as const).map(([sz, label]) => (
+          <button key={sz} type="button" aria-label={`Radiergröße ${label}`} title={`Radiergröße ${label}`} aria-pressed={t.eraserSize === sz}
+            onClick={() => t.setEraser({ eraserSize: sz })} className={cn(pill, t.eraserSize === sz && "bg-accent")}>
+            <span className="rounded-full border-2 border-foreground/70" style={{ width: 6 + sz / 2.2, height: 6 + sz / 2.2 }} />
+          </button>
+        ))}
+      </>)}
+    </div>
+  );
+}
+
 export const tip = (i: ToolItem) => ITEM_INFO[i].key ? `${ITEM_INFO[i].label} (${ITEM_INFO[i].key})` : ITEM_INFO[i].label;
 const SIZE_PX: Record<BarSize, number> = { s: 44, m: 48, l: 56 };
 
@@ -364,6 +437,19 @@ export function Toolbar(p: ToolbarProps) {
   };
   const side = inHeader || t.dock === "top" || t.dock === "header" ? "bottom" : t.dock === "bottom" ? "top" : t.dock === "left" ? "right" : t.dock === "right" ? "left" : vertical ? "right" : "bottom";
   const isHl = t.pen === "highlighter";
+  const leftHanded = usePrefs((s) => s.leftHanded);
+  // Kopfzeile (GoodNotes-artig): Füller/Kugelschreiber/Bleistift teilen sich ein Stift-Symbol,
+  // Stiftart, Breite und Farbe stehen in der Optionsleiste darunter.
+  const lastPen = useRef<PenKind>("fountain");
+  if (t.pen !== "highlighter") lastPen.current = t.pen;
+  const headerItems: (ToolItem | "pen")[] = [];
+  for (const i of t.items) {
+    if (BELOW_HEADER.has(i)) continue;
+    if (WRITE_PENS.includes(i)) { if (!headerItems.includes("pen")) headerItems.push("pen"); continue; }
+    headerItems.push(i);
+  }
+  const penActive = t.tool === "pen" && t.pen !== "highlighter";
+  const LastPenIcon = PEN_ICONS[lastPen.current];
   const hidden = TOOL_ITEMS.filter((i) => !t.items.includes(i));
 
   const render = (item: ToolItem): ReactNode => {
@@ -460,7 +546,7 @@ export function Toolbar(p: ToolbarProps) {
       className={cn(
         inHeader
           // „Dynamic Island“: eigene Pille, vom Rest der Kopfzeile abgesetzt
-          ? "relative flex max-w-full min-w-0 flex-row items-center gap-0.5 overflow-x-auto rounded-full border bg-card/95 px-1.5 shadow-lg ring-1 ring-black/5 backdrop-blur [scrollbar-width:none] dark:ring-white/10"
+          ? "relative flex max-w-full min-w-0 flex-row items-center gap-0.5 overflow-x-auto [scrollbar-width:none]"
           : "absolute z-20 flex items-center gap-1 rounded-2xl border bg-card/95 p-1.5 shadow-xl backdrop-blur",
         !inHeader && (vertical ? "max-h-[calc(100%-24px)] flex-col overflow-y-auto" : "w-max max-w-[calc(100%-24px)] flex-row flex-wrap justify-center"),
         !inHeader && (drag ? "pointer-events-auto opacity-80" : dockClass[t.dock]),
@@ -473,13 +559,30 @@ export function Toolbar(p: ToolbarProps) {
         zoom: inHeader ? Math.min(1, px / 44) : px / 44,
       } as React.CSSProperties}
     >
-      <button type="button" aria-label="Werkzeugleiste verschieben" title="Ziehen: an Kante andocken oder frei ablegen"
+      {!inHeader && <button type="button" aria-label="Werkzeugleiste verschieben" title="Ziehen: an Kante andocken oder frei ablegen"
         onPointerDown={onGrip}
         className="flex size-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground hover:bg-accent active:cursor-grabbing">
         <GripVertical className={cn("size-5", !vertical && "rotate-90")} />
-      </button>
+      </button>}
 
-      {!editing && groupsOf(t.items).map(([g, items]) => {
+      {!editing && inHeader && headerItems.map((item, i) => {
+        const g = item === "pen" ? "schreiben" : GROUP_OF[item];
+        const prev = i > 0 ? headerItems[i - 1] : null;
+        const sep = prev != null && (prev === "pen" ? "schreiben" : GROUP_OF[prev]) !== g;
+        return (
+          <div key={item} data-item={item} className="flex shrink-0 items-center">
+            {sep && <div data-bar-sep className="mx-1 h-6 w-px shrink-0" />}
+            {item === "pen" ? (
+              <ToolButton label={`Stift: ${PENS[lastPen.current].label}`} active={penActive}
+                onClick={() => (penActive ? setOpen(open === "pen" ? null : "pen") : t.setPen(lastPen.current))}>
+                <LastPenIcon />
+              </ToolButton>
+            ) : render(item)}
+          </div>
+        );
+      })}
+
+      {!editing && !inHeader && groupsOf(t.items).map(([g, items]) => {
         const activeItem = items.find(isActive);
         const fixed = g === "verlauf" || g === "ansicht";
         const show = fixed || expanded === g || closing === g;
@@ -516,7 +619,7 @@ export function Toolbar(p: ToolbarProps) {
         </div>
       ))}
 
-      <Sep vertical={vertical} />
+      {inHeader ? <div data-bar-sep className="mx-1 h-6 w-px shrink-0" /> : <Sep vertical={vertical} />}
       <ToolButton label={editing ? "Bearbeiten beenden" : "Leiste anpassen"} active={editing} onClick={() => { setEditing(!editing); setOpen(editing ? null : "bar"); }}>
         {editing ? <Check /> : <SlidersHorizontal />}
       </ToolButton>
@@ -712,6 +815,19 @@ export function Toolbar(p: ToolbarProps) {
     <>
       <span ref={homeRef} hidden aria-hidden />
       {inHeader ? createPortal(bar, slot!) : bar}
+      {inHeader && (<>
+        {/* Rückgängig/Wiederholen schwebend am Rand */}
+        <div role="group" aria-label="Verlauf" data-glass="float" data-glass-float=""
+          className={cn("absolute top-3 z-20 flex items-center gap-0.5 rounded-2xl border bg-card/95 p-1 shadow-md backdrop-blur", leftHanded ? "right-3" : "left-3")}>
+          {render("undo")}{render("redo")}
+        </div>
+        {/* Zoom & „Alles anzeigen“ auf der anderen Seite */}
+        <div role="group" aria-label="Ansicht" data-glass="float" data-glass-float=""
+          className={cn("absolute top-3 z-20 flex items-center gap-0.5 rounded-2xl border bg-card/95 p-1 shadow-md backdrop-blur", leftHanded ? "left-3" : "right-3")}>
+          {render("zoom")}{render("fit")}
+        </div>
+        <OptionsBar onMore={() => setOpen(open === "pen" ? null : "pen")} />
+      </>)}
     </>
   );
 }

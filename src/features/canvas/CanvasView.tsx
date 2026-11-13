@@ -29,7 +29,8 @@ import { focusCell } from "./objects/TextMenu";
 import { ObjectLayer } from "./objects/ObjectLayer";
 import { FormatBar } from "./objects/FormatBar";
 import { captureScreen, encodeImage, fileToImage, type LoadedImage } from "./objects/images";
-import { useTools } from "./tool-store";
+import { PAGE_ACTIONS_SLOT, useTools } from "./tool-store";
+import { createPortal } from "react-dom";
 import { usePrefs } from "@/store/prefs";
 import { useSetup } from "@/store/setup";
 import { PerfOverlay } from "./PerfOverlay";
@@ -729,11 +730,12 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
   }, [tool]);
 
   const focusMode = usePrefs((s) => s.focus);
-  const leftHanded = usePrefs((s) => s.leftHanded);
   const inkDebug = usePrefs((s) => s.inkDebug);
   const perfOn = usePrefs((s) => s.perfOverlay) || inkDebug;
   useEffect(() => { engineRef.current?.setInkDebug(inkDebug); }, [inkDebug, loaded]);
 
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => setActionsSlot(document.getElementById(PAGE_ACTIONS_SLOT)), []);
   const editingText = editingId && objects.find((o) => o.id === editingId)?.kind === "text";
   const saveLabel: Record<SaveState, string> = {
     saved: "Gespeichert", pending: "Ungespeicherte Änderungen", saving: "Speichert …", error: "Speichern fehlgeschlagen",
@@ -767,10 +769,11 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
         }}>
         <canvas ref={baseRef} className="absolute inset-0" />
         {perfOn && loaded && <PerfOverlay engine={engineRef.current} />}
-        {/* Blatt-Aktionen: klein oben rechts statt Titelbalken */}
-        <div data-page-actions className={cn("absolute top-2 z-20 flex items-center gap-1 rounded-full border bg-background/85 px-1 shadow-sm backdrop-blur", leftHanded ? "left-2" : "right-2", focusMode && "hidden")}>
-          <span role="status" data-testid="save-status" data-state={save} title={saveLabel[save]}
-            className={cn("px-2 text-xs", save === "error" ? "text-destructive" : "text-muted-foreground")}>
+        {/* Blatt-Aktionen: rechts in der farbigen Kopfzeile; ohne Kopfzeile (Fokusmodus) entfallen sie */}
+        {actionsSlot && !focusMode && createPortal(
+          <div data-page-actions className="flex items-center gap-0.5">
+            <span role="status" data-testid="save-status" data-state={save} title={saveLabel[save]}
+            className={cn("px-2 text-xs", save === "error" ? "font-semibold" : "opacity-80")}>
             {save === "saved" ? "✓" : saveLabel[save]}
           </span>
           <Button variant="ghost" size="icon" aria-label="Seitenversionen" title="Seitenversionen" onClick={() => setVersions(true)}><History /></Button>
@@ -797,7 +800,7 @@ export function CanvasView({ page, onAutoTitle, autoRev = 0, onPageChange, focus
               <DropdownMenuItem onSelect={() => setTplDialog(true)}><LayoutTemplate /> Als Vorlage speichern …</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
+          </div>, actionsSlot)}
         {loaded && <SpitzHint />}
         <canvas ref={activeRef} data-testid="canvas-input" className="absolute inset-0" style={{ touchAction: "none" }} />
         <ObjectLayer

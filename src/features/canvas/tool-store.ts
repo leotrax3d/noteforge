@@ -17,6 +17,8 @@ export interface Preset {
 
 /** Platz in der Fach-Kopfzeile, in den sich die Werkzeugleiste andocken lässt. */
 export const TOOLBAR_SLOT = "nf-toolbar-slot";
+/** Platz rechts in der Kopfzeile für die Blatt-Aktionen (Versionen, Wiedergabe, Menü). */
+export const PAGE_ACTIONS_SLOT = "nf-page-actions-slot";
 /** „header“ = in der Kopfzeile neben dem Fachnamen (kein Platzverbrauch im Blatt). */
 export type Dock = "top" | "bottom" | "left" | "right" | "float" | "header";
 export type BarOrient = "horizontal" | "vertical";

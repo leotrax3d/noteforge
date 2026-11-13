@@ -167,6 +167,14 @@ Unterseiten, Drag & Drop-Sortierung, Tags (To-Do, Wichtig, Frage, Lernen für KA
 Vollbild-Assistent mit Fortschrittsanzeige, Zurück/Weiter, fortsetzbar (Schritt wird gespeichert); optionale Schritte haben „Überspringen“; erneut startbar unter Einstellungen → Bedienung.
 1. Willkommen + Design (Hell/Dunkel/System, Glas mit Vorschau, Akzentfarbe) · 2. Speicherort (Standard `Dokumente\Noteforge`, Ordnerdialog, Schreibrechte-Prüfung, Warnung bei OneDrive/Nextcloud/Dropbox-Ordnern; DB wird per `VACUUM INTO` kopiert, wirksam nach Neustart; Pfad in `location.json` im App-Konfigurationsordner) · 3. Stift & Hand (Rechts-/Linkshänder, Testfeld, Druck-Kalibrierung = Maximaldruck, Druckkurve weich/normal/fest, Stifttaste: Lasso/Radierer/Radialmenü) · 4. Standard-Blatt (endlos/A4; kariert 5 mm, liniert 8 mm, punktiert, leer) · 5. WebUntis (Schulsuche über die öffentliche WebUntis-Schulsuche, Login, Verbindungstest, Fächer anlegen + verknüpfen nach Bestätigung) · 6. Moodle · 7. Google Kalender (optional: Client-ID, Anmeldung, Zielkalender und Auswahl, was synchronisiert wird) · 8. Nextcloud (Testverbindung) · 9. OneNote-Import (OneNote-PDF-Export → je Datei ein A4-Blatt in Thema „OneNote-Import“) · 10. Erinnerungen an/aus (`app.reminders`), Vorlaufzeit sonstiger Termine, Benachrichtigungen erlauben, Helfer „Spitz“ (Werkzeug-Tipps) · 11. Zusammenfassung.
 
+### 7.x Kopfzeile im GoodNotes-Stil
+- Im Fach ist die Kopfzeile in der Fachfarbe eingefärbt; Symbole in Kontrastfarbe (schwarz/weiß je nach Helligkeit).
+- Links: Startseite, Seitenleiste, Suche, Tags (Fachname nur auf sehr breiten Fenstern).
+- Mitte: Werkzeuge (Position „Kopfzeile“, Standard). Füller/Kugelschreiber/Bleistift teilen sich ein Stift-Symbol; Gruppen durch Trennstriche abgesetzt.
+- Rechts: Speicherstatus, Seitenversionen, Ink-Wiedergabe, Blatt-Menü, Fokusmodus.
+- Darunter schwebend: Optionsleiste fürs aktive Werkzeug (Stift: Stiftart, 3 Breiten, Schnellfarben, „+“ für alle Farben/Breiten; Radierer: Modus und Größe), links Rückgängig/Wiederholen, rechts Zoom und „Alles anzeigen“ (Linkshänder: gespiegelt).
+- Andere Positionen (oben, links, rechts, schwebend) und der Fokusmodus nutzen weiter die klassische Leiste.
+
 ## 8. Integrationen
 - **WebUntis:** inoffizielle JSON-RPC-API (`/WebUntis/jsonrpc.do?school=…`), Login Schulname/Benutzer/Passwort, Stundenplan + Vertretungen + Ausfälle, Cache in SQLite, Fach-Mapping. „Aktuelle Stunde öffnen“ springt ins Fach.
   - **Freistunden:** Lücken > 25 min zwischen stattfindenden Stunden („Lücke“) und entfallene Stunden zwischen zwei stattfindenden („Entfall“) werden in Startseite und Kalender-Woche als „Freistunde“ gezeigt (eigene Farbe, Streifenmuster; Entfall dichter gestreift). Lücken/Entfall vor der ersten bzw. nach der letzten Stunde sind keine Freistunden (Entfall bleibt als „entfällt“ sichtbar).

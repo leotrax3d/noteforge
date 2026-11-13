@@ -259,3 +259,10 @@ html.glass-solid [data-slot$="-overlay"] { -webkit-backdrop-filter: none; backdr
 }
 /* Kontrastmodus: kein Glas, Systemfarben */
 @media (forced-colors: active) { html.glass [data-glass], html.glass [data-slot$="-content"] { backdrop-filter: none; background: Canvas; } }
+
+/* GoodNotes-artige Kopfzeile: farbige Leiste (Fachfarbe), Symbole in Kontrastfarbe */
+[data-goodbar] { background: var(--subject); color: var(--bar-fg); }
+[data-goodbar] button { color: var(--bar-fg); }
+[data-goodbar] button:hover { background: color-mix(in srgb, var(--bar-fg) 14%, transparent); color: var(--bar-fg); }
+[data-goodbar] button[aria-pressed="true"] { background: color-mix(in srgb, var(--bar-fg) 24%, transparent) !important; box-shadow: none; --tw-ring-shadow: 0 0 #0000; }
+[data-goodbar] [data-bar-sep] { background: color-mix(in srgb, var(--bar-fg) 30%, transparent); }
