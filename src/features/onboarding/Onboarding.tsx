@@ -33,6 +33,9 @@ const STEPS = [
 const REQUIRED = new Set([0, 10]);
 
 import { ACCENTS } from "./accents";
+import { Switch } from "@/components/common/Switch";
+import { GlassPreview } from "@/features/settings/GlassSection";
+import { useGlass } from "@/lib/glass";
 
 const clean = (e: unknown) => String(e).replace(/^Error: /, "");
 
@@ -57,7 +60,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   return (
     <div role="dialog" aria-modal="true" aria-labelledby="ob-title" data-testid="onboarding"
       className="fixed inset-0 z-50 flex flex-col bg-background text-foreground">
-      <header className="flex items-center gap-3 border-b px-4 py-3">
+      <header data-glass="bar" className="flex items-center gap-3 border-b px-4 py-3">
         <Logo size={32} />
         <span className="font-semibold">Noteforge einrichten</span>
         <span className="ml-auto text-sm text-muted-foreground" aria-live="polite">Schritt {step + 1} von {STEPS.length}: {STEPS[step]}</span>
@@ -137,6 +140,7 @@ function useRun() {
 function WelcomeStep() {
   const { theme, setTheme } = useTheme();
   const { accent, set } = useSetup();
+  const glass = useGlass();
   const themes: [Theme, string, ReactNode][] = [["light", "Hell", <Sun key="s" />], ["dark", "Dunkel", <Moon key="m" />], ["system", "System", <Monitor key="c" />]];
   return (
     <div className="grid gap-6">
@@ -148,6 +152,8 @@ function WelcomeStep() {
         <div className="flex gap-2">
           {themes.map(([v, l, i]) => <Choice key={v} label={l} active={theme === v} onClick={() => setTheme(v)}>{i}{l}</Choice>)}
         </div>
+        <Switch id="ob-glass" label="Glas (transparente, weichgezeichnete Flächen)" checked={glass.enabled} onChange={(enabled) => glass.set({ enabled })} />
+        {glass.enabled && <GlassPreview />}
       </section>
       <section aria-labelledby="ob-accent" className="grid gap-2">
         <h2 id="ob-accent" className="font-medium">Akzentfarbe</h2>

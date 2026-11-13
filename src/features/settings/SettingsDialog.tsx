@@ -9,6 +9,8 @@ import { clockText, cloud, syncNowAndApply, type CloudStatus } from "@/lib/sync"
 import { usePrefs } from "@/store/prefs";
 import { useTools } from "@/features/canvas/tool-store";
 import { useSetup, type BarrelAction } from "@/store/setup";
+import { Switch } from "@/components/common/Switch";
+import { GlassSection } from "./GlassSection";
 import { useTheme } from "@/components/theme/theme-provider";
 import { setupApi } from "@/lib/setup-api";
 import { ACCENTS } from "@/features/onboarding/accents";
@@ -24,25 +26,10 @@ const selectCls = "h-11 w-full rounded-md border bg-background px-3 text-base ou
 const stamp = (t: number) => new Date(t).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
 const clean = (e: unknown) => String(e).replace(/^Error: /, "");
 
-function Switch({ id, checked, onChange, label }: { id: string; checked: boolean; onChange: (v: boolean) => void; label: string }) {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="mr-auto">
-        <Label htmlFor={id}>{label}</Label>
-      </div>
-      <button id={id} type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)}
-        className="flex h-11 w-16 shrink-0 items-center rounded-full px-1 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
-        <span className={cn("flex h-7 w-full items-center rounded-full p-0.5 transition-colors", checked ? "bg-primary" : "bg-muted-foreground/30")}>
-          <span className={cn("size-6 rounded-full bg-white shadow transition-transform", checked && "translate-x-7")} />
-        </span>
-      </button>
-    </div>
-  );
-}
 
 type CatId = "look" | "pen" | "notify" | "sync" | "google" | "backup";
 const CATS: { id: CatId; label: string; icon: React.ReactNode; words: string }[] = [
-  { id: "look", label: "Darstellung", icon: <Palette />, words: "design hell dunkel system akzent farbe theme logo" },
+  { id: "look", label: "Darstellung", icon: <Palette />, words: "design hell dunkel system akzent farbe theme logo glas transparenz blur mica acrylic hintergrund" },
   { id: "pen", label: "Stift & Bedienung", icon: <PenLine />, words: "stift druck kalibrierung stifttaste linkshänder rechtshänder leistung akku energie sparmodus fps tastenkürzel assistent einrichtung" },
   { id: "notify", label: "Erinnerungen", icon: <Bell />, words: "erinnerungen benachrichtigung spitz hinweise tipps vorlaufzeit" },
   { id: "sync", label: "Sync", icon: <Cloud />, words: "nextcloud sync abgleich app-passwort server ordner" },
@@ -210,6 +197,7 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
         {q && !CATS.some((c) => show(c.id)) && <p className="text-sm text-muted-foreground">Keine Einstellung gefunden.</p>}
 
         {show("look") && <AppearanceSection />}
+        {show("look") && <GlassSection />}
         {show("pen") && <PenSection />}
         {show("notify") && <NotifySection />}
 
