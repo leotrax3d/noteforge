@@ -70,7 +70,7 @@ export function CalendarPage({ date: initial, mode: initialMode }: { date?: numb
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
+      <header data-glass="bar" className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
         <Button variant="ghost" size="icon" aria-label="Zurück zur Startseite" onClick={() => go({ view: "home" })}><ArrowLeft /></Button>
         <h1 className="mr-2 text-xl font-semibold tracking-tight">Kalender</h1>
         <div role="tablist" aria-label="Ansicht" className="flex rounded-md border p-0.5">

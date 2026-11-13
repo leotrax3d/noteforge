@@ -34,7 +34,7 @@ export function UpcomingExams({ subjects }: { subjects: Subject[] }) {
         <Button variant="ghost" onClick={() => go({ view: "calendar" })}><CalendarDays /> Kalender</Button>
       </div>
       {list.length === 0 ? (
-        <p className="rounded-xl border border-dashed p-4 text-muted-foreground">
+        <p data-glass="panel" className="rounded-xl border border-dashed p-4 text-muted-foreground">
           Keine Klassenarbeiten
         </p>
       ) : (
@@ -45,7 +45,7 @@ export function UpcomingExams({ subjects }: { subjects: Subject[] }) {
             const urgent = cd.days <= 3;
             return (
               <li key={e.id}>
-                <button type="button" onClick={() => go({ view: "calendar", date: e.start })}
+                <button type="button" data-glass="tile" onClick={() => go({ view: "calendar", date: e.start })}
                   className="flex min-h-11 w-full items-center gap-3 rounded-xl border p-3 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
                   style={{ borderLeft: `6px solid ${s?.color ?? "var(--border)"}` }}>
                   <div className={`flex w-14 shrink-0 flex-col items-center rounded-lg py-1 ${urgent ? "bg-destructive/10 text-destructive" : "bg-muted"}`}>

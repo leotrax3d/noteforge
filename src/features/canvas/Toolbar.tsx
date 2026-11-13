@@ -436,6 +436,8 @@ export function Toolbar(p: ToolbarProps) {
       ref={rootRef}
       role="toolbar"
       aria-label="Werkzeugleiste"
+      data-glass="float"
+      data-glass-float=""
       aria-orientation={vertical ? "vertical" : "horizontal"}
       data-dock={t.dock}
       data-size={t.size}

@@ -39,9 +39,9 @@ export function SchoolWidgets({ subjects }: { subjects: Subject[] }) {
           <Button variant="ghost" onClick={() => go({ view: "homework" })}><BookCheck /> Alle</Button>
         </div>
         {shown.length === 0 ? (
-          <p className="rounded-xl border border-dashed p-4 text-muted-foreground">Keine offenen Hausaufgaben</p>
+          <p data-glass="panel" className="rounded-xl border border-dashed p-4 text-muted-foreground">Keine offenen Hausaufgaben</p>
         ) : (
-          <ul className="divide-y rounded-xl border" aria-label="Offene Hausaufgaben">
+          <ul data-glass="panel" className="divide-y rounded-xl border" aria-label="Offene Hausaufgaben">
             {shown.map((h) => (
               <HomeworkRow key={h.id} h={h} compact now={now} subject={h.subjectId ? subj.get(h.subjectId) : undefined}
                 onEdit={() => go({ view: "homework" })}
@@ -55,7 +55,7 @@ export function SchoolWidgets({ subjects }: { subjects: Subject[] }) {
           <h2 id="gr-h" className="mr-auto text-lg font-medium">Noten</h2>
           <Button variant="ghost" onClick={() => go({ view: "grades" })}><GraduationCap /> Rechner</Button>
         </div>
-        <button type="button" onClick={() => go({ view: "grades" })}
+        <button type="button" data-glass="tile" onClick={() => go({ view: "grades" })}
           className="w-full rounded-xl border p-4 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50">
           <div className="flex items-baseline gap-2">
             <span className="text-muted-foreground">Schnitt</span>

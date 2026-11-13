@@ -40,7 +40,7 @@ export function RadialMenu({ at, hostW, hostH, onClose, onUndo, onRedo }: {
   return (
     <div className="absolute inset-0 z-40" onPointerDown={onClose} data-testid="radial-backdrop">
       <div role="menu" aria-label="Radialmenü" className="absolute" style={{ left: cx, top: cy }} onPointerDown={(e) => e.stopPropagation()}>
-        <div className="absolute rounded-full border bg-card/80 shadow-2xl backdrop-blur"
+        <div data-glass="" className="absolute rounded-full border bg-card/80 shadow-2xl backdrop-blur"
           style={{ width: 2 * m, height: 2 * m, left: -m, top: -m }} />
         {items.map((it, i) => {
           const a = -Math.PI / 2 + (i / items.length) * Math.PI * 2;

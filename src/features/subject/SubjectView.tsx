@@ -174,7 +174,7 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
   const Icon = subjectIcon(subject?.icon ?? "");
   return (
     <div className="flex h-full flex-col" style={{ ["--subject" as string]: subject?.color ?? "var(--primary)" }}>
-      <header className={cn("flex items-center gap-1 border-b px-2 py-1", focusMode && "hidden")} style={{ borderBottomColor: "var(--subject)" }}>
+      <header data-glass="bar" className={cn("flex items-center gap-1 border-b px-2 py-1", focusMode && "hidden")} style={{ borderBottomColor: "var(--subject)" }}>
         <Button variant="ghost" size="icon" aria-label="Zur Startseite" onClick={() => go({ view: "home" })}>
           <ArrowLeft />
         </Button>
@@ -201,7 +201,7 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
             <Minimize2 />
           </Button>
         )}
-        <aside data-testid="sidebar" className={cn("w-72 shrink-0 bg-muted/30", leftHanded ? "border-l" : "border-r", (!sidebarOpen || focusMode) && "hidden")}>
+        <aside data-testid="sidebar" data-glass="side" data-side={leftHanded ? "right" : "left"} className={cn("w-72 shrink-0 bg-muted/30", leftHanded ? "border-l" : "border-r", (!sidebarOpen || focusMode) && "hidden")}>
           <Sidebar
             subjectColor={subject?.color ?? "#2563eb"}
             sections={sections}

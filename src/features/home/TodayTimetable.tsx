@@ -51,7 +51,7 @@ export function TodayTimetable({ subjects }: { subjects: Subject[]; onSetup?: ()
         )}
       </div>
       {data.lessons.length === 0 ? (
-        <p className="rounded-xl border border-dashed p-4 text-muted-foreground">Heute kein Unterricht laut WebUntis.</p>
+        <p data-glass="panel" className="rounded-xl border border-dashed p-4 text-muted-foreground">Heute kein Unterricht laut WebUntis.</p>
       ) : (
         <ol className="flex gap-2 overflow-x-auto pb-1" aria-label="Stundenplan heute">
           {daySlots(data.lessons).map((x) => x.kind === "free"
@@ -71,6 +71,7 @@ function LessonCard({ l, s, now, onOpen }: { l: Lesson; s?: Subject; now: number
     <li className="shrink-0">
       <button type="button" disabled={!s} onClick={() => s && onOpen(s.id)}
         aria-label={`${fmtTime(l.start)} ${l.subjectLong || l.subjectName}${cancelled ? " (entfällt)" : ""}`}
+        data-glass="tile"
         className={`flex min-h-16 w-36 flex-col items-start rounded-lg border-l-4 bg-card p-2 text-left text-sm shadow-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 enabled:hover:bg-accent ${running ? "ring-2 ring-primary" : ""} ${l.end < now ? "opacity-60" : ""}`}
         style={{ borderLeftColor: s?.color ?? "var(--border)" }}>
         <span className="text-xs tabular-nums text-muted-foreground">{fmtTime(l.start)} – {fmtTime(l.end)}</span>

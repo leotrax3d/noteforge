@@ -48,7 +48,7 @@ export function GradesPage({ subjectId }: { subjectId?: string }) {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-2 border-b px-2 py-1">
+      <header data-glass="bar" className="flex items-center gap-2 border-b px-2 py-1">
         <Button variant="ghost" size="icon" aria-label="Zurück" onClick={() => go({ view: "home" })}><ArrowLeft /></Button>
         <h1 className="mr-auto ml-1 text-lg font-semibold">Noten</h1>
         <label className="flex items-center gap-2 text-sm">

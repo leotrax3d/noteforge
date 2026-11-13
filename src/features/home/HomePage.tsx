@@ -70,7 +70,7 @@ export function HomePage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex min-w-0 items-center gap-1 border-b px-4 py-2">
+      <header data-glass="bar" className="flex min-w-0 items-center gap-1 border-b px-4 py-2">
         <h1 className="mr-auto flex items-center gap-2 text-xl font-semibold tracking-tight"><Logo size={32} /> Noteforge</h1>
         <Button variant="ghost" size="icon" aria-label="Befehlspalette" onClick={() => usePrefs.getState().setDialog("palette")}><Command /></Button>
         <NavButton label="Suche" icon={<Search />} onClick={() => go({ view: "search" })} />
@@ -164,17 +164,18 @@ function SubjectTile(props: { subject: Subject; onOpen: () => void; onEdit: () =
         aria-label={`${s.name} öffnen`}
         aria-roledescription="sortierbare Kachel"
         onContextMenu={(e) => { e.preventDefault(); openSoon(setMenu); }}
-        className="flex aspect-[4/3] w-full touch-manipulation flex-col justify-between rounded-xl p-4 text-left text-white shadow-sm outline-none transition-shadow hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/70 data-[dragging=true]:shadow-xl"
+        data-glass="tile"
+        className="nf-tile-subject flex aspect-[4/3] w-full touch-manipulation flex-col justify-between rounded-xl p-4 text-left text-white shadow-sm outline-none transition-shadow hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/70 data-[dragging=true]:shadow-xl"
         data-dragging={isDragging}
-        style={{ background: s.color }}
+        style={{ background: s.color, ["--subject" as string]: s.color }}
       >
-        <Icon className="size-9 opacity-90" />
+        <span className="nf-tile-icon"><Icon className="size-9 opacity-90" /></span>
         <span className="line-clamp-2 text-lg font-semibold">{s.name}</span>
       </button>
       <DropdownMenu open={menu} onOpenChange={setMenu}>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" aria-label={`Optionen für ${s.name}`} title="Optionen (Rechtsklick / lange drücken)"
-            className="absolute top-1 right-1 text-white hover:bg-white/20 hover:text-white">
+            className="absolute top-1 right-1 text-white hover:bg-white/20 hover:text-white [html.glass_&]:top-3 [html.glass_&]:right-3 [html.glass_&]:text-foreground [html.glass_&]:hover:text-foreground">
             <MoreVertical />
           </Button>
         </DropdownMenuTrigger>

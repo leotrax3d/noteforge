@@ -78,7 +78,7 @@ export function StartupNotices() {
   return (
     <>
       {recovered > 0 && (
-        <div role="status" data-testid="recovered-notice" className="fixed bottom-6 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-full bg-foreground py-1 pr-1 pl-4 text-sm text-background shadow-lg">
+        <div role="status" data-testid="recovered-notice" data-glass="" className="[html.glass_&]:text-foreground fixed bottom-6 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-full bg-foreground py-1 pr-1 pl-4 text-sm text-background shadow-lg">
           <RotateCcw className="size-4" /> {recovered} {recovered === 1 ? "Änderung" : "Änderungen"} wiederhergestellt
           <Button variant="ghost" size="icon" aria-label="Hinweis schließen" className="text-background hover:bg-background/20" onClick={() => setRecovered(0)}><X /></Button>
         </div>

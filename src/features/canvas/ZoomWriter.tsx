@@ -215,6 +215,7 @@ export function ZoomWriter({ engine, dark, hostRef }: { engine: CanvasEngine; da
         onPointerDown={onFrameDown}
         className="absolute top-0 left-0 z-20 cursor-move touch-none rounded-sm border-2 border-[var(--subject,#2563eb)] bg-[color-mix(in_oklab,var(--subject,#2563eb)_8%,transparent)]" />
       <div ref={panelRef} role="region" aria-label="Zoom-Schreibfeld" data-testid="zoom-writer"
+        data-glass="bar" data-glass-float=""
         className="absolute right-0 bottom-0 left-0 z-30 border-t bg-card shadow-[0_-8px_24px_rgba(0,0,0,0.12)]">
         <div className="flex items-center gap-1 border-b px-2 py-1">
           <span className="mr-2 text-sm font-medium">Zoom-Schreibfeld</span>

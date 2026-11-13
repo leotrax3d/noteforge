@@ -36,6 +36,7 @@ export function SpitzHint() {
   const close = () => { seeHint(hint); setHint(null); };
   return (
     <div role="status" aria-live="polite" data-testid="spitz-hint"
+      data-glass="" data-glass-float=""
       className="pointer-events-auto absolute right-4 bottom-4 z-30 flex max-w-sm items-start gap-3 rounded-2xl border bg-card p-3 shadow-xl">
       <Logo size={36} className="shrink-0" />
       <div className="grid gap-2 text-sm">

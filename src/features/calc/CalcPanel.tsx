@@ -19,7 +19,7 @@ export function CalcPanel() {
   const left = usePrefs((s) => s.leftHanded);
   if (!open) return null;
   return (
-    <aside role="dialog" aria-label="Rechner" data-testid="calc-panel"
+    <aside role="dialog" aria-label="Rechner" data-testid="calc-panel" data-glass=""
       className={cn("fixed top-14 z-40 flex max-h-[calc(100vh-4.5rem)] w-[min(27rem,calc(100vw-1rem))] flex-col rounded-xl border bg-card shadow-2xl",
         left ? "left-2" : "right-2")}>
       <div className="flex items-center gap-1 border-b p-1" role="tablist" aria-label="Rechner-Modus">

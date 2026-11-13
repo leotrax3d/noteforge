@@ -167,7 +167,7 @@ input[type="range"].hue::-webkit-slider-thumb { margin-top: -4px; background: #f
   --glass-highlight: inset 0 1px 0 rgb(255 255 255 / 0.7);
   --glass-shadow: 0 8px 32px rgb(15 23 42 / 0.14);
   --radius-glass: 24px;
-  --glass-dim: rgb(255 255 255 / 0.35);
+  --glass-dim: rgb(255 255 255 / 0.55);
 }
 .dark {
   --glass-tint: 20 20 24;
@@ -221,14 +221,14 @@ html.glass [data-glass-float][data-cheap] {
 }
 
 /* Kacheln im Widget-Stil: große Rundung, Icon-Kreise, viel Innenabstand */
+html.glass [data-glass="panel"] { border-radius: var(--radius-glass); }
 html.glass [data-glass="tile"] { border-radius: var(--radius-glass); transition: background-color 160ms ease-out, scale 160ms ease-out; }
 html.glass [data-glass="tile"]:hover { background: rgb(var(--glass-tint) / min(calc(var(--glass-alpha) + 0.12), 1)); }
 html.glass [data-glass="tile"]:active { scale: 0.98; }
-.nf-icon-circle { display: none; }
-html.glass .nf-icon-circle { display: inline-flex; align-items: center; justify-content: center; width: 3rem; height: 3rem; border-radius: 999px; background: var(--subject, var(--primary)); color: #fff; }
+html.glass .nf-tile-icon { display: inline-flex; align-items: center; justify-content: center; width: 3.25rem; height: 3.25rem; border-radius: 999px; background: var(--subject, var(--primary)); color: #fff; }
+html.glass .nf-tile-icon svg { width: 1.6rem; height: 1.6rem; }
 html.glass .nf-tile-subject { background: var(--glass-bg) !important; color: var(--foreground) !important; padding: 1.25rem; }
-html.glass .nf-tile-subject .nf-tile-plain { display: none; }
-html.glass .nf-tile-subject button { color: var(--foreground); }
+html.glass .nf-tile-subject:hover { background: rgb(var(--glass-tint) / min(calc(var(--glass-alpha) + 0.12), 1)) !important; }
 
 /* Übergänge: Blur-In für Dialoge und Menüs, Überblendung beim Seitenwechsel */
 @keyframes nf-glass-in { from { opacity: 0; scale: 0.97; filter: blur(6px); } to { opacity: 1; scale: 1; filter: none; } }

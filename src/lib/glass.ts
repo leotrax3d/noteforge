@@ -64,7 +64,7 @@ export const mix = (top: RGB, under: RGB, a: number): RGB => top.map((c, i) => c
 /** Glas-Grundfarben und (gedämpfte) Textfarben je Modus. */
 export const TINT: Record<"light" | "dark", { glass: RGB; text: RGB; muted: RGB; dim: RGB; dimAlpha: number }> = {
   dark: { glass: [20, 20, 24], text: [250, 250, 250], muted: [161, 161, 170], dim: [0, 0, 0], dimAlpha: 0.45 },
-  light: { glass: [255, 255, 255], text: [10, 10, 10], muted: [82, 82, 91], dim: [255, 255, 255], dimAlpha: 0.35 },
+  light: { glass: [255, 255, 255], text: [10, 10, 10], muted: [82, 82, 91], dim: [255, 255, 255], dimAlpha: 0.55 },
 };
 
 /** Hintergrundfarben, wie sie hinter dem Glas ankommen (nach Abdunkeln/Aufhellen des Hintergrunds). */
