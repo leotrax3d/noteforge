@@ -58,8 +58,8 @@ jobs:
             - `Noteforge_*_x64_de-DE.msi` (MSI)
 
             Neu in dieser Version:
-            - WebUntis-Hausaufgaben: Fach als farbiges Label, Titel ohne Abschneiden mitten im Wort, ganzer Text aufklappbar, Ausgabedatum und Lehrkraft
-            - WebUntis-Fächer zuordnen: Vorschläge, neues Fach direkt anlegen, „Nicht zugeordnet“ überall mit direkter Verknüpfung
-            - „Bug melden“ auf der Startseite
+            - Bug melden: Bildschirmfoto anhängen (mit Vorschau), auch über die Befehlspalette erreichbar
+            - Schutz vor massenhaften Bug-Berichten
+            - Moodle BW: falsche Adressen (Schule@BW-Portal, /my/ …) werden erkannt, klarer Hinweis auf den Schul-Login
           releaseDraft: false
           prerelease: false  # „latest“ muss auf das neueste Release zeigen (Update-Endpunkt)
