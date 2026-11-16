@@ -1,3 +1,5 @@
+import { contextPoint } from "@/lib/menu-point";
+import { snapTextPos, textMetrics } from "@/canvas/core/text-snap";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Check, GripHorizontal, MoveHorizontal, Minus, Plus, Trash2 } from "lucide-react";
@@ -126,7 +128,7 @@ function openMenu(e: React.MouseEvent, objId: string, onMenu: (t: MenuTarget) =>
   e.stopPropagation();
   // Rechtsklick ohne Markierung: Schreibmarke an die Klickstelle setzen
   const s = window.getSelection();
-  if (s && (s.isCollapsed || !el.contains(s.anchorNode)) && document.caretRangeFromPoint) {
+  if (s && (s.isCollapsed || !el.contains(s.anchorNode)) && document.caretRangeFromPoint && (e.clientX || e.clientY)) {
     const r = document.caretRangeFromPoint(e.clientX, e.clientY);
     if (r && el.contains(r.startContainer)) {
       el.focus({ preventScroll: true });
@@ -134,7 +136,8 @@ function openMenu(e: React.MouseEvent, objId: string, onMenu: (t: MenuTarget) =>
       s.addRange(r);
     }
   }
-  onMenu({ x: e.clientX, y: e.clientY, objId, el, range: captureRange(el), cell });
+  const at = contextPoint(e, el);
+  onMenu({ x: at.x, y: at.y, objId, el, range: captureRange(el), cell });
 }
 
 /** Gemeinsamer Rahmen: Verschiebegriff, Breite ändern, Löschen. */
@@ -198,17 +201,34 @@ function Frame({ obj, engine, interactive, editingId, hoverId, onEditing, childr
     try { el.setPointerCapture(pointerId); } catch { /* Zeiger schon losgelassen */ }
     el.style.cursor = "grabbing";
     const scale = engine.zoom;
-    // Eingerastete Textfelder bleiben beim Verschieben auf den Linien (Grundlinie) bzw. Kästchen
-    const lh = before.kind === "text" ? before.data.lh : undefined;
-    const grid = before.kind === "text" && before.data.padX === 0;
-    // Alt gedrückt → frei verschieben (kein Einrasten)
-    const snap = (d: number, on: boolean, alt: boolean) => (lh && on && !alt ? Math.round(d / lh) * lh : d);
-    const move = (ev: PointerEvent) => {
-      const dx = snap((ev.clientX - x0) / scale, grid, ev.altKey), dy = snap((ev.clientY - y0) / scale, true, ev.altKey);
-      engine.updateObjectLive(makeObj({ ...before, x: before.x + dx, y: before.y + dy }) as CanvasObj);
+    // Eingerastete Textfelder bleiben beim Verschieben auf den Linien (Grundlinie) bzw. Kästchen – immer am
+    // gemeinsamen Seitenraster, nicht relativ zur Startposition. Alt gedrückt → frei verschieben.
+    const box = before.kind === "text" && before.data.lh ? { lh: before.data.lh, size: before.data.size, grid: before.data.padX === 0 } : null;
+    const setup = engine.pageSetup();
+    const metrics = textMetrics();
+    let last = { x: x0, y: y0, alt: false };
+    const apply = () => {
+      const p = { x: before.x + (last.x - x0) / scale, y: before.y + (last.y - y0) / scale };
+      const q = box && !last.alt ? snapTextPos(setup, p, box, metrics) : p;
+      engine.updateObjectLive(makeObj({ ...before, x: q.x, y: q.y }) as CanvasObj);
     };
+    const move = (ev: PointerEvent) => {
+      last = { x: ev.clientX, y: ev.clientY, alt: ev.altKey };
+      apply();
+    };
+    // Alt während des Ziehens drücken/loslassen: sofort umschalten, auch ohne Mausbewegung
+    const key = (ev: KeyboardEvent) => {
+      if (ev.key !== "Alt" || ev.altKey === last.alt) return;
+      ev.preventDefault();
+      last = { ...last, alt: ev.altKey };
+      apply();
+    };
+    window.addEventListener("keydown", key);
+    window.addEventListener("keyup", key);
     const up = () => {
       el.style.cursor = "";
+      window.removeEventListener("keydown", key);
+      window.removeEventListener("keyup", key);
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerup", up);
       el.removeEventListener("pointercancel", up);

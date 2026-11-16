@@ -1,3 +1,4 @@
+import { contextPoint } from "@/lib/menu-point";
 import { PALM_CONTACT_PX, PALM_SIZE_WINDOW_MS, PalmRejection } from "../palm-rejection";
 import { PALETTES, drawBackground, pageFill, type Palette } from "./background";
 import {
@@ -1035,7 +1036,8 @@ export class CanvasEngine {
     e.preventDefault();
     if (this.mode !== "idle") return;
     this.rect = this.active.getBoundingClientRect();
-    const q = { x: e.clientX - this.rect.left, y: e.clientY - this.rect.top };
+    const at = contextPoint(e, this.active);
+    const q = { x: at.x - this.rect.left, y: at.y - this.rect.top };
     // Rechtsklick/langes Drücken auf ein Bild/PDF: auswählen → Auswahlmenü (Kontextmenü des Elements)
     const o = this.topObjAt(this.toWorld(q.x, q.y));
     if (o?.kind === "image") {

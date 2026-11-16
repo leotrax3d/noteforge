@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { BookmarkPlus, Check, Copy, LineChart, Lock, MoveRight, Palette, PencilRuler, ScanText, Sigma, Trash2, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -8,6 +8,13 @@ import type { Head } from "@/canvas/vector/vec";
 import { TagMenu } from "@/features/tags/TagMenu";
 import { MoleculeIcon } from "@/features/chem/MoleculeIcon";
 import { VIEW_LABELS, type MolView } from "@/features/chem/mol";
+
+/** Mittelpunkt so begrenzen, dass ein Element der Breite w ganz in [0, hostW] liegt (8 px Rand). */
+export function clampCenter(cx: number, w: number, hostW: number, pad = 8): number {
+  if (!w || !hostW) return cx;
+  if (w + 2 * pad >= hostW) return hostW / 2;
+  return Math.min(Math.max(cx, pad + w / 2), hostW - pad - w / 2);
+}
 
 export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDone, activeTags, onTag, onInkToText, onInkToLatex, onOcr, onEditPlot, onHeads, onEditVec, onSaveTemplate, onEditMol, onMolView, onLock }: {
   onLock: () => void;
@@ -35,9 +42,14 @@ export function SelectionMenu({ sel, hostHeight, onColor, onCopy, onDelete, onDo
   // Platz für den Drehgriff (36 px über der Auswahl) lassen
   const above = sel.rect.y > 180;
   const top = above ? sel.rect.y - 112 : Math.min(hostHeight - 64, sel.rect.y + sel.rect.h + 52);
-  const left = sel.rect.x + sel.rect.w / 2;
+  // Mittig über der Auswahl, aber vollständig im Editor (gemessene Breite, Rand 8 px)
+  const ref = useRef<HTMLDivElement>(null);
+  const [w, setW] = useState(0);
+  useLayoutEffect(() => { setW(ref.current?.offsetWidth ?? 0); });
+  const hostW = ref.current?.parentElement?.clientWidth ?? 0;
+  const left = clampCenter(sel.rect.x + sel.rect.w / 2, w, hostW);
   return (
-    <div role="toolbar" aria-label="Auswahl" data-glass="" data-glass-float="" className="absolute z-30 flex -translate-x-1/2 items-center gap-1 rounded-xl border bg-card p-1 shadow-lg"
+    <div ref={ref} role="toolbar" aria-label="Auswahl" data-glass="" data-glass-float="" className="absolute z-30 flex -translate-x-1/2 items-center gap-1 rounded-xl border bg-card p-1 shadow-lg"
       style={{ top: Math.max(8, top), left }}>
       <span className="px-2 text-sm text-muted-foreground tabular-nums">{sel.count} {sel.count === 1 ? "Element" : "Elemente"}</span>
       <Popover open={open} onOpenChange={setOpen}>

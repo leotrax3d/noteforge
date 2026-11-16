@@ -65,3 +65,24 @@ export function measureMetrics(family: string): FontMetrics {
     return DEFAULT_METRICS;
   }
 }
+
+/**
+ * Zielposition eines verschobenen Textcontainers auf dem gemeinsamen Seitenraster (nicht relativ zur
+ * Startposition): Grundlinie auf einer Linie, bei Karo (`grid`) linker Rand auf einer Spalte. So erzeugt
+ * eine zuvor frei (Alt) verschobene Box keinen eigenen, versetzten Rasterursprung.
+ */
+export function snapTextPos(setup: PageSetup, pos: Vec, box: { lh: number; size?: number; grid: boolean }, m: FontMetrics = DEFAULT_METRICS): Vec {
+  const step = box.lh;
+  if (!(step > 0) || setup.background === "blank") return pos;
+  const size = box.size ?? Math.max(8, step * FONT_RATIO);
+  const baselineInBox = (step - (m.ascent + m.descent) * size) / 2 + m.ascent * size;
+  const o = origin(setup, { x: pos.x, y: pos.y + baselineInBox });
+  const y = o.y + Math.round((pos.y + baselineInBox - o.y) / step) * step - baselineInBox;
+  const x = box.grid ? o.x + Math.round((pos.x - o.x) / step) * step : pos.x;
+  return { x, y };
+}
+
+let metricsCache: FontMetrics | null = null;
+/** Gemessene Metrik der UI-Schrift (einmal pro Sitzung). */
+export const textMetrics = (): FontMetrics =>
+  (metricsCache ??= typeof document === "undefined" ? DEFAULT_METRICS : measureMetrics(getComputedStyle(document.body).fontFamily || "sans-serif"));

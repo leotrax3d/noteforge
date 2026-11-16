@@ -1,3 +1,4 @@
+import { useHiddenLessons, visibleLessons } from "@/store/hidden-lessons";
 import { useMemo, useState } from "react";
 import { ArrowLeft, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -33,7 +34,9 @@ export function CalendarPage({ date: initial, mode: initialMode }: { date?: numb
   const from = days[0].getTime(), to = addDays(days[days.length - 1], 1).getTime();
   const rev = useSyncRev((s) => s.rev);
   const { data: events, reload } = useAsync(() => api.listEvents(from, to), [from, to, rev]);
-  const { data: lessons } = useAsync(() => (mode === "week" ? integrations.listLessons(from, to) : Promise.resolve([])), [mode, from, to, rev]);
+  const { data: rawLessons } = useAsync(() => (mode === "week" ? integrations.listLessons(from, to) : Promise.resolve([])), [mode, from, to, rev]);
+  const hiddenLessons = useHiddenLessons((s) => s.hidden);
+  const lessons = useMemo(() => rawLessons && visibleLessons(rawLessons, hiddenLessons), [rawLessons, hiddenLessons]);
   const { data: subjects } = useAsync(() => api.listSubjects(), []);
   const grev = useGcal((s) => s.rev);
   const { data: remote, reload: reloadRemote } = useAsync(() => gcal.events(from, to), [from, to, rev, grev]);

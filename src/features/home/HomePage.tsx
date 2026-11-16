@@ -25,6 +25,7 @@ import { openSoon } from "@/lib/utils";
 import { SubjectDialog } from "./SubjectDialog";
 import { UpcomingExams } from "./UpcomingExams";
 import { TodayTimetable, openLessonSubject } from "./TodayTimetable";
+import { TimetableRail } from "./TimetableRail";
 import { useAutoSync, useLessonWindow } from "./use-lessons";
 import { useNow } from "@/lib/clock";
 import { runningLesson } from "@/lib/timetable";
@@ -115,8 +116,9 @@ export function HomePage() {
         </Button>
       </header>
 
-      <main className="flex-1 overflow-auto p-6">
-        {untis?.connected && <TodayTimetable subjects={subjects ?? []} lessons={untis.lessons} now={now} />}
+      <div className="flex min-h-0 flex-1">
+      <main className="min-w-0 flex-1 overflow-auto p-6">
+        {untis?.connected && <div className="lg:hidden"><TodayTimetable subjects={subjects ?? []} lessons={untis.lessons} now={now} /></div>}
         <UpcomingExams subjects={subjects ?? []} now={now} />
         <SchoolWidgets subjects={subjects ?? []} lessons={untis?.lessons ?? []} now={now} />
         <h2 className="mb-4 text-lg font-medium">Meine Fächer</h2>
@@ -149,6 +151,8 @@ export function HomePage() {
           </SortableContext>
         </DndContext>
       </main>
+      {untis?.connected && <TimetableRail className="hidden lg:flex" />}
+      </div>
 
       <SubjectDialog
         open={creating}

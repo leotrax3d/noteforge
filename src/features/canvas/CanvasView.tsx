@@ -44,10 +44,8 @@ import { vecObj } from "@/canvas/vector/vec-obj";
 import { fmtDeg, type VecSpec } from "@/canvas/vector/vec";
 import { MM } from "@/canvas/core/layout";
 import { SpitzHint } from "./SpitzHint";
-import { measureMetrics, placeText, type FontMetrics } from "@/canvas/core/text-snap";
+import { placeText, textMetrics } from "@/canvas/core/text-snap";
 
-let metricsCache: FontMetrics | null = null;
-const textMetrics = () => (metricsCache ??= measureMetrics(getComputedStyle(document.body).fontFamily || "sans-serif"));
 import { readingOrder, titleFromText, titleFromTexts, UNTITLED } from "@/lib/auto-title";
 import { backgroundDelayFactor, shouldThrottleBackground } from "@/lib/power";
 import { cn } from "@/lib/utils";

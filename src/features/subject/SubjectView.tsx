@@ -1,7 +1,8 @@
 import { PAGE_ACTIONS_SLOT, TOOLBAR_SLOT } from "@/features/canvas/tool-store";
 import { onColor } from "@/features/canvas/Toolbar";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, FileText, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Search, Tags } from "lucide-react";
+import { ArrowLeft, CalendarClock, FileText, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Search, Tags } from "lucide-react";
+import { TimetableRail, useRailOpen } from "@/features/home/TimetableRail";
 import { toggleFocus, usePrefs } from "@/store/prefs";
 import { useCloudRev } from "@/lib/sync";
 import { typing } from "@/lib/shortcuts";
@@ -24,6 +25,7 @@ import { MoodleImportDialog } from "./MoodleImportDialog";
 export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; pageId: string | null; focus?: string }) {
   const go = useNav((s) => s.go);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [railOpen, setRailOpen] = useRailOpen();
   const [tpl, setTpl] = useState<{ sectionId: string; parent: string | null } | null>(null);
   const [trash, setTrash] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -199,6 +201,9 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
         {/* Werkzeugleiste dockt hier an (Position „Kopfzeile“) */}
         <div id={TOOLBAR_SLOT} className="flex min-h-11 min-w-0 flex-1 items-center justify-center self-stretch px-2" />
         <div id={PAGE_ACTIONS_SLOT} className="flex items-center gap-0.5" />
+        <Button variant="ghost" size="icon" className="hidden lg:inline-flex" aria-pressed={railOpen}
+          aria-label={railOpen ? "Stundenplan ausblenden" : "Stundenplan einblenden"} title={railOpen ? "Stundenplan ausblenden" : "Stundenplan einblenden"}
+          onClick={() => setRailOpen(!railOpen)}><CalendarClock /></Button>
         {page && (
           <Button variant="ghost" size="icon" aria-label="Fokusmodus" title="Fokusmodus (F11)" onClick={() => toggleFocus(true)}><Maximize2 /></Button>
         )}
@@ -256,6 +261,8 @@ export function SubjectView({ subjectId, pageId, focus }: { subjectId: string; p
             )
           )}
         </main>
+        {/* WebUntis am rechten Rand (Desktop); einklappbar, damit das Blatt Platz behält */}
+        {railOpen && !focusMode && <TimetableRail className="hidden lg:flex" onCollapse={() => setRailOpen(false)} />}
       </div>
       <input ref={pdfRef} type="file" accept="application/pdf,.pdf" hidden aria-hidden data-testid="pdf-page-input"
         onChange={(e) => {
